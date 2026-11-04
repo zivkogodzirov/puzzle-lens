@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><!-- Made by scripts/make-icons.mjs; do not edit by hand. -->
+<rect width="1" height="1" rx="0.2" fill="#101418"/>
+<g transform="translate(0.5 0.5) scale(0.9067) translate(-0.5 -0.5)">
+<circle cx="0.43" cy="0.43" r="0.25" fill="#4fb3ff" fill-opacity="0.14"/>
+<path d="M0.6237 0.6237L0.8 0.8" stroke="#4fb3ff" stroke-width="0.1" stroke-linecap="round"/>
+<path transform="translate(0.43 0.43) rotate(-8) scale(0.0023) translate(-52 -48)" fill="#eef2f6" d="M0 0 L36 0 C42 0 44 -3 42 -8 C32 -14 36 -27 50 -27 C64 -27 68 -14 58 -8 C56 -3 58 0 64 0 L100 0 L100 36 C100 42 103 44 108 42 C114 32 127 36 127 50 C127 64 114 68 108 58 C103 56 100 58 100 64 L100 100 L64 100 C58 100 56 97 58 92 C68 86 64 73 50 73 C36 73 32 86 42 92 C44 97 42 100 36 100 L0 100 L0 64 C0 58 3 56 8 58 C14 68 27 64 27 50 C27 36 14 32 8 42 C3 44 0 42 0 36 L0 0Z"/>
+<circle cx="0.43" cy="0.43" r="0.25" fill="none" stroke="#4fb3ff" stroke-width="0.068"/>
+</g>
+</svg>
