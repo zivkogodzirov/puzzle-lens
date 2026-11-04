@@ -20,7 +20,7 @@ npm run build
 ```
 
 - **Vision engine:** a custom OpenCV.js 4.14 build in `vendor/opencv/` (WebAssembly with SIMD, ES module, native exceptions). To rebuild it, see `scripts/build-opencv.sh` and `vendor/opencv/BUILD-INFO.txt`.
-- **Deployment:** every push to `main` runs the tests and deploys to GitHub Pages (`.github/workflows/deploy.yml`).
+- **Deployment:** `.github/workflows/deploy.yml` tests every push to `main` and deploys it to GitHub Pages. Until that workflow is pushed (the GitHub login needs the `workflow` permission), the site is published from the `gh-pages` branch: `npm run build`, then push `dist/` (plus an empty `.nojekyll`) to `gh-pages`. When the workflow is in, switch Pages to "GitHub Actions": `gh api -X PUT repos/zivkogodzirov/puzzle-lens/pages -f build_type=workflow`.
 - **Documents:** [`docs/BRIEF.md`](docs/BRIEF.md) (requirements), [`docs/RESEARCH.md`](docs/RESEARCH.md) (research and decisions), [`docs/PLAN.md`](docs/PLAN.md) (plan and status), [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Licence

@@ -431,7 +431,8 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
    - which way `takePhoto()` behaves with the live camera (does it pause the camera? does it change the photo size?). The Device check measures it.
 6. **Camera permission is asked at every launch of the Home Screen app.** This is a known iOS bug (WebKit 327237), not ours.
 7. **The memory readouts show the size of each helper's WebAssembly memory.** It only grows, never shrinks. They start at 32 MB, so growth is visible, but they don't show the bytes actually in use.
-8. **GitHub's test machine.** It runs WebKit on Linux, which may lack the direct frame path or WebGPU. The tests accept either frame path, and those Device check rows are allowed to be "not available".
+8. **Automatic publishing is waiting for a permission.** This Mac's GitHub login can't push the workflow file yet (it needs the `workflow` permission). Until you grant it (one step in the checklist), I publish by hand from the `gh-pages` branch, after running every test on the Mac.
+9. **GitHub's test machine.** It runs WebKit on Linux, which may lack the direct frame path or WebGPU. The tests accept either frame path, and those Device check rows are allowed to be "not available".
 
 ---
 
