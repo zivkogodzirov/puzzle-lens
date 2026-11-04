@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Puzzle Lens test marker: ArUco DICT_4X4_50, id 0. Made by scripts/make-test-marker.mjs; do not edit by hand.
+     6x6 cells including the black border, with a 2-cell white quiet zone. Prints at 90 mm (9 mm cells). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="90mm" height="90mm" shape-rendering="crispEdges">
+<title>Puzzle Lens test marker #0</title>
+<rect width="10" height="10" fill="#fff"/>
+<g fill="#000">
+<rect x="2" y="2" width="6" height="1"/>
+<rect x="2" y="3" width="1" height="1"/>
+<rect x="4" y="3" width="1" height="1"/>
+<rect x="7" y="3" width="1" height="1"/>
+<rect x="2" y="4" width="2" height="1"/>
+<rect x="5" y="4" width="1" height="1"/>
+<rect x="7" y="4" width="1" height="1"/>
+<rect x="2" y="5" width="3" height="1"/>
+<rect x="7" y="5" width="1" height="1"/>
+<rect x="2" y="6" width="3" height="1"/>
+<rect x="6" y="6" width="2" height="1"/>
+<rect x="2" y="7" width="6" height="1"/>
+</g>
+</svg>

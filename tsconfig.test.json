@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client"]
+  },
+  "include": ["test/**/*.ts", "src/shared/**/*.ts", "src/cv/**/*.ts", "src/types/**/*.d.ts", "*.config.ts", "playwright.config.ts"]
+}

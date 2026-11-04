@@ -1,0 +1,37 @@
+{
+  "name": "puzzle-lens",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Puzzle Lens: an iPhone web app that helps assemble 1000+ piece jigsaw puzzles.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run --project unit",
+    "test:leak": "vitest run --project leak",
+    "test:e2e": "playwright test",
+    "test:all": "npm run typecheck && npm test && npm run test:leak && npm run build && npm run test:e2e",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "dependencies": {
+    "@preact/signals": "2.11.4",
+    "comlink": "4.4.2",
+    "dexie": "4.4.7",
+    "fflate": "0.8.3",
+    "preact": "11.1.1"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "1.1.0",
+    "@playwright/test": "1.64.1",
+    "@preact/preset-vite": "2.10.6",
+    "@types/node": "26.6.6",
+    "fake-indexeddb": "6.2.7",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vite-plugin-pwa": "2.0.0",
+    "vitest": "5.1.0"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dev-dist/
+coverage/
+test-results/
+playwright-report/
+.DS_Store
+*.log
+# Your own puzzle photos stay on this Mac (docs/PLAN.md §7)
+test/fixtures/real/*
+!test/fixtures/real/README.md

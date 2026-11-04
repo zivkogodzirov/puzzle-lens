@@ -1,0 +1,6 @@
+OpenCV: 4.14.0
+Emscripten: emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.13 (e13ee988ce3d87a738dd8f3661d02223308c412a)
+Built: 2026-11-04T02:37:02Z
+Flags: --build_wasm --simd --disable_single_file, dnn/photo OFF, -s EXPORT_ES6=1 -s ENVIRONMENT=web,worker,node -s INITIAL_MEMORY=33554432 -s MAXIMUM_MEMORY=1073741824 -s ALLOW_MEMORY_GROWTH=1 -fwasm-exceptions -s EXPORTED_RUNTIME_METHODS=['getExceptionMessage','decrementExceptionRefcount','stackSave','stackRestore'] -s EXPORT_EXCEPTION_HANDLING_HELPERS=1 -DHAVE_UNISTD_H
+Sizes:   125181 bytes JS,  5793748 bytes WASM
+Memory: initial 32 MiB, maximum 1024 MiB

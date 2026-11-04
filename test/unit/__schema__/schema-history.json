@@ -1,0 +1,14 @@
+{
+  "rule": "Frozen copy of SCHEMA_HISTORY in src/db/db.ts. NEVER change an existing version here or in db.ts: people's catalogs live in those layouts. To change the database, add version N+1 (with an upgrade function) to db.ts, add it to SCHEMA_HISTORY, then append it here. test/unit/db.test.ts checks both files agree and that every old version upgrades without losing rows.",
+  "versions": {
+    "1": {
+      "projects": "id, updatedAt",
+      "settings": "key",
+      "logs": "++id, ts, level",
+      "deviceChecks": "++id, ts, mode",
+      "launches": "++id, ts",
+      "blobs": "id, ts, kind",
+      "jobs": "++id, kind, status"
+    }
+  }
+}
