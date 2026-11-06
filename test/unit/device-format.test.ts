@@ -168,12 +168,16 @@ describe('camera permission history (WebKit bug 327237)', () => {
 });
 
 describe('verdicts', () => {
-  it('reports the 2× test ratio without judging it (the measure is not calibrated yet)', () => {
-    const base = { ratio: 1.054, oneXSize: [4032, 3024] as [number, number], twoXSize: [4032, 3024] as [number, number] };
-    const expected = { status: 'partial', value: "Measured ratio 1.05 — not judged yet; the developer will set the thresholds from your phone's report" };
-    // Whatever the old verdict says, the owner never gets a ✗ or a recommendation.
-    for (const verdict of ['true-2x', 'digital-zoom', 'unclear'] as const) expect(twoXVerdict({ ...base, verdict })).toEqual(expected);
-    expect(twoXVerdict({ ...base, ratio: Number.NaN, verdict: 'unclear' }).value).toContain('Measured ratio ?');
+  it('judges the 2× test from the ratio measured on the owner\'s iPhone, never with a ✗', () => {
+    const base = { oneXSize: [4032, 3024] as [number, number], twoXSize: [4032, 3024] as [number, number] };
+    // The reader's own label is ignored; only the ratio counts.
+    for (const verdict of ['true-2x', 'digital-zoom', 'unclear'] as const) {
+      expect(twoXVerdict({ ...base, ratio: 1.83, verdict })).toEqual({ status: 'yes', value: 'True 2× lens — close-ups at 2× are sharp (ratio 1.83)' });
+      expect(twoXVerdict({ ...base, ratio: 1.054, verdict })).toEqual({ status: 'partial', value: 'Not confirmed (ratio 1.05) — close-ups will be taken at 1× from closer' });
+    }
+    expect(twoXVerdict({ ...base, ratio: 2.4, verdict: 'unclear' }).status).toBe('yes');
+    expect(twoXVerdict({ ...base, ratio: Number.NaN, verdict: 'unclear' }).value).toContain('Could not measure');
+    expect(twoXVerdict({ ...base, ratio: 0, verdict: 'unclear' }).status).toBe('partial');
   });
 
   it('words the canvas-noise result', () => {

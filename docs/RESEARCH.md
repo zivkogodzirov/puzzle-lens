@@ -286,6 +286,16 @@ Our markers will be hundreds of pixels across and static, so detector speed and 
 - The setup wizard compares the mat with the box picture. If a large share of the picture is darker than the mat would separate cleanly, it recommends a mid-tone coloured mat (e.g. green or blue felt).
 - puzzle-helper's measured lesson: pale pieces on a white board: 0/48 read correctly; on dark cloth: 48/48.
 
+**Update 2026-11-06: your setup has no mat** (white glossy table, phone held by hand). What changes, and what is still uncertain:
+- The "mat model" becomes a **table model**, learned from one photo of the empty sorting area. The pipeline above is otherwise the same.
+- **Pale pieces are the main risk.** The colour difference between a near-white piece and a white table is small, and puzzle-helper's 0/48 result above was exactly this case. Two extra cues are added for them (an estimate, not yet measured):
+  - **Edges:** the cut outline of a piece shows as a thin line of strong gradient even when its colour is close to the table's.
+  - **Side shadow:** with light from one side (the setup advice), every piece throws a 1–2 mm shadow along one side. Shadow-aware distance (Horprasert) already separates shadow from piece; here the shadow's inner edge also marks the piece's outline.
+  - Your box picture is mostly mid-tones and dark tones, so most pieces stand out well from white. The table-contrast check (M4) shows which parts are pale; the real per-piece recall on your palest pieces is measured in M2. If it stays below the 98% bar, the fallbacks are a one-tap "add missed piece" (M3), or, only if you want it, any dark cloth or paper under the sorting area.
+- **Glare:** a glossy table reflects lamps straight into the camera when the lamp is behind or above the phone. Glare spots are bright, low in colour, and **move when the phone moves**, while pieces stay put. So they are found by comparing two photos in table coordinates (the markers align them), and pixels under glare are filled in from the other photo. Side light avoids most of it in the first place.
+- **Handheld:** the markers give tilt and height every frame, so Snap waits until the phone is level (≤ 5°), at height and still, then fires by itself. The quality gate checks motion blur on the marker edges after every photo.
+- **Markers on white:** the white quiet zone around each marker no longer contrasts with the table, but ArUco only needs the black border against the quiet zone, so detection is unaffected. The grey patch remains the colour reference; the white table can serve as a second one.
+
 **Where it runs:** OpenCV.js (WASM SIMD) in a worker. Per-frame live segmentation is only for spotting changes (piece moved, added or removed), at 2–5 fps on downscaled frames.
 
 ---

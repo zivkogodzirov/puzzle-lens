@@ -65,6 +65,6 @@ It takes about 20–30 minutes. Write down anything that looks wrong, even small
 
 ## Known limits in this version
 
-- The **2× lens test** shows a measured number but doesn't say yes or no yet. I'll set that from your report.
+- The **2× lens test** says "True 2× lens" when the ratio is 1.3 or more (your phone: 1.83 and 2.40). A lower ratio says "not confirmed", never ✗.
 - The **Home Screen app asks for camera permission every time it opens**. That's an iOS bug, not something you did.
 - **Private Browsing:** photos can't be kept for reports. The app says so with a gentle note.

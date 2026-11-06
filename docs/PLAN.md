@@ -1,11 +1,11 @@
 # Puzzle Lens: plan and status
 
-_Last updated: 2026-11-04. M1 is built, reviewed (53 confirmed findings fixed) and passes every automated test on the Mac. It still has to be checked on your iPhone._
+_Last updated: 2026-11-06. M1 has been checked on your iPhone, in the Safari tab and the Home Screen app. The plan is now set for your setup: phone held by hand, no mat, a large white glossy table, printed markers (§2, decisions of 2026-11-06). M2 starts when you say so._
 
 | Milestone | Status |
 |---|---|
 | M0 Research and plan | ✅ Approved 2026-11-04 |
-| M1 Skeleton on your phone | 🔧 Built and tested on the Mac; **waiting for your iPhone check** (see the checklist) |
+| M1 Skeleton on your phone | ✅ Checked on your iPhone 2026-11-06 (Safari tab + Home Screen app); waiting for your OK to start M2 |
 | M2 Detection, markers and catalog | ⏳ |
 | M3 Shape reading and Border groups | ⏳ |
 | M4 Box placement | ⏳ |
@@ -21,8 +21,8 @@ The reasons behind every choice are in [`RESEARCH.md`](RESEARCH.md); section num
 ## 1. What we're building (plain English)
 
 **How a session goes:**
-1. You spread 200–300 pieces face up on a dark mat with 8 printed markers around it.
-2. With the phone on a stand (or held flat), you take **one overview photo**, then **about 4 closer photos**. The app shows which parts of the table still need one.
+1. You spread 200–300 pieces face up on your table with 8 printed markers around them.
+2. Holding the phone flat above the table, you take **one overview photo**, then **about 4–6 closer photos**. The app shows a level-and-height gauge and takes each photo by itself when the phone is level and still. It shows which parts of the table still need a photo.
 3. From these it builds a **catalog**. For every piece it works out:
    - its colours and its exact position on the table;
    - its four sides: flat, tab or blank;
@@ -49,11 +49,12 @@ The reasons behind every choice are in [`RESEARCH.md`](RESEARCH.md); section num
 
 | Item | Recommendation | Why |
 |---|---|---|
-| Mat | Plain, matte and dark (e.g. dark felt or a puzzle mat), about **16 cm larger than your sorting area on each side** (≈ 85 × 65 cm for a 70 × 50 cm area of 300 pieces). If your picture has lots of dark areas, the app may suggest a mid-tone coloured mat. | The app finds pieces as "not mat"; the markers sit in the margin. Glossy surfaces cause glare. |
-| Markers | **8 markers** on 2 A4 sheets the app prints, placed in the mat margin: one at each corner and one at the middle of each side of the sorting area. Each sheet has a 100 mm check bar and a grey patch. Print at 100% ("actual size"), on matte paper. | The phone always knows where it is, in millimetres. The bar catches printer rescaling; the grey patch sets colour and exposure (R§5). |
+| Table | **Your own table, as it is** (large, white, glossy). No mat. Clear a sorting area about 70 × 50 cm for 300 pieces, with ~15 cm around it for the markers. Before the first scan the app takes one photo of the **empty sorting area** to learn what the table looks like. | The app finds pieces as "not table". A white table works well for most of your picture's colours; pale pieces are found from their edges and the thin shadow along their sides (§3.3). |
+| Markers | **8 markers** on 2 A4 sheets the app prints. Cut them out and lay (or tape) them on the table around the sorting area: one at each corner and one at the middle of each side. Each sheet has a 100 mm check bar and a grey patch. Print at 100% ("actual size"). Markers stay on the table between sessions if you can leave them. | The phone always knows where it is, in millimetres, even held by hand. The bar catches printer rescaling; the grey patch sets colour and exposure (R§5). |
 | Pieces | Face up, small gaps between them, not touching. | Touching pieces get an orange dashed outline and "spread these apart". |
-| Light | Even, diffuse light, e.g. a lamp bounced off a wall or ceiling. Avoid a single hard lamp. Phone torch optional. | The app warns about glare and hard shadows. |
-| Phone | **Ideally an overhead phone stand that holds the phone ~60 cm above the table** (adjustable 50–70 cm; about A$25–40). Overview photo at 1×; close-ups at 2× from the same height, *if* your phone passes the 2× sharpness test in M1. Otherwise close-ups are taken at 1× from ~30 cm. Without a stand: hold the phone flat and follow the tilt/distance gauge. | Straight-down photos and a narrow view keep piece outlines accurate (R§4). The app works out the ideal height from your measured piece size. |
+| Light | **Light from the side** (a window or a lamp off to one side), **not a lamp straight above the table**. | On a glossy table a lamp above you reflects straight into the camera (glare), and your phone, hands and head throw a shadow on the pieces. Side light avoids both. The app finds glare spots and asks for a retake from a slightly different angle (§3.3). |
+| Phone | **Held by hand, flat, about 50–55 cm above the table** (standing at the table, arms comfortably bent). Overview photo at 1×; close-ups at **2× from the same height**: your phone passed the 2× test (true optical 2×, measured 1.83 and 2.40). The app shows a level-and-height gauge from the markers and takes the photo itself when the phone is level (≤ 5°), at the right height and still. If a photo comes out blurred it asks again. | Straight-down photos and a narrow view keep piece outlines accurate (R§4). One height for both photo types is easy to keep by hand. The app works out the best height from your measured piece size. |
+| Puzzle size | **Nothing to measure.** You type the piece count from the box (e.g. 1000) and take a photo of the box picture. The app suggests the grid (e.g. 27 × 37 = 999) from the count and the picture's shape. It measures the real piece size, and so the finished size, from your first overview photo. | Fewer questions; the measured size is more exact than the box label. |
 
 ---
 
@@ -108,7 +109,7 @@ The reasons behind every choice are in [`RESEARCH.md`](RESEARCH.md); section num
 ### 3.2 Coordinate systems
 
 - **Image (px):** a camera frame or photo.
-- **Table (mm):** fixed to the mat, origin at marker 0. Every piece position is stored here, so highlights stay pinned when the phone moves.
+- **Table (mm):** fixed to the table (set by the markers), origin at marker 0. Every piece position is stored here, so highlights stay pinned when the phone moves.
 - **Piece (canonical):** the piece's 4 corners mapped onto a square. Removes rotation, scale and perspective; used for fingerprints and placement.
 - **Box grid:** (column, row, rotation 0/90/180/270), plus a fitted box-to-grid correction (R§9).
 - **Mapping:** a homography H links table and image for each frame or photo. It comes from markers, plus known pieces when few markers are visible.
@@ -120,8 +121,9 @@ The reasons behind every choice are in [`RESEARCH.md`](RESEARCH.md); section num
 | Markers → table mapping | ArUco DICT_4X4_50, sub-pixel corners, RANSAC homography, moved-marker check; LK optical flow between detections; registration from catalogued pieces when markers are few | tracker | ≤ 25 ms per frame, ≤ 750 ms per second |
 | Live overlay | Catalogued outlines (stored in mm) drawn through the latest timestamped H, predicted forward to the displayed frame | main | ≥ 30 fps, ≤ 8 ms per draw |
 | Change detection | Downscaled segmentation vs expected occupancy (pieces "in tray" or "placed" are expected to be gone) | reader, when idle | 1–2 per second |
-| Photo quality gate | Marker-edge sharpness, clipped-pixel share, tilt from H (≤ 5° for detail photos) → "please retake" | reader | ≤ 100 ms |
-| Segmentation | Mat model + per-photo lighting field + shadow-aware distance, hysteresis, morphology, marker masking, size gate in mm², watershed only for flagged blobs, sub-pixel outline, **print vs wall separation** for detail reads (R§4, R§6) | reader | overview of 300 pieces ≤ 8 s; detail ≤ 6 s |
+| Handheld auto-capture | Tilt and height from the marker homography each frame (tilt sensor as backup), steadiness over ~0.3 s; Snap fires by itself when level, at height and still | tracker + main | every live frame |
+| Photo quality gate | Marker-edge sharpness (motion blur), clipped-pixel share, **glare spots on pieces** (bright, low-colour, moving between photos), tilt from H (≤ 5° for detail photos) → "please retake" | reader | ≤ 100 ms |
+| Segmentation | Table model (learned from the empty-table photo; white, glossy) + per-photo lighting field + edge and thin-side-shadow cues for pale pieces + glare mask (pixels under glare are filled from a second photo taken at a slightly different angle) + shadow-aware distance, hysteresis, morphology, marker masking, size gate in mm², watershed only for flagged blobs, sub-pixel outline, **print vs wall separation** for detail reads (R§4, R§6) | reader | overview of 300 pieces ≤ 8 s; detail ≤ 6 s |
 | Shape reading | Hybrid corner search (curvature + centroid candidates, 4-subset score with straight shoulders and expected cell size in mm), line-fit refinement, flat/tab/blank with an uncertain band; overview reads only provisional (R§7) | reader | ≤ 15 ms per piece |
 | Fingerprint and re-ID | Canonical Lab thumbnail ZNCC at 4 rotations + side-type word + side profiles in mm + colour stats; union shortlist; ratio test; pending + "close-up please"; one-to-one per photo (R§8) | reader | ≤ 20 ms per piece |
 | Box placement | Canonical piece vs grid at 8/16/32 px per cell, 4 rotations, texture-gated ZNCC + gradient cues, border and neighbour constraints, calibrated softmax, assignment + Sinkhorn, box-to-grid correction (R§9) | reader / matcher | ≤ 50 ms per piece (CPU); full re-score of 1000 ≤ 30 s, resumable |
@@ -133,7 +135,7 @@ The reasons behind every choice are in [`RESEARCH.md`](RESEARCH.md); section num
 
 | Table | Key fields |
 |---|---|
-| `projects` | id, name, created/updated, nominal piece count, grid {cols, rows}, finished size (mm), box {photo blob, 4 corners, rectified blob, px per cell, picture-border answer, box-to-grid correction}, zone layout {count 2–12, cell→zone}, colour calibration {white balance, 3×3+offset transform}, markers {dictionary, size mm, print-scale factor, id→position on the table}, mat model {Lab stats, spatial map}, settings (units, scan mode, thresholds) |
+| `projects` | id, name, created/updated, nominal piece count, grid {cols, rows}, finished size (mm, measured: grid × piece pitch), box {photo blob, 4 corners, rectified blob, px per cell, picture-border answer, box-to-grid correction}, zone layout {count 2–12, cell→zone}, colour calibration {white balance, 3×3+offset transform}, markers {dictionary, size mm, print-scale factor, id→position on the table}, table model {Lab stats, spatial map, glare history}, measured piece pitch (mm), settings (units, scan mode, thresholds) |
 | `cells` | [project+index], texture class (detailed/plain, by the frozen rule), zone, descriptors (Float32Array), optional embedding |
 | `pieces` | id, project, first batch, **status** (on table / in tray + tray name / placed / missing / pending), **type** (corner/edge/interior) + confidence + provisional flag, **4 sides** {flat/tab/blank + confidence, chord mm, 64-point profile, knob/neck scalars, seam colour strip, outline-quality weight}, shape class (e.g. TTBB), corners, top-face outline in mm, colour stats, thumbnail + canonical images (blobs), optional embedding, read quality and read count, **placement** {top-5 [(cell, rotation, p)], assigned cell, verdict}, groups {zone, colour family, border side}, **table position** {x, y mm, angle, last seen, photo id}, your marks (confirmed / rejected) |
 | `pairs` | (piece A, side) ↔ (piece B, side), probability, shape and colour scores, confirmed by (2×2 / you), rejected |
@@ -155,7 +157,7 @@ The reasons behind every choice are in [`RESEARCH.md`](RESEARCH.md); section num
 | Screen | Contents | Built in |
 |---|---|---|
 | **Home** | Your puzzles, "New puzzle". A banner if you're in a Safari tab rather than the Home Screen app: "Install first, then start your puzzle there". | M1 (shell), M2 |
-| **New puzzle wizard** | 0. Home Screen check (first!) → 1. piece count + finished size from the box → 2. grid suggestion / manual entry → 3. print markers (check 100 mm bar) → 4. lay out mat + markers, empty-mat calibration + marker map photo → 5. box picture (photo or import from Photos), corners with magnifier, "does the picture have a border or continue past the edges?" → mat-contrast check | M2 (steps 0–4), M4 (step 5) |
+| **New puzzle wizard** | 0. Home Screen check (first!) → 1. piece count from the box → 2. box picture (photo or import from Photos), corners with magnifier → 3. grid suggestion from count + picture shape / manual entry → 4. print markers (check 100 mm bar) → 5. lay out markers, empty-table photo + marker map photo, light check (glare and shadow) → later: "does the picture have a border or continue past the edges?", table-contrast check (which parts of the picture are close to your table's white) | M2 (steps 0–5), M4 (border question, table-contrast check) |
 | **Live** (main) | Camera + overlay; tracking indicator (good / weak / lost); Snap button; scan coverage map; progress counter **"pieces read · shapes read · placed on box"**; mode chips: Border · Zones · Trays · Colours · Shapes · Area · Fill spot · What next. Tap a piece → panel with thumbnail, box spot (zoomed), partners per side with %, **Fits / Doesn't fit** | M1 camera, M2 onward |
 | **Overlay state colours** (from the brief) | Outline/dot colour shows the piece's *state*: grey = detected, blue = shape read, green = its spot on the box is known, red/hollow = tracking uncertain. *Group* modes use rings (corners orange, edges teal, zone colours), so the two never clash. | grey M2, blue M3, green M4, red M5 |
 | **Box view** | Rectified picture, zones, drag to area-search, tap a cell to fill that spot | M4 |
@@ -216,10 +218,10 @@ Nothing is called "done" until it has worked on your iPhone.
 - **From you:** answers to §12, a photo of the box, a photo of your mat, and the Device check report from your phone (Safari and Home Screen).
 
 ### M2: Detection, markers and catalog
-- **Wizard steps 0–4:** Home Screen check, count + finished size, grid suggestion / manual entry, marker printing with scale check, empty-mat calibration + marker map.
+- **Wizard steps 0–5:** Home Screen check, piece count, box photo with corners, grid suggestion from count + picture shape (manual entry possible), marker printing with scale check, empty-table photo + marker map + light check.
 - **Table mapping** for every photo (markers + piece-based registration).
-- **Segmentation:** lighting flattening, shadow handling, clump warnings, sub-pixel outlines, marker masking; glare / hard-shadow warnings; the photo quality gate.
-- **Guidance:** distance and tilt from measured piece size, markers and the tilt sensor.
+- **Segmentation (white glossy table):** table model, lighting flattening, edge and side-shadow cues for pale pieces, glare mask with fill-in from a second photo, clump warnings, sub-pixel outlines, marker masking; the photo quality gate (blur, glare, tilt).
+- **Handheld guidance:** level-and-height gauge from the markers (tilt sensor as backup); **auto-capture** when level, at height and still; best height from the measured piece size; finished size measured from the first overview.
 - **Catalog:**
   - Overview Snap fills it (positions, thumbnails, colours).
   - Coverage map for the detail Snaps.
@@ -227,9 +229,9 @@ Nothing is called "done" until it has worked on your iPhone.
   - Grey "detected" outlines on the photo/live view.
 - **Minimal export/import** of a project.
 - **Synthetic puzzle generator v1** (R§16); frozen validation and test sets at 48 / 300 / 1000 pieces.
-- **Tests:** segmentation (per piece); position accuracy in mm; lens-distortion check (detail tiles vs overview); tiling memory; database upgrade.
+- **Tests:** segmentation (per piece) on synthetic **white glossy tables** with glare spots, side shadows and pale pieces; handheld tilt 0–10° and motion blur; position accuracy in mm; lens-distortion check (detail tiles vs overview); tiling memory; database upgrade.
 - **ML segmentation trigger** (R§6): if your real photos give per-piece recall < 98%, or > 5% clumps after spreading, I benchmark the ML segmenters.
-- **From you:** print the markers; photos of ~50 pieces on your mat (overview + close-ups); any photo where pieces were missed.
+- **From you:** print the markers; photos of ~50 pieces on your table (overview + close-ups), including some of the palest pieces; any photo where pieces were missed or glare hid a piece.
 
 ### M3: Shape reading and Border groups
 - **Shape reading:**
@@ -260,8 +262,8 @@ Nothing is called "done" until it has worked on your iPhone.
 
 ### M4: Box placement
 - **Box setup:**
-  - wizard step 5: box photo or import, corners with loupe, border question
-  - mat-contrast check
+  - border question (the box photo itself is taken in the M2 wizard)
+  - table-contrast check
   - box-to-grid correction after the first batch
 - **Placement:**
   - colour calibration v1 (grey-patch white balance; one-time statistics match)
@@ -400,7 +402,7 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
 
 | Risk | Mitigation |
 |---|---|
-| Shape matching isn't discriminative at phone resolution (the biggest risk) | Close-ups at 2× from a stand; print vs wall separation; box picture as the primary signal; honest probabilities; **real-piece go/no-go in M3** with a defined fallback (box-led matching) before M6 is built |
+| Shape matching isn't discriminative at phone resolution (the biggest risk) | Close-ups at 2× (confirmed optical on your phone), level and still thanks to auto-capture; print vs wall separation; box picture as the primary signal; honest probabilities; **real-piece go/no-go in M3** with a defined fallback (box-led matching) before M6 is built |
 | Piece walls distort outlines (parallax) | Narrow 2× view, most-central view per piece, print vs wall separation, outline-error test (R§4) |
 | `takePhoto()` interferes with the live stream / gives smaller photos | Camera contract (§3.1); measured on your phone in M1 |
 | iOS kills the page for memory | Per-part budgets, tiles, HUD counters, reader restart, leak tests |
@@ -412,7 +414,10 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
 | Safari fingerprinting protection adds noise to pixels | Read frames via `VideoFrame.copyTo`; noise probe; WASM JPEG decode fallback |
 | Box art cropped or extended vs the real puzzle | Border question + fitted box-to-grid correction |
 | Printer rescales the marker sheet | 100 mm check bar; scale-free grid cues |
-| Glare, hard shadows, dark pieces on a dark mat | Matte mat, diffuse light, photo quality gate, warnings, mat-contrast check |
+| Glare on your glossy table | Side light advice and a light check in the wizard; glare spots found in every photo; pixels under glare filled from a second photo at a slightly different angle; "retake" when glare covers a piece |
+| Pale pieces on a white table | Edge and side-shadow cues, not colour alone; table-contrast check warns which parts of the picture are pale; pale pieces that are still missed can be added with one tap (M3). Measured on your real pale pieces in M2 |
+| Hand shake and tilt (no stand) | Auto-capture only when level and still; blur check after every photo; tilt ≤ 5° for close-ups; the markers correct the remaining perspective |
+| Shadow of the phone and your hands | Side light advice; shadows are told apart from pieces (shadow-aware segmentation); the light check shows them in the wizard |
 | Puzzle brand with uniform cuts | Shape counts for less; placement and colour still work; percentages stay honest |
 | Losing a 1000-piece catalog | Home Screen install first, `persist()`, backups with reminders |
 
@@ -427,15 +432,15 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
 - **Fifth report: solved.** With a full-size tracker copy, photos are full 12.2 MP and sharp (sharpness 3,810 vs 55 for the live picture) while tracking keeps running. The 2× test measured 1.83, a true optical 2×. Cost: tracker 17 fps (GPU shrink 47 ms per frame). The fix reads big frames directly and shrinks them ×4 in OpenCV (Mac 18.7 ms), and the tracker times both ways on the phone and keeps the faster. **Confirmed on the phone (sixth report):** tracker 27.8 fps, 22.9 ms per frame (direct 20 ms vs GPU 52 ms); Snap sharp 3024×4032. Full-size tracking is now the default everywhere.
 - Snap now falls back to the **full-size live picture** (12 MP in the 4:3 format), then to the iPhone camera screen. It is checked with exact pixel reading, but its saved JPEG goes through a canvas (it may carry Safari's tiny privacy noise, which only matters for reports).
 
-**M1 (2026-11-04).** The items below have not been checked on an iPhone yet.
+**Seventh report (2026-11-06, Safari tab) — M1 checked on the phone:** Device check steps 1–5 all done in the Safari tab; Snap sharp 3024×4032 with full-size tracking (chosen by the Photo test, now also the default); tracker 22–28 fps; memory headroom 1,792 MB (the most the test tries). The marker test was right in all three positions (upright, sideways left and right).
+- **The 2× lens test now gives a verdict.** Your phone measured 1.83 and 2.40; ≥ 1.3 counts as a true 2× lens. A lower ratio only says "not confirmed" (digital zoom has not been measured on a phone, so it is never called that).
+- **Watch item:** after the Photo test (about 25 full-size photos in a row) the next visit noted that the page had ended while on screen. iOS may have reclaimed the page. Normal use takes far fewer photos in a row; M2's memory tests will include long photo series.
 
-1. **The 2× lens test only shows a number for now.** It says "Measured ratio …, not judged yet". The thresholds will be set from your phone's report, because the iPhone's own sharpening could make digital zoom look sharper than it is (R§4).
-2. **Marker outlines may be drawn in the wrong place when the phone is held sideways the "other" way.** Safari doesn't say which way camera frames are turned, so the app guesses from the picture's shape. The checklist asks you to look in portrait and both landscape directions.
+**M1 (2026-11-04).** Remaining notes:
+
 3. **Big photos.** While a photo is checked, one full-size decoded copy is in memory (about 48 MB for 12 MP). Photos bigger than 16 MP (e.g. 48 MP from the iPhone camera screen) are checked at 12 MP size and reported with their real size. M2 decodes in tiles.
 4. **The memory test result can be up to about 64 MB too low.** The last step may not be saved at the moment iOS closes the app.
-5. **Not yet confirmed on the iPhone:**
-   - sharing the report `.zip`, and the "Download" link in the Home Screen app;
-   - which way `takePhoto()` behaves with the live camera (does it pause the camera? does it change the photo size?). The Device check measures it.
+5. Report sharing works on the phone (seven reports received). How `takePhoto()` behaves with the live camera is measured and handled (see the reports above).
 6. **Camera permission is asked at every launch of the Home Screen app.** This is a known iOS bug (WebKit 327237), not ours.
 7. **The memory readouts show the size of each helper's WebAssembly memory.** It only grows, never shrinks. They start at 32 MB, so growth is visible, but they don't show the bytes actually in use.
 8. **Automatic publishing is waiting for a permission.** This Mac's GitHub login can't push the workflow file yet (it needs the `workflow` permission). Until you grant it (one step in the checklist), I publish by hand from the `gh-pages` branch, after running every test on the Mac.
@@ -472,13 +477,18 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
 | 2026-11-04 | Device check keeps results across app updates (each row tagged with its version) and shows only the current mode | Safari tab and Home Screen app keep separate data; results were silently dropped after an update |
 | 2026-11-06 | Snap takes its picture the way the Photo test found to work; fallback chain: camera photo → full-size live picture (grabFrame) → iPhone camera screen | On the owner's iPhone every takePhoto() call failed; the live picture is already 12 MP in the 4:3 format |
 | 2026-11-04 | Crash notice only when the app was on screen when it ended | iOS reloads backgrounded apps without firing pagehide; that is not a crash |
+| 2026-11-06 | **No stand: the phone is always held by hand.** Level-and-height gauge from the markers and auto-capture when level and still | Your choice; the app is meant to be used handheld. The markers give tilt and height every frame, so the app can wait for a good moment instead of asking you to hold still |
+| 2026-11-06 | **No mat: pieces lie on your white glossy table.** Table model from an empty-table photo; edge and side-shadow cues for pale pieces; glare detection with fill-in from a second photo; side-light advice | Your choice. Replaces BRIEF §4's "require a matte mat"; glare and pale-piece risks are handled in software and measured on your photos in M2 |
+| 2026-11-06 | **Finished size is measured, not asked.** Wizard asks only the piece count; grid from count + box picture shape; size = grid × piece pitch measured from the first overview photo. The box photo moves from M4 to the M2 wizard | Your request; the box picture's shape is needed for the grid anyway |
+| 2026-11-06 | Close-ups at 2× from the same ~50–55 cm height as the overview | Your phone's 2× lens is a true optical 2× (measured 1.83 and 2.40); one height is easier to keep by hand |
+| 2026-11-06 | Printed markers kept (you can print A4) | Handheld tracking needs them even more than a stand would |
 
 ---
 
 ## 12. Questions for you (please answer with your OK)
 
 1. ~~**Name**~~ → answered 2026-11-04: **Puzzle Lens**, at https://zivkogodzirov.github.io/puzzle-lens/
-2. **Your iPhone:** answered: an iPhone 15/16/17 **Pro** (48 MP main camera, 24 mm lens, true 2× crop expected). Still open: do you have, or will you get, an overhead phone stand that holds the phone ~60 cm above the table (adjustable 50–70 cm)?
-3. **Your puzzle:** brand, piece count, and the finished size printed on the box (e.g. 70 × 50 cm)?
-4. **Your setup:** mat size and colour, table size, and do you have a printer for A4?
+2. ~~**Your iPhone**~~ → answered: an iPhone **Pro** (48 MP main camera, true optical 2× confirmed). **No stand**: the app is used handheld (2026-11-06).
+3. ~~**Your puzzle**~~ → answered: Ravensburger, 1000 pieces, *The Kiss* (Hayez), portrait. The box is a little bigger than A4; the finished size is measured by the app (2026-11-06).
+4. ~~**Your setup**~~ → answered 2026-11-06: **no mat**, a very large white glossy table that fits the whole finished puzzle, and **an A4 printer**.
 5. ~~**GitHub**~~ → answered 2026-11-04: use the Mac's account `zivkogodzirov`, public repository `puzzle-lens`; real photos stay out of it.

@@ -4,6 +4,17 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### Seventh report (2026-11-06, Safari tab): M1 checked on your iPhone
+- Everything in the M1 checklist has now worked on your phone, in the Safari tab and the Home Screen app: sharp 3024×4032 Snap with live tracking, tracking at 22–28 per second, memory headroom 1,792 MB, the marker outline right in all three positions.
+- **The 2× lens test now gives a verdict:** your phone measured 1.83 and 2.40, so it shows "True 2× lens". A low ratio says "not confirmed" and never ✗.
+
+### Plan changed for your setup (2026-11-06)
+- **No stand:** the phone is held by hand. The app will show a level-and-height gauge from the markers and take each photo by itself when the phone is level and still (M2).
+- **No mat:** pieces lie on your white glossy table. The app learns the empty table from one photo, finds pale pieces from their edges and side shadows, and detects glare and fills it in from a second photo (M2). Advice: light from the side, not straight above.
+- **Finished size is measured, not asked:** you type only the piece count; the grid comes from the count and the box picture's shape, the size from the first overview photo. The box photo moves into the M2 wizard.
+- Close-ups at 2× from the same height as the overview, because your 2× lens is a true optical 2×.
+- Printed markers stay (you can print A4).
+
 ### Fixed after your first iPhone report (2026-11-06)
 - On your iPhone, every in-app photo failed with an internal camera error (all sizes, all formats).
 - **Snap** now falls back by itself to the **full-size live picture** (12 MP), and only offers the iPhone camera screen if that fails too.

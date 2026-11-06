@@ -160,14 +160,17 @@ export function permissionHistoryEntry(rows: LaunchLike[]): CheckEntry {
 /* ---------- verdicts for individual probes ---------- */
 
 /**
- * The 2× lens test is measured but NOT judged yet: the detail measure can't yet tell a real 2× lens
- * from digital zoom reliably (a real 2× crop scored at or below the old "digital zoom" threshold in
- * the synthetic tests). So it never gives a ✗ or a recommendation; the raw ratio goes into the report
- * and the thresholds will be set from measurements on the owner's iPhone. `r.verdict` is ignored.
+ * The 2× lens verdict. Set from the owner's iPhone (2026-11-06): two runs measured 1.83 and 2.40,
+ * well above the synthetic real-2× pairs. Digital zoom has not been measured on a phone, so a low
+ * ratio is never called "digital zoom": it only says the test could not confirm a true 2× (no ✗).
+ * `r.verdict` (the reader's provisional label) is ignored.
  */
+export const TWO_X_CONFIRMED_AT = 1.3;
 export function twoXVerdict(r: TwoXResult): { status: CheckStatus; value: string } {
-  const ratio = Number.isFinite(r.ratio) ? r.ratio.toFixed(2) : '?';
-  return { status: 'partial', value: `Measured ratio ${ratio} — not judged yet; the developer will set the thresholds from your phone's report` };
+  if (!Number.isFinite(r.ratio) || r.ratio <= 0) return { status: 'partial', value: 'Could not measure (not enough detail in view) — point at printed text and run again' };
+  const ratio = r.ratio.toFixed(2);
+  if (r.ratio >= TWO_X_CONFIRMED_AT) return { status: 'yes', value: `True 2× lens — close-ups at 2× are sharp (ratio ${ratio})` };
+  return { status: 'partial', value: `Not confirmed (ratio ${ratio}) — close-ups will be taken at 1× from closer` };
 }
 
 export function noiseVerdict(cmp: NoiseComparison | null, error?: string): { status: CheckStatus; value: string } {
