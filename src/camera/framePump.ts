@@ -284,6 +284,24 @@ export function stopPump(): void {
   if (wasDirect) void peekTracker()?.api.detach().catch(() => {});
 }
 
+/**
+ * Stops feeding frames AND waits until the tracker's copy of the camera is really closed. On iPhone
+ * a still-open copy makes photos come out at its small size (owner's phone, 2026-11-06), so a
+ * photo with tracking paused must wait for this.
+ */
+export async function stopPumpAndWait(): Promise<void> {
+  const wasDirect = pumpMode.value === 'mstp';
+  stopPump();
+  const tr = peekTracker();
+  if (wasDirect && tr) {
+    try {
+      await Promise.race([tr.api.detach(), new Promise((r) => setTimeout(r, 3000))]);
+    } catch {
+      /* worker gone */
+    }
+  }
+}
+
 /** Longest gap in frames reaching the tracker between two moments (ms since epoch). */
 export async function trackerGap(startAbs: number, endAbs: number): Promise<number | null> {
   const tr = peekTracker();

@@ -10,7 +10,7 @@
  * then the 2× lens test with whatever works.
  */
 import { cameraInfo, cameraState, currentTrack, grabFullFrame, photoInfo, setZoom, startCamera, stopCamera } from '../camera/camera';
-import { startPump } from '../camera/framePump';
+import { startPump, stopPumpAndWait } from '../camera/framePump';
 import { takePhotoWith } from '../camera/snap';
 import { describeSnapMethod, type PhotoSize, type SnapMethod } from '../camera/snapMethod';
 import { settings } from '../app/settings';
@@ -45,7 +45,7 @@ export function runPhotoProbe(h: CameraRunHooks): Promise<void> {
 async function tryPhoto(id: string, method: TakeMethod, h: CameraRunHooks): Promise<Attempt> {
   try {
     await waitLive(4000);
-    const r = await takePhotoWith(method, null, 12_000);
+    const r = await takePhotoWith(method, null, 12_000, false);
     const m = await measurePhoto(r.blob);
     h.onCheck(
       makeEntry(id, 'yes', `${sizeText(m.width, m.height)} · ${formatMs(r.ms)}, camera paused ${formatMs(r.mutedMs)}`, {
@@ -144,7 +144,7 @@ async function probeSequence(h: CameraRunHooks, firstStart: Promise<void>): Prom
     const onFull: Attempt[] = [];
     if (!h.isAborted() && worked.length) {
       h.onProgress('Photo test: full-size tracking…');
-      safeStopPump();
+      await stopPumpAndWait();
       await startPump(h.video, { fullSizeClone: true });
       await sleep(1500);
       for (const m of worked) {
@@ -178,7 +178,7 @@ async function probeSequence(h: CameraRunHooks, firstStart: Promise<void>): Prom
 
     // 4. The 2× lens test with what works (tracking set up the way Snap will have it).
     if (choice.kind !== 'file' && !h.isAborted()) {
-      safeStopPump();
+      await stopPumpAndWait();
       if (choice.kind === 'grabFrame' || !choice.pauseTracking) await startPump(h.video);
       await sleep(1000);
       h.onCheck(await twoXWith(choice, h));

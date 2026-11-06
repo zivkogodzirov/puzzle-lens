@@ -123,3 +123,24 @@ test('when both ways fail, the iPhone camera screen is offered', async ({ page }
   await expect(sheet.getByTestId('snap-error')).toContainText("didn't come back from the camera");
   await expect(sheet.getByTestId('use-system-camera')).toBeVisible();
 });
+
+test('a photo that comes back small (540×960, like the owner\'s iPhone with tracking on) is replaced by the full-size live picture', async ({ page }) => {
+  await startLiveCamera(page);
+  await page.evaluate(() => {
+    const IC = (window as unknown as { ImageCapture: { prototype: { takePhoto: () => Promise<Blob> } } }).ImageCapture;
+    IC.prototype.takePhoto = () =>
+      new Promise<Blob>((resolve) => {
+        const c = document.createElement('canvas');
+        c.width = 540;
+        c.height = 960;
+        c.getContext('2d')!.fillRect(0, 0, 10, 10);
+        c.toBlob((b) => resolve(b!), 'image/jpeg', 0.9);
+      });
+  });
+  await page.getByTestId('snap').click();
+  const sheet = page.getByTestId('snap-sheet');
+  await expect(sheet).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('snap-size')).toContainText('1280 × 960');
+  await expect(sheet).toContainText('full-size live picture');
+  await expect(sheet.getByTestId('snap-send-report')).toBeVisible();
+});

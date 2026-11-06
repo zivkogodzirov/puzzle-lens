@@ -73,6 +73,9 @@ export function SnapSheet({ record, onClose, onUseSystemCamera }: { record: Snap
           <dd>{mb(stats.wasmBytesAfter)}</dd>
         </dl>
       )}
+      <a class="btn btn-block" href="#/report" data-testid="snap-send-report" style={{ marginTop: '14px' }}>
+        Send report (includes this photo)
+      </a>
     </div>
   );
 }

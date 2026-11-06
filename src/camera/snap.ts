@@ -8,7 +8,8 @@
  */
 import { signal } from '@preact/signals';
 import { currentTrack, grabFullFrame, hasImageCapture, photoInfo, setExternalCapture, takePhoto, cameraState, type SnapResult } from './camera';
-import { trackerGap, refreshReaderMemory, startPump, stopPump } from './framePump';
+import { trackerGap, refreshReaderMemory, startPump, stopPumpAndWait } from './framePump';
+import { JPEG_HEADER_BYTES, parseJpegHeader } from '../device/jpeg';
 import { parseSnapMethod, photoSizeFor, type SnapMethod } from './snapMethod';
 import { settings } from '../app/settings';
 import { Comlink, peekReader, readerWorker, restartReader } from '../app/workers';
@@ -67,18 +68,68 @@ export function canSnapWithCamera(): boolean {
   return hasImageCapture() && cameraState.value === 'live' && takePhotoFailures < MAX_TAKEPHOTO_FAILURES;
 }
 
-/** Takes a photo the way `method` says (null = the camera contract's default). */
-export async function takePhotoWith(method: Extract<SnapMethod, { kind: 'takePhoto' }> | null, video: HTMLVideoElement | null, timeoutMs?: number): Promise<SnapResult> {
-  if (!method) return takePhoto('current', { timeoutMs });
+/** Pixel count of a JPEG from its header (no decode), or null. */
+async function jpegPixels(blob: Blob): Promise<{ w: number; h: number } | null> {
+  try {
+    const info = parseJpegHeader(new Uint8Array(await blob.slice(0, JPEG_HEADER_BYTES).arrayBuffer()));
+    return info ? { w: info.displayWidth, h: info.displayHeight } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A photo much smaller than the live camera picture is a failed photo (the tracker's small copy leaked into it). */
+async function assertFullSize(r: SnapResult): Promise<void> {
+  const t = currentTrack();
+  const s = t ? trackSettings(t) : {};
+  const live = (s.width ?? 0) * (s.height ?? 0);
+  const got = await jpegPixels(r.blob);
+  if (live && got && got.w * got.h < 0.5 * live) throw new SmallPhoto(`The photo came out small (${got.w}×${got.h})`);
+}
+
+class SmallPhoto extends Error {}
+
+/**
+ * Takes a photo the way `method` says (null = the camera contract's default). With `checkSize`
+ * (default) a photo that comes out much smaller than the live picture counts as a failure, so
+ * Snap falls back to the full-size live picture.
+ */
+export async function takePhotoWith(
+  method: Extract<SnapMethod, { kind: 'takePhoto' }> | null,
+  video: HTMLVideoElement | null,
+  timeoutMs?: number,
+  checkSize = true,
+): Promise<SnapResult> {
+  if (!method) {
+    const r = await takePhoto('current', { timeoutMs });
+    if (checkSize) await assertFullSize(r);
+    return r;
+  }
   let size: PhotoSettingsLike | null = null;
   if (method.size !== 'none') {
     const t = currentTrack();
     const info = method.size === 'caps-max' || method.size === 'camera-default' ? await photoInfo() : null;
     size = photoSizeFor(method.size, t ? trackSettings(t) : {}, info?.capabilities as PhotoCapabilitiesLike | null, info?.settings as PhotoSettingsLike | null);
   }
-  if (method.pauseTracking) stopPump();
+  if (method.pauseTracking) {
+    // Wait until the tracker's copy of the camera is closed, then give the camera a moment to go back to full size.
+    await stopPumpAndWait();
+    await new Promise((r) => setTimeout(r, 400));
+  }
   try {
-    return await takePhoto(size, { onClone: method.onClone, timeoutMs });
+    let r = await takePhoto(size, { onClone: method.onClone, timeoutMs });
+    if (checkSize) {
+      try {
+        await assertFullSize(r);
+      } catch (err) {
+        if (!(err instanceof SmallPhoto) || !method.pauseTracking) throw err;
+        // Once more after a longer wait: the camera may still have been switching back.
+        await new Promise((res) => setTimeout(res, 800));
+        r = await takePhoto(size, { onClone: method.onClone, timeoutMs });
+        await assertFullSize(r);
+      }
+    }
+    return r;
   } finally {
     if (method.pauseTracking && video) void startPump(video);
   }

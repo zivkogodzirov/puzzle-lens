@@ -16,6 +16,10 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
   - The Photo test now never picks a way that gives a small picture. The first version would have chosen 0.5 MP photos.
   - It also tries tracking with a full-size copy of the camera.
   - The camera tests take their photos with tracking paused.
+- Third report: the Photo test chose correctly (photo with tracking paused), but Snap still gave 540×960.
+  - The pause didn't wait for the tracker's copy of the camera to close. It does now.
+  - Every Snap checks its size. A photo that comes out small is retried once, then replaced by the full-size live picture.
+  - The photo panel has a "Send report" button.
 
 ### Added: M1, skeleton on your phone (2026-11-04; not yet checked on an iPhone)
 - **App:**
