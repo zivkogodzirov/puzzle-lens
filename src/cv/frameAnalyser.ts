@@ -103,11 +103,15 @@ export class FrameAnalyser {
     let t = performance.now();
 
     // 1. Downscale
-    const aw = Math.min(this.opts.analysisWidth, width);
+    // A whole-number shrink factor when it fits (e.g. 4032×3024 → 1008×756 = exactly ¼): OpenCV's
+    // area shrink is many times faster then (measured on the Mac: 57 ms → a few ms for 12 MP).
+    let aw = Math.min(this.opts.analysisWidth, width);
+    const k = Math.round(width / this.opts.analysisWidth);
+    if (k >= 2 && width % k === 0 && height % k === 0) aw = width / k;
     const scale = width / aw;
     let src: Mat = this.gray!;
     if (aw < width) {
-      const ah = Math.max(1, Math.round(height / scale));
+      const ah = width % aw === 0 && height % (width / aw) === 0 ? height / (width / aw) : Math.max(1, Math.round(height / scale));
       cv.resize(this.gray, this.small, new cv.Size(aw, ah), 0, 0, cv.INTER_AREA);
       src = this.small!;
     }

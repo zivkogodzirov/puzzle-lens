@@ -78,6 +78,8 @@ export interface TrackerStatus {
   lastError: WorkerError | null;
   /** OpenCV errors in a row without a good frame in between (the tracker restarts itself past a limit). */
   consecutiveErrors: number;
+  /** How big (full-size) frames are read, once the tracker has timed both ways on this phone. */
+  bigFrames?: { path: 'direct' | 'gpu'; directMs: number | null; gpuMs: number | null } | null;
 }
 
 export interface WorkerInitInfo {

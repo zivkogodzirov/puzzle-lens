@@ -148,6 +148,7 @@ const api: TrackerApi = {
       memory: core?.memory() ?? { wasmBytes: 0, liveScoped: 0, livePersistent: 0, openFrames: 0 },
       lastError: core?.lastError ?? initError,
       consecutiveErrors: core?.consecutiveErrors ?? 0,
+      bigFrames: core?.bigChoice ?? null,
     };
   },
 

@@ -23,6 +23,9 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 - Fourth report: Snap gave a full 3024×4032 picture through the live-picture backup, but that picture is soft. Once the tracker's shrunk copy has run, photos stay small until the camera restarts.
   - The Photo test now starts every stage with a freshly started camera.
   - It also tries "pause tracking and restart the camera" before the photo.
+- Fifth report: **Snap takes real, sharp 12 MP photos** while tracking keeps running, by giving the tracker a full-size copy of the camera. The 2× lens measured 1.83 (a true 2×). Tracking dropped to 17 fps, because shrinking the big frames on the GPU took about 47 ms.
+  - New way to read big frames: copy the grey picture and shrink it by an exact factor of 4 in OpenCV (Mac: 18.7 ms per 12 MP frame, the shrink itself 4 ms).
+  - The tracker times both ways on the phone and keeps the faster one. The HUD shows the choice under "big frames".
 
 ### Added: M1, skeleton on your phone (2026-11-04; not yet checked on an iPhone)
 - **App:**

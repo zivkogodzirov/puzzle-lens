@@ -32,6 +32,11 @@ export function Hud() {
       <div>
         <b>frames</b> {pumpMode.value === 'off' ? 'not connected' : hud.frameSource.value} · {hud.frameFormat.value} · {hud.frameSize.value}
       </div>
+      {hud.bigFrames.value && (
+        <div data-testid="big-frames">
+          <b>big frames</b> {hud.bigFrames.value}
+        </div>
+      )}
       <div>
         <b>ms</b>{' '}
         {Object.keys(STAGE_LABELS)

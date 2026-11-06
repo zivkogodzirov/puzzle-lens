@@ -18,6 +18,18 @@ export const MAX_DIRECT_COPY_WIDTH = 1280;
 export const THUMB_EVERY_MS = 3000;
 export const THUMB_KEEP = 6;
 const THUMB_WIDTH = 480;
+/** Big frames: frames per way timed before choosing (after a couple of warm-up frames each). */
+const BIG_TRIAL_FRAMES = 10;
+const BIG_TRIAL_SKIP = 2;
+
+/**
+ * How frames wider than MAX_DIRECT_COPY_WIDTH are read:
+ *  - 'gpu': shrink on the GPU (createImageBitmap) and copy the small picture;
+ *  - 'direct': copy the full frame's grey plane and shrink it in OpenCV.
+ * On the owner's iPhone with the full-size tracker copy (needed for full-size photos) the GPU way
+ * took ~47 ms per 4032×3024 frame. 'auto' times both on the phone and keeps the faster one.
+ */
+export type BigFramePath = 'auto' | 'direct' | 'gpu';
 
 /** The few browser things the tracker needs, injectable so tests can count every frame. */
 export interface TrackerEnv {
@@ -64,6 +76,10 @@ export class TrackerCore {
   private lastProcessedAt = Number.NEGATIVE_INFINITY;
   private lastThumbAt = Number.NEGATIVE_INFINITY;
   private frameIndex = 0;
+  private bigPath: BigFramePath = 'auto';
+  private readonly bigTrial: { direct: number[]; gpu: number[] } = { direct: [], gpu: [] };
+  /** Median ms per frame for each way once chosen (for the HUD, Device check and reports). */
+  bigChoice: { path: 'direct' | 'gpu'; directMs: number | null; gpuMs: number | null } | null = null;
 
   constructor(
     private readonly cv: Cv,
@@ -182,7 +198,37 @@ export class TrackerCore {
     return a;
   }
 
-  /** Gets pixels from a frame and runs the analyser. Big frames are shrunk on the GPU first. */
+  /** Forces one way of reading big frames (tests), or 'auto' to time both. */
+  setBigFramePath(p: BigFramePath): void {
+    this.bigPath = p;
+    this.bigTrial.direct.length = 0;
+    this.bigTrial.gpu.length = 0;
+    this.bigChoice = null;
+  }
+
+  private nextBigPath(): 'direct' | 'gpu' {
+    if (this.bigPath !== 'auto') return this.bigPath;
+    // Alternate while timing.
+    return this.bigTrial.direct.length <= this.bigTrial.gpu.length ? 'direct' : 'gpu';
+  }
+
+  private noteBigTime(path: 'direct' | 'gpu', ms: number): void {
+    if (this.bigPath !== 'auto') return;
+    this.bigTrial[path].push(ms);
+    const need = BIG_TRIAL_FRAMES + BIG_TRIAL_SKIP;
+    if (this.bigTrial.direct.length >= need && this.bigTrial.gpu.length >= need) {
+      const med = (xs: number[]) => {
+        const t = xs.slice(BIG_TRIAL_SKIP).sort((a, b) => a - b);
+        return t[Math.floor(t.length / 2)]!;
+      };
+      const d = med(this.bigTrial.direct);
+      const g = med(this.bigTrial.gpu);
+      this.bigPath = d <= g ? 'direct' : 'gpu';
+      this.bigChoice = { path: this.bigPath, directMs: d, gpuMs: g };
+    }
+  }
+
+  /** Gets pixels from a frame and runs the analyser. Big frames: see BigFramePath. */
   private async analyseVideoFrame(frame: VideoFrame): Promise<Analysed | null> {
     const width = frame.displayWidth;
     if (width <= MAX_DIRECT_COPY_WIDTH || !this.env.makeVideoFrame) {
@@ -190,13 +236,29 @@ export class TrackerCore {
       if (read) return { analysis: this.analyseRead(read), format: frame.format ?? read.format, scale: 1 };
       return this.analyseViaCanvas(frame, frame.displayWidth, frame.displayHeight, frame.format, 1);
     }
-    // Big frame (e.g. the clone kept 4032×3024): shrink on the GPU, then copy the small one.
+    if (this.nextBigPath() === 'direct') {
+      // Copy the whole frame (only its grey plane is used) and let OpenCV shrink it.
+      const t0 = this.env.now();
+      const read = await this.env.readVideoFrame(frame);
+      if (read) {
+        const analysis = this.analyseRead(read);
+        this.noteBigTime('direct', this.env.now() - t0);
+        return { analysis, format: `${frame.format ?? read.format} full copy`, scale: 1 };
+      }
+      // Opaque frames can't be copied: only the GPU way works.
+      if (this.bigPath === 'auto') this.setBigFramePath('gpu');
+    }
+    return this.analyseBigOnGpu(frame, width);
+  }
+
+  /** Big frame shrunk on the GPU, then the small picture copied. */
+  private async analyseBigOnGpu(frame: VideoFrame, width: number): Promise<Analysed | null> {
     const tScale = this.env.now();
     const scaled = await this.env.createImageBitmap(frame, { resizeWidth: ANALYSIS_WIDTH, resizeQuality: 'medium' });
     this.counters.openBitmaps++;
     let target: VideoFrame | null = null;
     try {
-      target = this.env.makeVideoFrame(scaled, frame.timestamp);
+      target = this.env.makeVideoFrame!(scaled, frame.timestamp);
       this.counters.openFrames++;
       const scaleMs = this.env.now() - tScale;
       const scale = width / scaled.width;
@@ -204,7 +266,10 @@ export class TrackerCore {
       const res = read
         ? { analysis: this.analyseRead(read), format: `${frame.format ?? 'opaque'}→scaled ${read.format ?? '?'}`, scale }
         : this.analyseViaCanvas(target, scaled.width, scaled.height, `${frame.format ?? 'opaque'}→scaled`, scale);
-      if (res) res.analysis.timings.scale = scaleMs;
+      if (res) {
+        res.analysis.timings.scale = scaleMs;
+        this.noteBigTime('gpu', this.env.now() - tScale);
+      }
       return res;
     } finally {
       if (target) {

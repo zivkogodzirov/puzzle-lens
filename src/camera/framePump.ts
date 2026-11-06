@@ -105,6 +105,8 @@ function onStatus(st: TrackerStatus): void {
   const now = performance.now();
   hud.trackerMemory.value = st.memory;
   hud.trackerSkipped.value = st.framesSkipped;
+  const b = st.bigFrames;
+  hud.bigFrames.value = b ? `${b.path === 'direct' ? 'full copy' : 'GPU shrink'} (full copy ${Math.round(b.directMs ?? 0)} ms, GPU ${Math.round(b.gpuMs ?? 0)} ms)` : '';
 
   // Errors: log each one once; show it on the HUD only while it is recent.
   const err = st.lastError;

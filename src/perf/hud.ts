@@ -49,6 +49,8 @@ export const hud = {
   trackerMemory: signal<WorkerMemory | null>(null),
   readerMemory: signal<WorkerMemory | null>(null),
   trackerSkipped: signal(0),
+  /** How big frames are read and what each way cost, once the tracker has timed both. */
+  bigFrames: signal<string>(''),
   /** A recent tracker error (cleared after a few seconds). */
   lastError: signal<string | null>(null),
 };

@@ -203,7 +203,7 @@ describe('10-minute live loop', () => {
           const hit = r.markers.find((m) => m.id === MARKER_ID);
           if (hit) worstBigCornerErr = Math.max(worstBigCornerErr, maxCornerError(hit.corners, big.expected[0]!.corners));
           expect(r.width).toBe(2 * W);
-          expect(r.format).toContain('→scaled');
+          expect(r.format).toMatch(/→scaled|full copy/);
         }
       } else {
         const failCopy = i % FAIL_COPY_EVERY === FAIL_COPY_EVERY - 1;
@@ -279,7 +279,7 @@ describe('10-minute live loop', () => {
     expect(core.counters.openBitmaps).toBe(0);
     expect(core.memory().openFrames).toBe(0);
     // Big frames made an extra bitmap + frame each, fallback frames a VideoFrame each.
-    expect(bitmaps.created).toBeGreaterThanOrEqual(Math.floor(FRAMES / BIG_EVERY) * 0.9 + bitmapPathFrames);
+    expect(bitmaps.created).toBeGreaterThanOrEqual(bitmapPathFrames);
 
     // Failures were counted, and every other frame produced a result.
     expect(core.counters.errors).toBe(expectedErrors);
@@ -291,6 +291,9 @@ describe('10-minute live loop', () => {
     expect(worstBigCornerErr).toBeLessThanOrEqual(1);
     expect(thumbsMade).toBeGreaterThanOrEqual(Math.floor(FRAMES / 90) - 2);
     expect(snaps).toBe(Math.floor(FRAMES / SNAP_EVERY));
+    // Both ways of reading big frames were timed, and one was chosen.
+    expect(core.bigChoice).not.toBeNull();
+    console.info(`  big frames: ${JSON.stringify(core.bigChoice)}`);
 
     // OpenCV objects: scoped back to 0 after every frame and Snap; persistent constant.
     expect(scopedViolations, `liveScoped ≠ 0 first after frame ${firstScopedViolation}`).toBe(0);
