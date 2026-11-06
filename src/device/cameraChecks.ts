@@ -111,11 +111,11 @@ function zoomNow(): number | null {
 }
 
 /** Waits until the camera is live and not muted (after a Snap, a format switch or a zoom change). */
-function waitLive(ms: number): Promise<boolean> {
+export function waitLive(ms: number): Promise<boolean> {
   return waitFor(() => cameraState.value === 'live' && currentTrack()?.muted !== true, ms);
 }
 
-async function attachPreview(video: HTMLVideoElement): Promise<void> {
+export async function attachPreview(video: HTMLVideoElement): Promise<void> {
   const stream = cameraStream.value;
   if (!stream) throw new Error('No camera picture');
   if (video.srcObject !== stream) video.srcObject = stream;

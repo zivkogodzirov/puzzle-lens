@@ -310,20 +310,22 @@ describe('catalog and results', () => {
 
   it('knows which steps of a full check are done', () => {
     const r0 = newResults('1', 'browser', ENV, 100);
-    expect(missingParts(r0)).toEqual(['automatic', 'camera', 'fileCamera']);
-    expect(missingParts(null)).toEqual(['automatic', 'camera', 'fileCamera']);
+    expect(missingParts(r0)).toEqual(['automatic', 'camera', 'fileCamera', 'photoProbe']);
+    expect(missingParts(null)).toEqual(['automatic', 'camera', 'fileCamera', 'photoProbe']);
     // Camera tests that only produced errors (e.g. permission refused) don't count as done.
     const refused = applyRun(r0, [makeEntry('camera-format-auto-4x3', 'error', 'refused')], 'camera', 200);
     expect(partDone(refused, 'camera')).toBe(false);
-    const all = applyRun(
+    const three = applyRun(
       applyRun(applyRun(refused, [makeEntry('opfs', 'yes', '')], 'automatic', 300), [makeEntry('camera-format-4k', 'yes', '')], 'camera', 400),
       [makeEntry('file-camera', 'yes', '')],
       'fileCamera',
       500,
     );
+    expect(missingParts(three)).toEqual(['photoProbe']);
+    const all = applyRun(three, [makeEntry('photo-probe-choice', 'partial', 'Snap will use: Full-size live picture')], 'photoProbe', 600);
     expect(missingParts(all)).toEqual([]);
     expect(partDone(all, 'memory')).toBe(false);
-    expect(REQUIRED_PARTS).toEqual(['automatic', 'camera', 'fileCamera']);
+    expect(REQUIRED_PARTS).toEqual(['automatic', 'camera', 'fileCamera', 'photoProbe']);
     expect(PART_NAMES.memory).toMatch(/optional/);
   });
 

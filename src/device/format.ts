@@ -357,12 +357,13 @@ export function isFromOlderVersion(c: CheckEntry, results: { appVersion: string 
 /* ---------- the steps of a full check ---------- */
 
 /** The steps that make a full check (the memory test is optional). */
-export const REQUIRED_PARTS: readonly RunPart[] = ['automatic', 'camera', 'fileCamera'];
+export const REQUIRED_PARTS: readonly RunPart[] = ['automatic', 'camera', 'fileCamera', 'photoProbe'];
 
 export const PART_NAMES: Record<RunPart, string> = {
   automatic: 'Automatic checks',
   camera: 'Camera tests',
   fileCamera: 'iPhone camera screen',
+  photoProbe: 'Photo test',
   memory: 'Memory test (optional)',
 };
 
@@ -374,6 +375,7 @@ export function partDone(results: DeviceCheckResults | null | undefined, part: R
   if (!results?.parts[part]) return false;
   if (part === 'camera') return results.checks.some((c) => c.id.startsWith('camera-format-') && c.status !== 'error');
   if (part === 'fileCamera') return results.checks.some((c) => c.id === 'file-camera' && c.status !== 'error');
+  if (part === 'photoProbe') return results.checks.some((c) => c.id === 'photo-probe-choice');
   if (part === 'memory') return results.checks.some((c) => c.id === 'memory-headroom');
   return true;
 }

@@ -1,11 +1,18 @@
 /**
- * Snap = a full-resolution still photo, then a tile-by-tile check of it in the reader worker.
+ * Snap = a full-resolution still picture, then a tile-by-tile check of it in the reader worker.
  * The latest Snap is kept (in the database) so it can go into a report.
+ *
+ * How the picture is taken follows the Device check "Photo test" (settings.snapMethod). Without a
+ * result: the camera's photo pipeline (takePhoto) first, then the full-size live picture
+ * (grabFrame: 12 MP in the 4:3 format), then the iPhone camera screen is offered.
  */
 import { signal } from '@preact/signals';
-import { hasImageCapture, setExternalCapture, takePhoto, cameraState, type SnapResult } from './camera';
-import { trackerGap, refreshReaderMemory } from './framePump';
-import { peekReader, readerWorker, restartReader } from '../app/workers';
+import { currentTrack, grabFullFrame, hasImageCapture, photoInfo, setExternalCapture, takePhoto, cameraState, type SnapResult } from './camera';
+import { trackerGap, refreshReaderMemory, startPump, stopPump } from './framePump';
+import { parseSnapMethod, photoSizeFor, type SnapMethod } from './snapMethod';
+import { settings } from '../app/settings';
+import { Comlink, peekReader, readerWorker, restartReader } from '../app/workers';
+import { trackSettings, type PhotoCapabilitiesLike, type PhotoSettingsLike } from '../types/media';
 import { db } from '../db/db';
 import { logError, logInfo, logWarn } from '../log/logger';
 import type { PhotoStats } from '../shared/types';
@@ -56,32 +63,62 @@ function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
 }
 
 export function canSnapWithCamera(): boolean {
+  if (parseSnapMethod(settings.snapMethod.value)?.kind === 'file') return false;
   return hasImageCapture() && cameraState.value === 'live' && takePhotoFailures < MAX_TAKEPHOTO_FAILURES;
 }
 
-export async function snapWithCamera(): Promise<SnapRecord> {
+/** Takes a photo the way `method` says (null = the camera contract's default). */
+export async function takePhotoWith(method: Extract<SnapMethod, { kind: 'takePhoto' }> | null, video: HTMLVideoElement | null, timeoutMs?: number): Promise<SnapResult> {
+  if (!method) return takePhoto('current', { timeoutMs });
+  let size: PhotoSettingsLike | null = null;
+  if (method.size !== 'none') {
+    const t = currentTrack();
+    const info = method.size === 'caps-max' || method.size === 'camera-default' ? await photoInfo() : null;
+    size = photoSizeFor(method.size, t ? trackSettings(t) : {}, info?.capabilities as PhotoCapabilitiesLike | null, info?.settings as PhotoSettingsLike | null);
+  }
+  if (method.pauseTracking) stopPump();
+  try {
+    return await takePhoto(size, { onClone: method.onClone, timeoutMs });
+  } finally {
+    if (method.pauseTracking && video) void startPump(video);
+  }
+}
+
+export async function snapWithCamera(video: HTMLVideoElement | null = null): Promise<SnapRecord> {
   snapBusy.value = true;
   try {
-    let result: SnapResult;
-    try {
-      result = await takePhoto('current');
-    } catch (err) {
-      takePhotoFailures++;
-      logError('snap', `Photo failed (${takePhotoFailures} so far)`, err);
-      const why = String((err as Error)?.message ?? err);
-      const rec: SnapRecord = {
-        snap: emptySnap('takePhoto'),
-        stats: null,
-        previewUrl: null,
-        error: `The photo didn't come back from the camera. (${why})`,
-        cameraFailed: true,
-      };
-      lastSnap.value = rec;
-      return rec;
+    const method = parseSnapMethod(settings.snapMethod.value);
+    const tried: string[] = [];
+    if (!method || method.kind === 'takePhoto') {
+      try {
+        // Without a Photo test result, don't wait long before trying the live picture instead.
+        const result = await takePhotoWith(method?.kind === 'takePhoto' ? method : null, video, method ? 20_000 : 8_000);
+        takePhotoFailures = 0;
+        result.workerGapMs = await trackerGap(result.startAbs, result.endAbs);
+        return await processSnap(result);
+      } catch (err) {
+        tried.push(`photo: ${String((err as Error)?.message ?? err)}`);
+        logWarn('snap', 'Camera photo failed; trying the full-size live picture', err);
+      }
     }
-    takePhotoFailures = 0;
-    result.workerGapMs = await trackerGap(result.startAbs, result.endAbs);
-    return await processSnap(result);
+    try {
+      const g = await grabFullFrame();
+      const gap = await trackerGap(g.startAbs, g.endAbs);
+      return await processFrameSnap(g, gap, tried);
+    } catch (err) {
+      tried.push(`live picture: ${String((err as Error)?.message ?? err)}`);
+    }
+    takePhotoFailures++;
+    logError('snap', `Snap failed (${takePhotoFailures} so far): ${tried.join('; ')}`);
+    const rec: SnapRecord = {
+      snap: emptySnap('takePhoto'),
+      stats: null,
+      previewUrl: null,
+      error: `The photo didn't come back from the camera. (${tried.join('; ')})`,
+      cameraFailed: true,
+    };
+    lastSnap.value = rec;
+    return rec;
   } finally {
     snapBusy.value = false;
   }
@@ -157,6 +194,49 @@ async function processSnap(result: SnapResult): Promise<SnapRecord> {
   const old = lastSnap.value?.previewUrl;
   if (old) URL.revokeObjectURL(old);
   const rec: SnapRecord = { snap: { ...meta, bytes: blob.size, type: blob.type }, stats, previewUrl, error, saveWarning };
+  lastSnap.value = rec;
+  return rec;
+}
+
+/** A Snap taken as the full-size live picture: checked, previewed and kept like a photo. */
+async function processFrameSnap(g: { bitmap: ImageBitmap; ms: number; startAbs: number; endAbs: number }, gap: number | null, tried: string[]): Promise<SnapRecord> {
+  let stats: PhotoStats | null = null;
+  let error: string | null = null;
+  let saveWarning: string | null = null;
+  let previewUrl: string | null = null;
+  let jpeg: Blob | null = null;
+  const reader = readerWorker();
+  const meta: Omit<SnapResult, 'blob'> = { method: 'grabFrame', requested: null, ms: g.ms, mutedMs: 0, workerGapMs: gap, startAbs: g.startAbs, endAbs: g.endAbs };
+  try {
+    const info = await withTimeout(reader.ready, READY_TIMEOUT_MS, 'Starting the photo checker');
+    if (!info?.ok) throw new Error(info?.error ?? 'The photo checker could not start');
+    const out = await withTimeout(reader.api.analyseFrame(Comlink.transfer(g.bitmap, [g.bitmap])), ANALYSE_TIMEOUT_MS, 'Checking the picture');
+    stats = out.stats;
+    jpeg = out.jpeg;
+    previewUrl = URL.createObjectURL(out.preview);
+    logInfo('snap', `Live picture ${stats.width}×${stats.height}, checked in ${Math.round(stats.analyseMs)} ms`, { meta, stats, tried });
+    try {
+      await db().blobs.put({ id: 'last-snap', ts: Date.now(), kind: 'snap', blob: out.jpeg, meta: { ...meta, stats, tried } });
+      await db().blobs.put({ id: 'last-snap-preview', ts: Date.now(), kind: 'snap-preview', blob: out.preview });
+    } catch (err) {
+      saveWarning = "Photo checked ✓, but it couldn't be kept for reports (Private Browsing, or the iPhone is low on storage?).";
+      logWarn('snap', 'Could not keep the photo for reports', err);
+    }
+  } catch (err) {
+    try {
+      g.bitmap.close();
+    } catch {
+      /* already transferred */
+    }
+    const why = String((err as Error)?.message ?? err);
+    error = err instanceof Timeout ? `${why}. The photo checker was restarted; please try again.` : `The picture was taken but couldn't be checked. (${why})`;
+    logError('snap', 'Live picture check failed', err);
+    if (err instanceof Timeout) restartReader();
+  }
+  await refreshReaderMemory();
+  const old = lastSnap.value?.previewUrl;
+  if (old) URL.revokeObjectURL(old);
+  const rec: SnapRecord = { snap: { ...meta, bytes: jpeg?.size ?? 0, type: jpeg?.type ?? '' }, stats, previewUrl, error, saveWarning };
   lastSnap.value = rec;
   return rec;
 }

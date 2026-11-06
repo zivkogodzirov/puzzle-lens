@@ -125,6 +125,55 @@ async function decode(blob: Blob): Promise<{ reader: PhotoReader; ms: number; or
   return { reader: new PhotoReader(bitmap), ms: performance.now() - t0, original };
 }
 
+async function bitmapToJpeg(bitmap: ImageBitmap, w: number, h: number, quality: number): Promise<Blob> {
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('No 2D canvas in the photo helper');
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  return canvas.convertToBlob({ type: 'image/jpeg', quality });
+}
+
+/** Brightness, clipping and sharpness of a whole picture, one 1024 px tile at a time. */
+async function checkTiles(
+  c: Cv,
+  reader: PhotoReader,
+  meta: Pick<PhotoStats, 'width' | 'height' | 'checkedAt' | 'bytes' | 'type' | 'decodeMs'>,
+): Promise<PhotoStats> {
+  const t0 = performance.now();
+  let pixels = 0;
+  let sumLuma = 0;
+  let high = 0;
+  let low = 0;
+  const sharp: number[] = [];
+  let tiles = 0;
+  for (let y = 0; y < reader.height; y += TILE) {
+    for (let x = 0; x < reader.width; x += TILE) {
+      const rect = { x, y, width: Math.min(TILE, reader.width - x), height: Math.min(TILE, reader.height - y) };
+      const px = await reader.read(rect);
+      const s = tileStats(c, px, px.order);
+      pixels += s.pixels;
+      sumLuma += s.sumLuma;
+      high += s.clippedHigh;
+      low += s.clippedLow;
+      sharp.push(s.lapVar);
+      tiles++;
+    }
+  }
+  sharp.sort((a, b) => a - b);
+  return {
+    ...meta,
+    analyseMs: performance.now() - t0,
+    tiles,
+    tileSize: TILE,
+    meanLuma: pixels ? sumLuma / pixels : 0,
+    clippedHigh: pixels ? high / pixels : 0,
+    clippedLow: pixels ? low / pixels : 0,
+    sharpness: sharp[Math.floor(sharp.length / 2)] ?? 0,
+    readMethod: reader.method,
+    wasmBytesAfter: wasmBytes(c),
+  };
+}
+
 const api: ReaderApi = {
   async init(): Promise<WorkerInitInfo> {
     const capabilities = await probeWorkerCapabilities();
@@ -140,48 +189,60 @@ const api: ReaderApi = {
   async analysePhoto(blob: Blob): Promise<PhotoStats> {
     const c = await ready();
     const { reader, ms: decodeMs, original } = await decode(blob);
-    const t0 = performance.now();
-    const reduced = original !== null && (original.width !== reader.width || original.height !== reader.height);
     try {
-      let pixels = 0;
-      let sumLuma = 0;
-      let high = 0;
-      let low = 0;
-      const sharp: number[] = [];
-      let tiles = 0;
-      for (let y = 0; y < reader.height; y += TILE) {
-        for (let x = 0; x < reader.width; x += TILE) {
-          const rect = { x, y, width: Math.min(TILE, reader.width - x), height: Math.min(TILE, reader.height - y) };
-          const px = await reader.read(rect);
-          const s = tileStats(c, px, px.order);
-          pixels += s.pixels;
-          sumLuma += s.sumLuma;
-          high += s.clippedHigh;
-          low += s.clippedLow;
-          sharp.push(s.lapVar);
-          tiles++;
-        }
-      }
-      sharp.sort((a, b) => a - b);
-      return {
+      const reduced = original !== null && (original.width !== reader.width || original.height !== reader.height);
+      return await checkTiles(c, reader, {
         width: reduced ? original!.width : reader.width,
         height: reduced ? original!.height : reader.height,
         checkedAt: reduced ? [reader.width, reader.height] : null,
         bytes: blob.size,
         type: blob.type || 'unknown',
         decodeMs,
-        analyseMs: performance.now() - t0,
-        tiles,
-        tileSize: TILE,
-        meanLuma: pixels ? sumLuma / pixels : 0,
-        clippedHigh: pixels ? high / pixels : 0,
-        clippedLow: pixels ? low / pixels : 0,
-        sharpness: sharp[Math.floor(sharp.length / 2)] ?? 0,
-        readMethod: reader.method,
-        wasmBytesAfter: wasmBytes(c),
-      };
+      });
     } finally {
       reader.close();
+    }
+  },
+
+  /**
+   * A Snap taken as the full-size live picture (grabFrame): checks it like a photo (pixels read
+   * with VideoFrame.copyTo, so no canvas noise), and makes a preview and a full JPEG for reports.
+   * Takes ownership of the bitmap.
+   */
+  async analyseFrame(bitmap: ImageBitmap): Promise<{ stats: PhotoStats; preview: Blob; jpeg: Blob }> {
+    const c = await ready();
+    const w = bitmap.width;
+    const h = bitmap.height;
+    let reader: PhotoReader | null = null;
+    try {
+      const t0 = performance.now();
+      const jpeg = await bitmapToJpeg(bitmap, w, h, 0.92);
+      const scale = Math.min(1, 1024 / Math.max(w, h));
+      const preview = await bitmapToJpeg(bitmap, Math.max(1, Math.round(w * scale)), Math.max(1, Math.round(h * scale)), 0.8);
+      const encodeMs = performance.now() - t0;
+      reader = new PhotoReader(bitmap);
+      const stats = await checkTiles(c, reader, { width: w, height: h, checkedAt: null, bytes: jpeg.size, type: 'image/jpeg', decodeMs: encodeMs });
+      return { stats, preview, jpeg };
+    } finally {
+      if (reader) reader.close();
+      else bitmap.close();
+    }
+  },
+
+  /** The 2× lens test on two full-size live pictures (when takePhoto() isn't available). Takes ownership of both. */
+  async twoXFrames(one: ImageBitmap, two: ImageBitmap): Promise<TwoXResult> {
+    const c = await ready();
+    const r1 = new PhotoReader(one);
+    const r2 = new PhotoReader(two);
+    try {
+      const w = twoXWindows(r1.width, r1.height, r2.width, r2.height);
+      const a = await r1.read(w.one);
+      const aCopy = { ...a, data: new Uint8Array(a.data) };
+      const b = await r2.read(w.two);
+      return twoXRatio(c, aCopy, b, { one: [r1.width, r1.height], two: [r2.width, r2.height] }, b.order);
+    } finally {
+      r1.close();
+      r2.close();
     }
   },
 

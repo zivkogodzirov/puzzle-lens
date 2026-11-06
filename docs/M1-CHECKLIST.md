@@ -20,9 +20,10 @@ It takes about 20–30 minutes. Write down anything that looks wrong, even small
    - Point the phone at your puzzle box (something with lots of detail), about 30–40 cm away, and keep it still.
    - It takes about a minute and takes about 11 photos. The torch will flash. That's expected.
 4. **Step 3:** tap the iPhone camera screen button. Your iPhone's own camera opens: take a photo of the box and tap **Use Photo**.
-5. **Step 4 (optional, memory test):** this pushes memory until iOS stops it, so the app may close by itself. If it does, open it again and go back to **Device check** to see the result.
-6. The top of the screen should now say **All done ✓**.
-7. Go to **Send report** → tap **Prepare report** → tap **Share report** → choose **AirDrop** → your Mac. (Or Mail it to yourself.)
+5. **Step 4, Photo test:** tap **Start photo test**. Hold the phone over the puzzle box again and keep it still for about a minute (around 10 photos). At the end, the row "How Snap will take pictures" says which way works on your phone. Snap then uses that way automatically.
+6. **Step 5 (optional, memory test):** this pushes memory until iOS stops it, so the app may close by itself. If it does, open it again and go back to **Device check** to see the result.
+7. The top of the screen should now say **All done ✓**.
+8. Go to **Send report** → tap **Prepare report** → tap **Share report** → choose **AirDrop** → your Mac. (Or Mail it to yourself.)
 
 ## Part C: Install it on your Home Screen, and repeat
 

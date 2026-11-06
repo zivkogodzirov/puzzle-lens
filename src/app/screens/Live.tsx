@@ -79,7 +79,7 @@ export function LiveScreen() {
   const onSnap = () => {
     if (snapBusy.value) return;
     if (canSnapWithCamera()) {
-      void snapWithCamera().then(() => setShowSheet(true));
+      void snapWithCamera(videoRef.current).then(() => setShowSheet(true));
     } else {
       openSystemCamera();
     }

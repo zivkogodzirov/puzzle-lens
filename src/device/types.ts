@@ -16,7 +16,7 @@ export type CheckStatus = 'yes' | 'no' | 'partial' | 'error' | 'skipped' | 'info
 export type SectionId = 'basics' | 'camera' | 'photos' | 'graphics' | 'storage' | 'other';
 
 /** The four things the user can run on the Device check screen. */
-export type RunPart = 'automatic' | 'camera' | 'fileCamera' | 'memory';
+export type RunPart = 'automatic' | 'camera' | 'fileCamera' | 'photoProbe' | 'memory';
 
 export interface CheckEntry {
   /** Stable id (also used as data-testid `check-<id>`). */

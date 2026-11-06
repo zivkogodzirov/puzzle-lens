@@ -420,7 +420,11 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
 
 ## 10. Known issues
 
-**M1 (2026-11-04).** None of this has been checked on an iPhone yet.
+**Found on your iPhone (first report, 2026-11-06, Safari tab):** every in-app photo (`takePhoto()`) failed: "Internal error" when a size was given, "setMaxPhotoDimensions failed" without one, in every format, and the 2× test too. Everything else worked (4032×3024 live at 30 fps, direct frames, 9 ms per frame, WebGPU, offline, memory headroom about 1,728 MB). Response:
+- a **Photo test** (Device check step 4) that tries each possible cause on its own and remembers what works;
+- Snap now falls back to the **full-size live picture** (12 MP in the 4:3 format), then to the iPhone camera screen. It is checked with exact pixel reading, but its saved JPEG goes through a canvas (it may carry Safari's tiny privacy noise, which only matters for reports).
+
+**M1 (2026-11-04).** The items below have not been checked on an iPhone yet.
 
 1. **The 2× lens test only shows a number for now.** It says "Measured ratio …, not judged yet". The thresholds will be set from your phone's report, because the iPhone's own sharpening could make digital zoom look sharper than it is (R§4).
 2. **Marker outlines may be drawn in the wrong place when the phone is held sideways the "other" way.** Safari doesn't say which way camera frames are turned, so the app guesses from the picture's shape. The checklist asks you to look in portrait and both landscape directions.
@@ -463,6 +467,7 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
 | 2026-11-04 | 2× test uses a band-pass detail measure; no verdict is shown until checked on your phone | The first measure couldn't tell a real 2× from digital zoom (R§4); BRIEF §1: never present a guess as certain |
 | 2026-11-04 | Photos over 16 MP are checked at reduced size | BRIEF §2: never decode a 48 MP photo at full size |
 | 2026-11-04 | Device check keeps results across app updates (each row tagged with its version) and shows only the current mode | Safari tab and Home Screen app keep separate data; results were silently dropped after an update |
+| 2026-11-06 | Snap takes its picture the way the Photo test found to work; fallback chain: camera photo → full-size live picture (grabFrame) → iPhone camera screen | On the owner's iPhone every takePhoto() call failed; the live picture is already 12 MP in the 4:3 format |
 | 2026-11-04 | Crash notice only when the app was on screen when it ended | iOS reloads backgrounded apps without firing pagehide; that is not a crash |
 
 ---

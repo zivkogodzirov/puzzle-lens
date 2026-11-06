@@ -88,18 +88,38 @@ test('snap in a private (throw-away) session: photo checked, only a gentle note 
   }
 });
 
-test('when the in-app photo fails, the iPhone camera screen is offered', async ({ page }) => {
-  await startLiveCamera(page);
-  // Make the fake ImageCapture fail, like a takePhoto() hang/refusal on a real phone.
-  await page.evaluate(() => {
-    const IC = (window as unknown as { ImageCapture: { prototype: { takePhoto: () => Promise<Blob> } } }).ImageCapture;
+/** Like the owner's iPhone (2026-11-06): every takePhoto() call fails with an internal camera error. */
+async function breakTakePhoto(page: Page, alsoGrabFrame = false): Promise<void> {
+  await page.evaluate((grab) => {
+    const IC = (window as unknown as { ImageCapture: { prototype: { takePhoto: () => Promise<Blob>; grabFrame: () => Promise<ImageBitmap> } } }).ImageCapture;
     IC.prototype.takePhoto = async () => {
-      throw new DOMException('simulated camera failure', 'UnknownError');
+      throw new DOMException('Internal error', 'UnknownError');
     };
-  });
+    if (grab)
+      IC.prototype.grabFrame = async () => {
+        throw new DOMException('simulated grab failure', 'UnknownError');
+      };
+  }, alsoGrabFrame);
+}
+
+test('when the camera refuses photos, Snap uses the full-size live picture instead', async ({ page }) => {
+  await startLiveCamera(page);
+  await breakTakePhoto(page);
   await page.getByTestId('snap').click();
   const sheet = page.getByTestId('snap-sheet');
-  await expect(sheet).toBeVisible({ timeout: 10_000 });
+  await expect(sheet).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('snap-size')).toContainText('1280 × 960');
+  await expect(sheet).toContainText('full-size live picture');
+  await expect(sheet.getByTestId('snap-error')).toHaveCount(0);
+  await expect(sheet.getByRole('img', { name: 'Last photo' })).toBeVisible();
+});
+
+test('when both ways fail, the iPhone camera screen is offered', async ({ page }) => {
+  await startLiveCamera(page);
+  await breakTakePhoto(page, true);
+  await page.getByTestId('snap').click();
+  const sheet = page.getByTestId('snap-sheet');
+  await expect(sheet).toBeVisible({ timeout: 20_000 });
   await expect(sheet.getByTestId('snap-error')).toContainText("didn't come back from the camera");
   await expect(sheet.getByTestId('use-system-camera')).toBeVisible();
 });

@@ -38,7 +38,7 @@ export function SnapSheet({ record, onClose, onUseSystemCamera }: { record: Snap
             {stats.width} × {stats.height} ({mp.toFixed(1)} MP)
           </dd>
           <dt>Taken with</dt>
-          <dd>{snap.method === 'takePhoto' ? 'the app (ImageCapture)' : "iPhone's camera screen"}</dd>
+          <dd>{snap.method === 'takePhoto' ? 'the app (ImageCapture)' : snap.method === 'grabFrame' ? 'the app (full-size live picture)' : "iPhone's camera screen"}</dd>
           {snap.requested && (
             <>
               <dt>Asked for</dt>

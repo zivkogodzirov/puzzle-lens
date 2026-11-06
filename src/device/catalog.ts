@@ -26,6 +26,14 @@ export const FORMAT_NAMES: Record<CameraFormat, string> = {
 
 type Def = readonly [id: string, section: SectionId, label: string];
 
+const PROBE_SIZE_NAMES = {
+  none: 'no size given',
+  'as-delivered': 'size as delivered (upright)',
+  landscape: 'sideways size',
+  'caps-max': 'largest size offered',
+  'camera-default': "camera's own setting",
+} as const;
+
 const DEFS: Def[] = [
   // Basics
   ['secure-context', 'basics', 'Secure connection (https)'],
@@ -56,6 +64,14 @@ const DEFS: Def[] = [
   ['photo-48mp', 'photos', '48 MP photo'],
   ['two-x-test', 'photos', '2× lens test'],
   ['file-camera', 'photos', "iPhone's own camera screen (backup way)"],
+  // Photo test (step 4): each possible cause of a failing in-app photo on its own
+  ['photo-probe-info', 'photos', 'Photo test: what the camera says about photos'],
+  ...(['none', 'as-delivered', 'landscape', 'caps-max', 'camera-default'] as const).map((s): Def => [`photo-probe-off-${s}`, 'photos', `Photo test, tracking off: ${PROBE_SIZE_NAMES[s]}`]),
+  ['photo-probe-off-clone', 'photos', 'Photo test, tracking off: from a copy of the camera'],
+  ...(['none', 'as-delivered', 'landscape', 'caps-max', 'camera-default'] as const).map((s): Def => [`photo-probe-on-${s}`, 'photos', `Photo test, tracking on: ${PROBE_SIZE_NAMES[s]}`]),
+  ['photo-probe-on-clone', 'photos', 'Photo test, tracking on: from a copy of the camera'],
+  ['photo-probe-grab', 'photos', 'Photo test: full-size live picture'],
+  ['photo-probe-choice', 'photos', 'How Snap will take pictures'],
   // Graphics & speed
   ['offscreen-canvas', 'graphics', 'Drawing in background helpers'],
   ['image-bitmap-worker', 'graphics', 'Picture decoding in background helpers'],

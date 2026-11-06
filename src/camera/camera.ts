@@ -25,7 +25,8 @@ export interface CameraInfo {
 
 export interface SnapResult {
   blob: Blob;
-  method: 'takePhoto' | 'file-input';
+  /** takePhoto = the camera's photo pipeline; grabFrame = the full-size live picture; file-input = iPhone camera screen. */
+  method: 'takePhoto' | 'grabFrame' | 'file-input';
   requested: PhotoSettingsLike | null;
   ms: number;
   /** How long the camera was muted while the photo was taken. */
@@ -322,7 +323,14 @@ export function hasImageCapture(): boolean {
  * the capture contract; `null` calls takePhoto() with no settings; an object is passed through
  * (used by the Device check to measure what each choice does).
  */
-export async function takePhoto(photoSettings: PhotoSettingsLike | null | 'current' = 'current'): Promise<SnapResult> {
+export interface TakePhotoOptions {
+  /** Take the photo from a fresh clone of the camera track instead of the track itself (an experiment for the Photo test). */
+  onClone?: boolean;
+  /** Time limit in ms (default 20 s). */
+  timeoutMs?: number;
+}
+
+export async function takePhoto(photoSettings: PhotoSettingsLike | null | 'current' = 'current', opts: TakePhotoOptions = {}): Promise<SnapResult> {
   const Ctor = imageCaptureCtor();
   if (!Ctor) throw new Error('ImageCapture is not available');
   if (!track || cameraState.value !== 'live') throw new Error('The camera is not running');
@@ -332,20 +340,59 @@ export async function takePhoto(photoSettings: PhotoSettingsLike | null | 'curre
   if (track.muted && mutedSince === null) mutedSince = performance.now();
   const startAbs = performance.timeOrigin + performance.now();
   const t0 = performance.now();
+  const source = opts.onClone ? track.clone() : track;
   try {
-    const capture = new Ctor(track);
-    const blob = await withTimeout(requested ? capture.takePhoto(requested) : capture.takePhoto(), 20_000, 'The photo');
+    const capture = new Ctor(source);
+    const blob = await withTimeout(requested ? capture.takePhoto(requested) : capture.takePhoto(), opts.timeoutMs ?? 20_000, 'The photo');
     // Let a trailing unmute arrive before measuring.
     await new Promise((r) => setTimeout(r, 300));
     if (mutedSince !== null) mutedTotalDuringSnap += performance.now() - mutedSince;
     const ms = performance.now() - t0;
-    logInfo('snap', `Photo taken in ${Math.round(ms)} ms (${Math.round(blob.size / 1024)} KB)`, { requested });
+    logInfo('snap', `Photo taken in ${Math.round(ms)} ms (${Math.round(blob.size / 1024)} KB)`, { requested, onClone: !!opts.onClone });
     return { blob, method: 'takePhoto', requested, ms, mutedMs: mutedTotalDuringSnap, workerGapMs: null, startAbs, endAbs: performance.timeOrigin + performance.now() };
   } finally {
+    if (source !== track) source.stop();
     snapping.value = false;
     if (track && !track.muted) mutedSince = null;
     armRecovery();
   }
+}
+
+/**
+ * The live camera picture at its full size (ImageCapture.grabFrame). With the 4:3 full-sensor
+ * format that is 4032 × 3024 (12 MP) without using the photo pipeline, so it works even where
+ * takePhoto() fails. The caller owns (and must close) the bitmap.
+ */
+export async function grabFullFrame(timeoutMs = 10_000): Promise<{ bitmap: ImageBitmap; ms: number; startAbs: number; endAbs: number }> {
+  const Ctor = imageCaptureCtor();
+  if (!track || cameraState.value !== 'live') throw new Error('The camera is not running');
+  const startAbs = performance.timeOrigin + performance.now();
+  const t0 = performance.now();
+  const capture = Ctor ? new Ctor(track) : null;
+  if (!capture?.grabFrame) throw new Error('Grabbing a full-size picture is not available');
+  const bitmap = await withTimeout(capture.grabFrame(), timeoutMs, 'The live picture');
+  const ms = performance.now() - t0;
+  logInfo('snap', `Full-size live picture grabbed in ${Math.round(ms)} ms (${bitmap.width}×${bitmap.height})`);
+  return { bitmap, ms, startAbs, endAbs: performance.timeOrigin + performance.now() };
+}
+
+/** What the camera says about photos (for the Photo test and reports). */
+export async function photoInfo(): Promise<{ capabilities: unknown; settings: unknown; error?: string }> {
+  const Ctor = imageCaptureCtor();
+  if (!Ctor || !track) return { capabilities: null, settings: null, error: 'No camera or ImageCapture' };
+  const c = new Ctor(track);
+  const out: { capabilities: unknown; settings: unknown; error?: string } = { capabilities: null, settings: null };
+  try {
+    out.capabilities = await withTimeout(c.getPhotoCapabilities?.() ?? Promise.resolve(null), 5000, 'Photo capabilities');
+  } catch (err) {
+    out.error = String((err as Error)?.message ?? err);
+  }
+  try {
+    out.settings = await withTimeout(c.getPhotoSettings?.() ?? Promise.resolve(null), 5000, 'Photo settings');
+  } catch (err) {
+    out.error = `${out.error ?? ''} ${String((err as Error)?.message ?? err)}`.trim();
+  }
+  return out;
 }
 
 /** Called around the system camera (file input) so its interruption isn't treated as a failure. */

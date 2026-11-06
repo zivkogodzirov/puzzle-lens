@@ -4,6 +4,15 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### Fixed after your first iPhone report (2026-11-06)
+- On your iPhone, every in-app photo failed with an internal camera error (all sizes, all formats).
+- **Snap** now falls back by itself to the **full-size live picture** (12 MP), and only offers the iPhone camera screen if that fails too.
+- New **Photo test** (Device check step 4): it tries each possible cause separately and remembers what works:
+  - with and without live tracking;
+  - with no size, the upright size, the sideways size, the largest size, the camera's own setting, or a copy of the camera;
+  - with the full-size live picture.
+- The 2× lens test now runs inside the Photo test, using whichever way works.
+
 ### Added: M1, skeleton on your phone (2026-11-04; not yet checked on an iPhone)
 - **App:**
   - A Home Screen web app (PWA) that works offline, with an "update available" banner. Published at https://zivkogodzirov.github.io/puzzle-lens/.

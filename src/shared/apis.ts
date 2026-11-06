@@ -30,7 +30,11 @@ export interface TrackerApi {
 export interface ReaderApi {
   init(): Promise<WorkerInitInfo>;
   analysePhoto(blob: Blob): Promise<PhotoStats>;
+  /** A Snap taken as the full-size live picture (transferred): stats + preview + full JPEG. */
+  analyseFrame(bitmap: ImageBitmap): Promise<{ stats: PhotoStats; preview: Blob; jpeg: Blob }>;
   twoX(oneXBlob: Blob, twoXBlob: Blob): Promise<TwoXResult>;
+  /** The 2× test on two full-size live pictures (transferred). */
+  twoXFrames(one: ImageBitmap, two: ImageBitmap): Promise<TwoXResult>;
   bench(): Promise<CvBenchResult>;
   /** A small JPEG of the photo. Pass the photo's size when known, so it isn't decoded at full size just to measure it. */
   preview(blob: Blob, maxSide: number, size?: { width: number; height: number }): Promise<Blob>;

@@ -107,8 +107,8 @@ test('device check: "Run checks" fills in the results', async ({ page }, testInf
   await expect(page.getByTestId('device-check-summary')).toContainText(`${AUTOMATIC_IDS.length} checks:`);
   await expect(page.getByTestId('device-check-summary')).toContainText('working');
 
-  // Step 1 of 3 is ticked; the camera steps are not.
-  await expect(page.getByTestId('device-checked-browser')).toContainText('1 of 3 steps done');
+  // Step 1 of 4 is ticked; the camera steps are not.
+  await expect(page.getByTestId('device-checked-browser')).toContainText('1 of 4 steps done');
   await expect(page.getByTestId('device-part-automatic')).toHaveAttribute('data-done', 'true');
   await expect(page.getByTestId('device-part-camera')).toHaveAttribute('data-done', 'false');
   await expect(page.getByTestId('device-part-fileCamera')).toHaveAttribute('data-done', 'false');
@@ -122,7 +122,7 @@ test('device check: "Run checks" fills in the results', async ({ page }, testInf
   await page.reload();
   await expect(page.getByTestId('device-check-results')).toBeVisible();
   expect(await page.getByTestId('device-check-results').locator('.check-row').count()).toBe(count);
-  await expect(page.getByTestId('device-checked-browser')).toContainText('1 of 3 steps done');
+  await expect(page.getByTestId('device-checked-browser')).toContainText('1 of 4 steps done');
 });
 
 test('device check: a memory test that iOS cut short is picked up on the next visit', async ({ page }) => {
@@ -190,4 +190,37 @@ test('device check: camera tests run on the simulated camera and record the live
   // Step 2 is ticked, and the camera is off again afterwards.
   await expect(page.getByTestId('device-part-camera')).toHaveAttribute('data-done', 'true');
   await expect(page.getByTestId('device-camera-preview')).toBeHidden();
+});
+
+test('device check: the photo test finds what works and sets up Snap (takePhoto broken like the owner\'s iPhone)', async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  await gotoScreen(page, 'device');
+  await page.evaluate(() => {
+    const IC = (window as unknown as { ImageCapture: { prototype: { takePhoto: () => Promise<Blob> } } }).ImageCapture;
+    IC.prototype.takePhoto = async () => {
+      throw new DOMException('Internal error', 'UnknownError');
+    };
+  });
+  await page.getByTestId('photo-probe').click();
+  const choice = page.getByTestId('check-photo-probe-choice');
+  await expect(choice).toContainText('Full-size live picture', { timeout: 90_000 });
+  await expect(page.getByTestId('check-photo-probe-grab')).toHaveAttribute('data-status', /yes|partial/);
+  await expect(page.getByTestId('check-photo-probe-off-none')).toHaveAttribute('data-status', 'error');
+  await expect(page.getByTestId('device-part-photoProbe')).toHaveAttribute('data-done', 'true', { timeout: 30_000 });
+  const twoX = page.getByTestId('check-two-x-test');
+  testInfo.annotations.push({ type: 'two-x via live pictures', description: (await twoX.innerText()).replace(/\n/g, ' | ') });
+  // The choice is remembered for Snap.
+  const saved = await page.evaluate(async () => {
+    const req = indexedDB.open('puzzle-lens');
+    const db = await new Promise<IDBDatabase>((res, rej) => {
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+    return new Promise<unknown>((res) => {
+      const g = db.transaction('settings').objectStore('settings').get('snapMethod');
+      g.onsuccess = () => res(g.result);
+      g.onerror = () => res(null);
+    });
+  });
+  expect(JSON.stringify(saved)).toContain('grabFrame');
 });

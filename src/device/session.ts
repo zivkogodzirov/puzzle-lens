@@ -10,6 +10,7 @@ import { beginExternalCapture, cancelExternalCapture } from '../camera/snap';
 import { logError, logInfo } from '../log/logger';
 import { collectEnvironment, runAutomaticChecks, type RunHooks } from './autoChecks';
 import { fileCameraEntry, runCameraTests, safeStopPump } from './cameraChecks';
+import { runPhotoProbe } from './photoProbe';
 import { applyRun, carryForward, formatMB, newResults } from './format';
 import { BACKGROUND_STOP_MESSAGE, startMemoryTest, takeCrashedMemoryResult, type MemoryTestHandle } from './memoryRunner';
 import { loadDeviceCheckHistory, saveDeviceCheck } from './store';
@@ -153,9 +154,14 @@ export function startCameraTests(video: HTMLVideoElement): void {
   void execute('camera', (h) => runCameraTests({ ...h, video }));
 }
 
-/** Leaving the screen stops the camera tests (nothing is saved for an unfinished run). */
+/** The Photo test. Call directly from the tap (camera permission). */
+export function startPhotoProbe(video: HTMLVideoElement): void {
+  void execute('photoProbe', (h) => runPhotoProbe({ ...h, video }));
+}
+
+/** Leaving the screen stops the camera tests and the Photo test (nothing is saved for an unfinished run). */
 export function abortCameraTests(): void {
-  if (deviceCheck.running.value !== 'camera') return;
+  if (deviceCheck.running.value !== 'camera' && deviceCheck.running.value !== 'photoProbe') return;
   aborted = true;
   safeStopPump();
   stopCamera();

@@ -7,6 +7,7 @@ import {
   deviceCheck,
   dismissNotice,
   fileCameraChosen,
+  startPhotoProbe,
   loadSaved,
   openFileCamera,
   startAutomatic,
@@ -215,6 +216,7 @@ function StepsCard({ mode, results, busy }: { mode: DisplayMode; results: Device
 
 export function DeviceCheckScreen() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const probeVideoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [confirmMemory, setConfirmMemory] = useState(false);
 
@@ -318,7 +320,33 @@ export function DeviceCheckScreen() {
       />
       {progressLine('fileCamera')}
 
-      <h2>4. Memory test (optional)</h2>
+      <h2>4. Photo test</h2>
+      <p class="small">
+        Finds the way your iPhone lets the app take full-size photos, and sets up <strong>Snap</strong> to use it. Hold the phone over the puzzle box
+        again and <strong>keep it still</strong> — about a minute, around 10 photos.
+      </p>
+      <button
+        class="btn btn-block"
+        data-testid="photo-probe"
+        disabled={busy}
+        onClick={() => {
+          const v = probeVideoRef.current;
+          if (v) startPhotoProbe(v);
+        }}
+      >
+        {running === 'photoProbe' ? 'Testing photos…' : 'Start photo test'}
+      </button>
+      <video
+        ref={probeVideoRef}
+        playsInline
+        muted
+        autoPlay
+        data-testid="photo-probe-preview"
+        style={{ display: running === 'photoProbe' ? 'block' : 'none', width: '100%', maxHeight: '240px', objectFit: 'contain', background: '#000', borderRadius: '12px', marginTop: '10px' }}
+      />
+      {progressLine('photoProbe')}
+
+      <h2>5. Memory test (optional)</h2>
       <div class="notice notice-warn small">
         This fills up memory on purpose until the iPhone says stop. <strong>Puzzle Lens may close or reload by itself</strong> — that's expected, and it's how
         the test measures. If it happens, open Puzzle Lens again and come back to Device check: the result will be waiting.

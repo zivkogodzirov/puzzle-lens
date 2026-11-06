@@ -16,6 +16,11 @@ export interface Settings {
   showHud: boolean;
   /** Preferred camera deviceId (empty = automatic: the physical "Back Camera"). */
   cameraDeviceId: string;
+  /**
+   * How Snap takes its picture, chosen by the Device check "Photo test" (JSON of SnapMethod in
+   * src/camera/snapMethod.ts); empty = automatic (try the photo pipeline, then the full-size live picture).
+   */
+  snapMethod: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -24,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   trackingFps: 30,
   showHud: true,
   cameraDeviceId: '',
+  snapMethod: '',
 };
 
 type SettingSignals = { [K in keyof Settings]: Signal<Settings[K]> };

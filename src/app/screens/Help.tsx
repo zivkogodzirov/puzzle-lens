@@ -219,9 +219,9 @@ export function HelpScreen() {
         </p>
         <ol class="steps">
           <li>
-            <strong>In Safari:</strong> open {short(PUBLIC_ADDRESS)} in a normal Safari tab, tap <strong>Device check</strong>, and do steps 1, 2
-            and 3 on that screen until it says <strong>All done ✓</strong>. Keep the phone still during the camera tests. The memory test (step 4)
-            is optional.
+            <strong>In Safari:</strong> open {short(PUBLIC_ADDRESS)} in a normal Safari tab, tap <strong>Device check</strong>, and do steps 1 to 4
+            on that screen until it says <strong>All done ✓</strong>. Keep the phone still during the camera tests and the photo test. The memory
+            test (step 5) is optional.
           </li>
           <li>Still in Safari, send me a report (step 5).</li>
           <li>
