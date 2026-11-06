@@ -422,6 +422,7 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
 
 **Found on your iPhone (first report, 2026-11-06, Safari tab):** every in-app photo (`takePhoto()`) failed: "Internal error" when a size was given, "setMaxPhotoDimensions failed" without one, in every format, and the 2× test too. Everything else worked (4032×3024 live at 30 fps, direct frames, 9 ms per frame, WebGPU, offline, memory headroom about 1,728 MB). Response:
 - a **Photo test** (Device check step 4) that tries each possible cause on its own and remembers what works;
+- **Cause found** (second report, Home Screen app): with live tracking OFF every photo works at full 12.2 MP (~0.7 s). With tracking ON, photos come out at the tracker's shrunk size (540×960) or fail. The Photo test now only chooses ways that give a full-size picture, and also tries tracking with a full-size camera copy. The camera tests (step 2) take their photos with tracking paused.
 - Snap now falls back to the **full-size live picture** (12 MP in the 4:3 format), then to the iPhone camera screen. It is checked with exact pixel reading, but its saved JPEG goes through a canvas (it may carry Safari's tiny privacy noise, which only matters for reports).
 
 **M1 (2026-11-04).** The items below have not been checked on an iPhone yet.

@@ -66,16 +66,27 @@ async function tryPhoto(id: string, method: TakeMethod, h: CameraRunHooks): Prom
   }
 }
 
-/** Best way to Snap from the attempts: tracking can stay on > biggest picture > live picture > camera screen. */
-export function chooseSnapMethod(on: Attempt[], off: Attempt[], grab: { ok: boolean; pixels: number }): SnapMethod {
-  const best = (xs: Attempt[]) => xs.filter((a) => a.ok).sort((a, b) => b.pixels - a.pixels)[0];
-  const withTracking = best(on);
-  if (withTracking) return { ...withTracking.method, pauseTracking: false };
-  const paused = best(off);
-  if (paused && (!grab.ok || paused.pixels > grab.pixels)) return { ...paused.method, pauseTracking: true };
-  if (grab.ok) return { kind: 'grabFrame' };
-  if (paused) return { ...paused.method, pauseTracking: true };
-  return { kind: 'file' };
+/** Pictures smaller than this share of the biggest one are never chosen (a 0.5 MP "photo" is useless). */
+const SIZE_SHARE = 0.9;
+
+/**
+ * Best way to Snap: first only ways that give (nearly) the biggest picture; among those, tracking
+ * can stay on with a full-size copy > tracking stays on > tracking paused for the photo > the
+ * full-size live picture; nothing works: the iPhone camera screen.
+ */
+export function chooseSnapMethod(on: Attempt[], off: Attempt[], grab: { ok: boolean; pixels: number }, onFull: Attempt[] = []): SnapMethod {
+  const all = [...onFull, ...on, ...off].filter((a) => a.ok);
+  const maxPixels = Math.max(0, grab.ok ? grab.pixels : 0, ...all.map((a) => a.pixels));
+  if (maxPixels === 0) return { kind: 'file' };
+  const big = (a: { ok: boolean; pixels: number }) => a.ok && a.pixels >= SIZE_SHARE * maxPixels;
+  const first = (xs: Attempt[]) => xs.filter(big).sort((a, b) => b.pixels - a.pixels)[0];
+  const full = first(onFull);
+  if (full) return { ...full.method, pauseTracking: false, fullSizeTracking: true };
+  const tracking = first(on);
+  if (tracking) return { ...tracking.method, pauseTracking: false, fullSizeTracking: false };
+  const paused = first(off);
+  if (paused) return { ...paused.method, pauseTracking: true, fullSizeTracking: false };
+  return { kind: 'grabFrame' };
 }
 
 async function probeSequence(h: CameraRunHooks, firstStart: Promise<void>): Promise<void> {
@@ -129,6 +140,20 @@ async function probeSequence(h: CameraRunHooks, firstStart: Promise<void>): Prom
       on.push(await tryPhoto(`photo-probe-on-${m.onClone ? 'clone' : m.size}`, m, h));
     }
 
+    // 2b. Live tracking ON with a FULL-SIZE copy of the camera (the worker shrinks it on the GPU).
+    const onFull: Attempt[] = [];
+    if (!h.isAborted() && worked.length) {
+      h.onProgress('Photo test: full-size tracking…');
+      safeStopPump();
+      await startPump(h.video, { fullSizeClone: true });
+      await sleep(1500);
+      for (const m of worked) {
+        if (h.isAborted()) return;
+        h.onProgress(`Photo test: full-size tracking, ${m.onClone ? 'copy' : m.size}… keep still`);
+        onFull.push(await tryPhoto(`photo-probe-onfull-${m.onClone ? 'clone' : m.size}`, { ...m, fullSizeTracking: true }, h));
+      }
+    }
+
     // 3. The full-size live picture.
     if (h.isAborted()) return;
     h.onProgress('Photo test: full-size live picture…');
@@ -145,14 +170,19 @@ async function probeSequence(h: CameraRunHooks, firstStart: Promise<void>): Prom
     }
 
     // Choose and remember.
-    const choice = chooseSnapMethod(on, off, grab);
+    const choice = chooseSnapMethod(on, off, grab, onFull);
     settings.snapMethod.value = JSON.stringify(choice);
     const status = choice.kind === 'file' ? 'no' : choice.kind === 'grabFrame' || choice.pauseTracking ? 'partial' : 'yes';
     h.onCheck(makeEntry('photo-probe-choice', status, `Snap will use: ${describeSnapMethod(choice)}`, { choice }));
     logInfo('device', `Photo test chose: ${describeSnapMethod(choice)}`, { choice });
 
-    // 4. The 2× lens test with what works.
-    if (choice.kind !== 'file' && !h.isAborted()) h.onCheck(await twoXWith(choice, h));
+    // 4. The 2× lens test with what works (tracking set up the way Snap will have it).
+    if (choice.kind !== 'file' && !h.isAborted()) {
+      safeStopPump();
+      if (choice.kind === 'grabFrame' || !choice.pauseTracking) await startPump(h.video);
+      await sleep(1000);
+      h.onCheck(await twoXWith(choice, h));
+    }
   } finally {
     safeStopPump();
     const t = currentTrack();

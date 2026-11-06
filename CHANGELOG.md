@@ -12,6 +12,10 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
   - with no size, the upright size, the sideways size, the largest size, the camera's own setting, or a copy of the camera;
   - with the full-size live picture.
 - The 2× lens test now runs inside the Photo test, using whichever way works.
+- Second report (Home Screen app) found the cause: the tracker's shrunk copy of the camera makes photos small (540×960) or fail. With tracking off, photos are full 12 MP.
+  - The Photo test now never picks a way that gives a small picture. The first version would have chosen 0.5 MP photos.
+  - It also tries tracking with a full-size copy of the camera.
+  - The camera tests take their photos with tracking paused.
 
 ### Added: M1, skeleton on your phone (2026-11-04; not yet checked on an iPhone)
 - **App:**

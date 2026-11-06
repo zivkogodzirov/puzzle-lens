@@ -15,6 +15,12 @@ export type SnapMethod =
       pauseTracking: boolean;
       /** Take it from a fresh clone of the camera track. */
       onClone: boolean;
+      /**
+       * Give the tracker a FULL-SIZE copy of the camera (the worker shrinks it on the GPU). Found on
+       * the owner's iPhone (2026-11-06): while the tracker's copy is shrunk to 960 px, photos come
+       * out at that small size (540×960) or fail; with tracking off they are full 12 MP.
+       */
+      fullSizeTracking?: boolean;
     }
   | { kind: 'grabFrame' }
   | { kind: 'file' };
@@ -35,7 +41,7 @@ export function describeSnapMethod(m: SnapMethod | null): string {
   if (m.kind === 'grabFrame') return 'Full-size live picture';
   if (m.kind === 'file') return "iPhone's camera screen";
   const size = { none: 'no size', 'as-delivered': 'size as the camera delivers it', landscape: 'sideways size', 'caps-max': 'largest size offered', 'camera-default': "camera's own setting" }[m.size];
-  return `Camera photo (${size}${m.pauseTracking ? ', tracking paused' : ''}${m.onClone ? ', from a copy of the camera' : ''})`;
+  return `Camera photo (${size}${m.pauseTracking ? ', tracking paused' : ''}${m.fullSizeTracking ? ', full-size tracking' : ''}${m.onClone ? ', from a copy of the camera' : ''})`;
 }
 
 /** The photo size to ask for. `delivered` = the track's current width/height; caps/defaults from ImageCapture. */
@@ -59,4 +65,10 @@ export function photoSizeFor(
     case 'camera-default':
       return cameraDefault?.imageWidth && cameraDefault.imageHeight ? { imageWidth: cameraDefault.imageWidth, imageHeight: cameraDefault.imageHeight } : null;
   }
+}
+
+/** Whether the live tracker should get a full-size copy of the camera (see SnapMethod.fullSizeTracking). */
+export function wantsFullSizeTracking(raw: string): boolean {
+  const m = parseSnapMethod(raw);
+  return m?.kind === 'takePhoto' && m.fullSizeTracking === true;
 }

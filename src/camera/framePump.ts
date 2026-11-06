@@ -18,6 +18,7 @@ import { hud, RateMeter, recordTrackerResult } from '../perf/hud';
 import { logInfo, logWarn } from '../log/logger';
 import { rvfc } from '../types/media';
 import { cameraState, currentTrack, snapping } from './camera';
+import { wantsFullSizeTracking } from './snapMethod';
 import type { TrackerFrameResult, TrackerStatus } from '../shared/types';
 
 export type PumpMode = 'off' | 'mstp' | 'bitmap';
@@ -154,8 +155,12 @@ async function recoverTracker(reason: string): Promise<void> {
   if (v) await startPump(v);
 }
 
-/** Starts sending frames from the running camera to the tracker. Safe to call again at any time. */
-export async function startPump(v: HTMLVideoElement): Promise<void> {
+/**
+ * Starts sending frames from the running camera to the tracker. Safe to call again at any time.
+ * `fullSizeClone`: don't shrink the tracker's copy of the camera (default: what the Photo test chose).
+ */
+export async function startPump(v: HTMLVideoElement, opts: { fullSizeClone?: boolean } = {}): Promise<void> {
+  const fullSize = opts.fullSizeClone ?? wantsFullSizeTracking(settings.snapMethod.value);
   stopPump();
   const gen = ++pumpGen;
   video = v;
@@ -177,11 +182,14 @@ export async function startPump(v: HTMLVideoElement): Promise<void> {
     let clone: MediaStreamTrack | null = null;
     try {
       clone = t.clone();
-      try {
-        // The tracker only needs ~960 px; WebKit scales each clone separately.
-        await clone.applyConstraints({ width: { ideal: FALLBACK_WIDTH } });
-      } catch {
-        /* keep full size; the worker shrinks it on the GPU */
+      // The tracker only needs ~960 px, but on iPhone a shrunk copy also shrinks (or breaks)
+      // photos, so when the Photo test says so the copy stays full size and the worker shrinks it.
+      if (!fullSize) {
+        try {
+          await clone.applyConstraints({ width: { ideal: FALLBACK_WIDTH } });
+        } catch {
+          /* keep full size; the worker shrinks it on the GPU */
+        }
       }
       if (gen !== pumpGen) {
         clone.stop();
@@ -199,7 +207,7 @@ export async function startPump(v: HTMLVideoElement): Promise<void> {
         pumpMode.value = 'mstp';
         startVideoFpsMeter(v, gen);
         startStatusPolling(gen);
-        logInfo('pump', 'Frames go straight to the tracker worker');
+        logInfo('pump', `Frames go straight to the tracker worker${fullSize ? ' (full-size copy)' : ''}`);
         return;
       }
       clone.stop();

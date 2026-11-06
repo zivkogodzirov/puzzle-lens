@@ -44,12 +44,25 @@ describe('choosing how Snap works', () => {
 
   it('prefers a photo that works with tracking on, the biggest one', () => {
     const c = chooseSnapMethod([ok('a', take('none'), 12e6), ok('b', take('landscape'), 48e6)], [], { ok: true, pixels: 12e6 });
-    expect(c).toEqual({ ...take('landscape'), pauseTracking: false });
+    expect(c).toEqual({ ...take('landscape'), pauseTracking: false, fullSizeTracking: false });
   });
 
   it('pauses tracking when photos only work with tracking off (and beat the live picture)', () => {
     const c = chooseSnapMethod([bad('a', take('none'))], [ok('b', take('as-delivered'), 24e6)], { ok: true, pixels: 12e6 });
-    expect(c).toEqual({ ...take('as-delivered'), pauseTracking: true });
+    expect(c).toEqual({ ...take('as-delivered'), pauseTracking: true, fullSizeTracking: false });
+  });
+
+  it("never picks a small photo: the owner's iPhone, Home Screen app, 2026-11-06", () => {
+    // Tracking on (shrunk copy): 540×960 photos. Tracking off: 3024×4032. Live picture: 3024×4032.
+    const on = [ok('on-none', take('none'), 540 * 960), ok('on-as', take('as-delivered'), 540 * 960), bad('on-l', take('landscape'))];
+    const off = [ok('off-none', take('none'), 3024 * 4032), ok('off-as', take('as-delivered'), 3024 * 4032)];
+    const grab = { ok: true, pixels: 3024 * 4032 };
+    expect(chooseSnapMethod(on, off, grab)).toEqual({ ...take('none'), pauseTracking: true, fullSizeTracking: false });
+    // If full-size tracking keeps photos full size, tracking can stay on.
+    const onFull = [ok('full-as', take('as-delivered'), 3024 * 4032)];
+    expect(chooseSnapMethod(on, off, grab, onFull)).toEqual({ ...take('as-delivered'), pauseTracking: false, fullSizeTracking: true });
+    // Full-size tracking that still gives small photos doesn't count.
+    expect(chooseSnapMethod(on, off, grab, [ok('full-none', take('none'), 540 * 960)])).toEqual({ ...take('none'), pauseTracking: true, fullSizeTracking: false });
   });
 
   it("uses the full-size live picture when no photo works (the owner's iPhone on 2026-11-06)", () => {

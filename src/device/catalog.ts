@@ -70,6 +70,8 @@ const DEFS: Def[] = [
   ['photo-probe-off-clone', 'photos', 'Photo test, tracking off: from a copy of the camera'],
   ...(['none', 'as-delivered', 'landscape', 'caps-max', 'camera-default'] as const).map((s): Def => [`photo-probe-on-${s}`, 'photos', `Photo test, tracking on: ${PROBE_SIZE_NAMES[s]}`]),
   ['photo-probe-on-clone', 'photos', 'Photo test, tracking on: from a copy of the camera'],
+  ...(['none', 'as-delivered', 'landscape', 'caps-max', 'camera-default'] as const).map((s): Def => [`photo-probe-onfull-${s}`, 'photos', `Photo test, full-size tracking: ${PROBE_SIZE_NAMES[s]}`]),
+  ['photo-probe-onfull-clone', 'photos', 'Photo test, full-size tracking: from a copy of the camera'],
   ['photo-probe-grab', 'photos', 'Photo test: full-size live picture'],
   ['photo-probe-choice', 'photos', 'How Snap will take pictures'],
   // Graphics & speed

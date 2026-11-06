@@ -459,6 +459,10 @@ async function cameraSequence(h: CameraRunHooks, firstStart: Promise<void>): Pro
       }
 
       if (h.isAborted()) return;
+      // On iPhone the tracker's shrunk copy of the camera shrinks or breaks photos (owner's phone,
+      // 2026-11-06), so these photo measurements are taken with tracking paused. The Photo test
+      // (step 4) measures the combinations.
+      safeStopPump();
       h.onProgress(`Taking a photo (${name}, exact size)… keep still`);
       h.onCheck(await photoCheck(`photo-${format}-current`, 'current'));
       await sleep(SETTLE_MS);
