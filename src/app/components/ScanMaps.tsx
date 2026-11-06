@@ -31,7 +31,7 @@ export function CoverageMap({ pieces, coverage, target, view }: { pieces: PieceR
 }
 
 /** The last photo (small preview) with the outlines of the pieces found in it. */
-export function PhotoResult({ url, size, outlines, onClose }: { url: string; size: { width: number; height: number }; outlines: Array<{ points: number[]; flag: 'ok' | 'clump' | 'weak' }>; onClose: () => void }) {
+export function PhotoResult({ url, size, outlines, onClose }: { url: string; size: { width: number; height: number }; outlines: Array<{ points: number[]; flag: 'ok' | 'clump' | 'weak' | 'assembled' | 'object' }>; onClose: () => void }) {
   return (
     <div class="photo-result" data-testid="photo-result" onClick={onClose}>
       <svg viewBox={`0 0 ${size.width} ${size.height}`} preserveAspectRatio="xMidYMid meet">

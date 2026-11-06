@@ -14,7 +14,7 @@ import { registerPieces, type RegCatalogPiece, type RegFoundPiece } from '../../
 import { planMerge } from '../../src/project/catalog';
 import type { Mat3, PieceRow, Vec2 } from '../../src/project/types';
 import { getCv, type Cv } from '../helpers/cv';
-import { centroid, renderScene, segmentationScore, type SceneOptions, type SynthScene } from '../synth/index';
+import { centroid, generatePuzzle, polygonIoU, renderScene, segmentationScore, type SceneOptions, type SynthScene } from '../synth/index';
 import { sceneOptions, val300 } from '../synth/sets';
 
 let cv: Cv;
@@ -119,7 +119,7 @@ beforeAll(async () => {
   // A close-up of a DIFFERENT puzzle.
   const otherItem = val300.items.find((it) => it.puzzleKey === 'val300-p1' && it.kind === 'detail')!;
   other = await renderScene({ ...sceneOptions(otherItem), markers: [] });
-  r1 = scanMarkerless(cv, buf(o1), { catalog: [], zoom: 1, kind: 'overview', table: null });
+  r1 = scanMarkerless(cv, buf(o1), { catalog: [], zoom: 1, kind: 'overview', table: null, pieceAreaShare: 1 });
   merge(r1, 'o1');
   const sc = segmentationScore(r1.pieces, o1.truth);
   S = fitSim(
@@ -174,7 +174,7 @@ describe('scanMarkerless', () => {
       [o2, 1, 'overview'],
       [dMid, 2, 'detail'],
     ] as const) {
-      const r = scanMarkerless(cv, buf(s), { catalog, zoom, kind, table: null });
+      const r = scanMarkerless(cv, buf(s), { catalog, zoom, kind, table: null, pieceAreaShare: 1 });
       expect(r.registered).toBe(true);
       expect(r.isNewFrame).toBe(false);
       expect(r.rmsMm).toBeLessThan(1);
@@ -192,7 +192,7 @@ describe('scanMarkerless', () => {
   }, 120_000);
 
   it('refuses a photo of different pieces', () => {
-    const r = scanMarkerless(cv, buf(other), { catalog, zoom: 2, kind: 'detail', table: null });
+    const r = scanMarkerless(cv, buf(other), { catalog, zoom: 2, kind: 'detail', table: null, pieceAreaShare: 1 });
     expect(r.registered).toBe(false);
     expect(r.pieces).toHaveLength(0);
   }, 60_000);
@@ -203,11 +203,86 @@ describe('scanMarkerless', () => {
     const changed = catalog
       .filter(() => rnd() > 0.1)
       .map((c) => (rnd() < 0.11 ? { ...c, table: { ...c.table, x: c.table.x + (rnd() - 0.5) * 120, y: c.table.y + (rnd() - 0.5) * 120 } } : c));
-    const r = scanMarkerless(cv, buf(dMid), { catalog: changed, zoom: 2, kind: 'detail', table: null });
+    const r = scanMarkerless(cv, buf(dMid), { catalog: changed, zoom: 2, kind: 'detail', table: null, pieceAreaShare: 1 });
     expect(r.registered).toBe(true);
     expect(r.rmsMm).toBeLessThan(1);
     expect(q(centreErrors(r, dMid), 0.5)).toBeLessThanOrEqual(1);
   }, 60_000);
+});
+
+describe('the app\'s free-scan flow (e2e scan-free.spec.ts, in Node)', () => {
+  it('registers a 2× close-up reported as 1× (the fake camera can\'t say 2×), with the default (real) piece-area share', async () => {
+    const puzzle = generatePuzzle({ cols: 8, rows: 6, cellMm: [17.8, 19.4], seed: 12 });
+    const base: SceneOptions = { puzzle, seed: 44, markers: [], layout: { areaMm: [600, 450], originMm: [100, 80] }, camera: { x: 400, y: 305, heightMm: 680, tiltDeg: 1, imageSize: [4032, 3024] }, light: { dirDeg: 200 } };
+    const overview = await renderScene(base);
+    const closeUp = await renderScene({ ...base, camera: { x: 280, y: 220, heightMm: 620, tiltDeg: 2, tiltDirDeg: 40, zoom: 2, imageSize: [4032, 3024] } });
+    // Exactly what the app does: defaults everywhere (pieceAreaShare 0.79, a real-photo value).
+    const r1 = scanMarkerless(cv, buf(overview), { catalog: [], pitchMm: 18.6, zoom: 1, kind: 'overview', table: null });
+    expect(r1.isNewFrame).toBe(true);
+    let n = 0;
+    const rows = planMerge([], r1.pieces, { projectId: 'p', snapId: 'o', pxPerMm: r1.pxPerMm ?? 4, now: 1, newId: () => `r${n++}`, thumbId: (id) => id }).added;
+    expect(rows.length).toBeGreaterThan(30);
+    const r2 = scanMarkerless(cv, buf(closeUp), { catalog: rows, pitchMm: 18.6, zoom: 1, kind: 'detail', table: null });
+    expect(r2.registered).toBe(true);
+    expect(r2.inliers).toBeGreaterThanOrEqual(10);
+    expect(r2.rmsMm).toBeLessThan(1.5);
+    // Same scale relation between the two photos as in reality (2.2×), whatever the area share.
+    expect(r2.pxPerMm! / r1.pxPerMm!).toBeCloseTo(closeUp.truth.pxPerMm / overview.truth.pxPerMm, 1);
+  }, 120_000);
+});
+
+describe('an assembled area and objects on the table (synthetic)', () => {
+  it('reports the assembled frame and the objects as regions, and still finds the loose pieces, inside the frame too', async () => {
+    const puzzle = generatePuzzle({ cols: 28, rows: 36, cellMm: [17.8, 19.4], seed: 501, art: { kind: 'procedural-kiss-like', seed: 1501 } });
+    // Assembled: a 14 × 14-cell window's frame plus a 4-column strip; loose: ~190 others, ~20 of
+    // them lying inside the frame.
+    const asmIds: string[] = [];
+    const loose: string[] = [];
+    for (const p of puzzle.pieces) {
+      const inWin = p.row >= 22 && p.col <= 13;
+      if (inWin && (p.row === 22 || p.row === 35 || p.col === 0 || p.col === 13 || p.col <= 3)) asmIds.push(p.id);
+      else if (!inWin && loose.length < 160 && (p.col * 7 + p.row * 3) % 5 === 0) loose.push(p.id);
+    }
+    for (const p of puzzle.pieces) if (p.row >= 24 && p.row <= 33 && p.col >= 5 && p.col <= 12 && (p.row + p.col) % 4 === 0) loose.push(p.id);
+    const objects: NonNullable<SceneOptions['objects']> = [
+      { shape: 'rect', centreMm: [620, 80], sizeMm: [160, 45], angleDeg: 20, rgb: [235, 235, 238] }, // a white remote
+      { shape: 'disc', centreMm: [520, 120], sizeMm: [95, 95], rgb: [60, 60, 70] }, // a coaster
+      { shape: 'rect', centreMm: [700, 420], sizeMm: [70, 140], angleDeg: -10, rgb: [25, 25, 28] }, // a phone
+    ];
+    const s = await renderScene({
+      puzzle,
+      seed: 77,
+      pieceIds: [...asmIds, ...loose],
+      markers: [],
+      assembled: { ids: asmIds, originMm: [140, 30 - 22 * 19.4] },
+      objects,
+      layout: { areaMm: [700, 500], touchingShare: 0.03 },
+      camera: { x: 405, y: 305, heightMm: 720, tiltDeg: 3, imageSize: [4032, 3024] },
+      light: { dirDeg: 200, elevationDeg: 45 },
+    });
+    const r = scanMarkerless(cv, buf(s), { catalog: [], zoom: 1, kind: 'overview', table: null, pieceAreaShare: 1 });
+    // The frame is one assembled region; its outer outline encloses the 14 × 14-cell window
+    // (≈ 67 700 mm²). The table inside the frame is not filled in: the loose pieces there are found.
+    const asm = r.regions.filter((g) => g.kind === 'assembled');
+    expect(asm).toHaveLength(1);
+    expect(asm[0]!.areaMm2).toBeGreaterThan(55_000);
+    expect(asm[0]!.areaMm2).toBeLessThan(90_000);
+    // The coaster and the phone are objects; nothing on any object is reported as a piece.
+    expect(r.regions.filter((g) => g.kind === 'object' && g.areaMm2 > 5000).length).toBeGreaterThanOrEqual(2);
+    for (const o of objects) {
+      const c = applyH(s.tableToImg, o.centreMm);
+      expect(r.pieces.filter((p) => Math.hypot(p.bboxImg[0] + p.bboxImg[2] / 2 - c[0], p.bboxImg[1] + p.bboxImg[3] / 2 - c[1]) < 25 * s.truth.pxPerMm)).toHaveLength(0);
+    }
+    // Loose pieces: found as well as without the assembled area; those inside the frame too.
+    const sc = segmentationScore(r.pieces, s.truth);
+    expect(sc.recall).toBeGreaterThan(0.85);
+    expect(sc.precision).toBeGreaterThan(0.85);
+    const insideIds = new Set(puzzle.pieces.filter((p) => p.row >= 24 && p.row <= 33 && p.col >= 5 && p.col <= 12 && (p.row + p.col) % 4 === 0).map((p) => p.id));
+    const inside = s.truth.pieces.filter((t) => insideIds.has(t.id) && t.touching.length === 0);
+    const foundInside = inside.filter((t) => r.pieces.some((p) => polygonIoU(p.outlineImg, t.outlineImg) >= 0.85));
+    expect(foundInside.length).toBeGreaterThanOrEqual(0.8 * inside.length);
+    expect(Math.abs(r.pxPerMm! / s.truth.pxPerMm - 1)).toBeLessThan(0.05);
+  }, 120_000);
 });
 
 describe('registerPieces (points only)', () => {

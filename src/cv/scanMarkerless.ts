@@ -2,8 +2,10 @@
  * The marker-free photo path (owner's decision: no printed markers). Pure function of the decoded
  * photo and the catalog, so it runs in the reader worker and in Node tests alike.
  *
- *  1. Scale: estimatePxPerMm (pieces' median size ↔ the cell pitch). Falls back to the nominal
- *     scale for the zoom (1×: ~4 px/mm, 2×: ~9 px/mm at 12 MP) when too few pieces are seen.
+ *  1. Scale: findPieces runs at the nominal scale for the zoom (1×: ~4 px/mm, 2×: ~9 px/mm at
+ *     12 MP); the MODE of the single pieces' top-face areas (full resolution; not cut, not clumps,
+ *     not weak, near-square) ↔ the cell pitch gives the real scale (measureScale). Within 15 %
+ *     the result is just rescaled; further off, findPieces runs again at the measured scale.
  *  2. Provisional frame: photo px → mm by that scale, origin at the image centre, axes as the
  *     image (the phone is held flat; no tilt correction).
  *  3. findPieces with no marker map.
@@ -16,7 +18,7 @@
  */
 import type { Cv } from './loadCv';
 import type { PixelBuffer } from './frameAnalyser';
-import { DEFAULT_PITCH_MM, estimatePxPerMm, findPieces, minAreaRect, type FoundPiece } from './pieceFinder';
+import { DEFAULT_PITCH_MM, estimatePxPerMm, findPieces, minAreaRect, type FindResult, type FoundPiece, type FoundRegion } from './pieceFinder';
 import { applyH, IDENTITY, mulH } from '../geo/homography';
 import { nominalIntrinsics } from '../geo/pose';
 import { registerPieces, type RegCatalogPiece, type Registration } from '../geo/registerPieces';
@@ -28,6 +30,12 @@ export interface ScanMarkerlessOptions {
   catalog: PieceRowLike[];
   /** Cell pitch (mm), default 18.6 (Ravensburger 1000: √(17.8 × 19.4)). */
   pitchMm?: number;
+  /**
+   * Area of a piece's found top face ÷ its cell's area (default 0.79, measured on the owner's real
+   * photos: die-cut pieces have rounded top edges, so the printed face seen from above is smaller
+   * than the cell). The synthetic generator draws exact cells: pass 1 for synthetic photos.
+   */
+  pieceAreaShare?: number;
   zoom: number;
   kind: 'overview' | 'detail';
   table: TableModel | null;
@@ -36,6 +44,8 @@ export interface ScanMarkerlessOptions {
 export interface ScanMarkerlessResult {
   /** Pieces with outlineMm / centreMm / areaMm2 / sizeMm / angleDeg in the CATALOG frame. */
   pieces: FoundPiece[];
+  /** Assembled areas and objects (outlineMm in the catalog frame); empty when not registered. */
+  regions: FoundRegion[];
   /** Photo provisional mm → catalog mm (identity for a new frame), null when not registered. */
   photoToCatalog: Mat3 | null;
   /** Photo px → catalog mm, null when not registered. */
@@ -51,7 +61,9 @@ export interface ScanMarkerlessResult {
 }
 
 /** Re-run detection when the registered scale differs from the estimate by more than this. */
-export const RESCALE_LIMIT = 0.15;
+export const RESCALE_LIMIT = 0.3;
+/** Found top-face area ÷ cell area on real photos (IMG_9224: 12 single pieces, 0.79 ± 0.05 against the assembled frame's scale). */
+export const REAL_PIECE_AREA_SHARE = 0.79;
 
 function scaleFrame(W: number, H: number, ppm: number): { imgToMm: Mat3; mmToImg: Mat3 } {
   const cx = (W - 1) / 2;
@@ -60,6 +72,21 @@ function scaleFrame(W: number, H: number, ppm: number): { imgToMm: Mat3; mmToImg
     imgToMm: [1 / ppm, 0, -cx / ppm, 0, 1 / ppm, -cy / ppm, 0, 0, 1],
     mmToImg: [ppm, 0, cx, 0, ppm, cy, 0, 0, 1],
   };
+}
+
+function mapRegion(g: FoundRegion, H: Mat3): FoundRegion {
+  const outlineMm: number[] = [];
+  for (let i = 0; i < g.outlineMm.length; i += 2) {
+    const q = applyH(H, [g.outlineMm[i]!, g.outlineMm[i + 1]!]);
+    outlineMm.push(q[0], q[1]);
+  }
+  let a = 0;
+  const n = outlineMm.length / 2;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    a += outlineMm[2 * i]! * outlineMm[2 * j + 1]! - outlineMm[2 * j]! * outlineMm[2 * i + 1]!;
+  }
+  return { ...g, outlineMm, areaMm2: Math.abs(a / 2) };
 }
 
 function mapPiece(p: FoundPiece, H: Mat3): FoundPiece {
@@ -90,12 +117,13 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
   const W = rgba.width;
   const H = rgba.height;
   const pitch = opts.pitchMm ?? DEFAULT_PITCH_MM;
-  const pieceAreaMm2 = pitch * pitch;
+  const share = opts.pieceAreaShare ?? REAL_PIECE_AREA_SHARE;
+  const pieceAreaMm2 = share * pitch * pitch;
 
   let t = performance.now();
-  const est = estimatePxPerMm(cv, rgba, { pitchMm: pitch, zoom: opts.zoom, table: opts.table });
-  timings.scale = performance.now() - t;
-  let ppm = est?.pxPerMm ?? (opts.zoom >= 2 ? 9 : 4) * (Math.max(W, H) / 4032);
+  // Start from the nominal scale for the zoom (hand-held at ~65–75 cm: 1× ≈ 4 px/mm, 2× ≈ 9 px/mm
+  // at 12 MP); the pieces found then measure the real one (below).
+  let ppm = (opts.zoom >= 2 ? 9 : 4) * (Math.max(W, H) / 4032);
 
   const find = (pxPerMm: number) => {
     const f = scaleFrame(W, H, pxPerMm);
@@ -105,7 +133,36 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
     return { frame: f, res: r };
   };
   let { frame, res } = find(ppm);
-  const empty = (): ScanMarkerlessResult => ({ pieces: [], photoToCatalog: null, imgToCatalog: null, registered: false, isNewFrame: false, pxPerMm: null, inliers: 0, rmsMm: 0, confidence: 0, timings: { ...timings, total: performance.now() - T0 } });
+  // Scale from the pieces themselves (full-resolution top-face outlines of single pieces).
+  t = performance.now();
+  let measured = measureScale(res.pieces, ppm, pitch, share);
+  if (!measured) {
+    // Too few single pieces at the nominal scale: the zoom is not what we were told (a 2×
+    // close-up reported as 1×, a phone much higher or lower than usual), so pieces came out as
+    // "regions" or specks. The scale-robust pre-pass (it iterates from the blobs it sees) gives a
+    // starting point; detect again there and measure properly.
+    const pre = estimatePxPerMm(cv, rgba, { pitchMm: pitch, zoom: opts.zoom, table: opts.table });
+    if (pre && Math.abs(pre.pxPerMm / ppm - 1) > 0.1) {
+      ppm = pre.pxPerMm;
+      ({ frame, res } = find(ppm));
+      measured = measureScale(res.pieces, ppm, pitch, share);
+    }
+  }
+  timings.scale = performance.now() - t; // includes the second detection when the zoom was wrong
+  if (measured) {
+    if (Math.abs(measured / ppm - 1) > RESCALE_LIMIT) {
+      // Far off: detect again (size gates and the wall model depend on the scale).
+      ppm = measured;
+      ({ frame, res } = find(ppm));
+      const again = measureScale(res.pieces, ppm, pitch, share);
+      if (again && Math.abs(again / ppm - 1) <= RESCALE_LIMIT) ({ frame, res } = { frame: scaleFrame(W, H, again), res: rescale(res, ppm / again) }), (ppm = again);
+    } else {
+      res = rescale(res, ppm / measured);
+      ppm = measured;
+      frame = scaleFrame(W, H, ppm);
+    }
+  }
+  const empty = (): ScanMarkerlessResult => ({ pieces: [], regions: [], photoToCatalog: null, imgToCatalog: null, registered: false, isNewFrame: false, pxPerMm: null, inliers: 0, rmsMm: 0, confidence: 0, timings: { ...timings, total: performance.now() - T0 } });
 
   if (!opts.catalog.length) {
     // The first photo defines the frame. Undo the phone's small tilt, measured from how piece
@@ -113,7 +170,7 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
     const Hr = levelFromSizes(res.pieces, { W, H, zoom: opts.zoom, pxPerMm: ppm }) ?? IDENTITY;
     const pieces = res.pieces.map((p) => mapPiece(p, Hr));
     timings.total = performance.now() - T0;
-    return { pieces, photoToCatalog: Hr, imgToCatalog: mulH(Hr, frame.imgToMm), registered: true, isNewFrame: true, pxPerMm: ppm, inliers: 0, rmsMm: 0, confidence: 1, timings };
+    return { pieces, regions: res.regions.map((g) => mapRegion(g, Hr)), photoToCatalog: Hr, imgToCatalog: mulH(Hr, frame.imgToMm), registered: true, isNewFrame: true, pxPerMm: ppm, inliers: 0, rmsMm: 0, confidence: 1, timings };
   }
 
   const register = (pieces: FoundPiece[]): Registration | null => {
@@ -139,6 +196,7 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
   timings.total = t - T0;
   return {
     pieces,
+    regions: res.regions.map((g) => mapRegion(g, Hc)),
     photoToCatalog: Hc,
     imgToCatalog,
     registered: true,
@@ -245,4 +303,76 @@ function solve3(A: number[][], b: number[]): number[] | null {
     }
   }
   return [M[0]![3]! / M[0]![0]!, M[1]![3]! / M[1]![1]!, M[2]![3]! / M[2]![2]!];
+}
+
+/**
+ * Photo px per mm AT THE IMAGE CENTRE from the single pieces found at `ppm` (provisional mm,
+ * origin at the image centre): single pieces (not cut, not clumps, not weak, near-square) near
+ * the mode of log-area (±0.5, which drops fragments and unflagged pairs), then a trimmed
+ * least-squares plane log(area) = c + a·x + b·y — a tilted phone sees nearer pieces bigger, so
+ * the mode alone would follow wherever most pieces lie. c ↔ pitch² (a piece's area ≈ its cell's).
+ * Null with fewer than 5 single pieces.
+ */
+export function measureScale(pieces: FoundPiece[], ppm: number, pitchMm: number, areaShare = 1): number | null {
+  const singles = pieces.filter((p) => !p.flags.cut && !p.flags.clump && !p.flags.weak && p.areaMm2 > 0 && Math.max(p.sizeMm[0], p.sizeMm[1]) / Math.max(1e-6, Math.min(p.sizeMm[0], p.sizeMm[1])) <= 1.6);
+  if (singles.length < 5) return null;
+  const logs = singles.map((p) => Math.log(p.areaMm2));
+  const lo = Math.min(...logs);
+  const nb = Math.ceil((Math.max(...logs) - lo) / 0.04) + 1;
+  const hist = new Float64Array(nb);
+  for (const v of logs) hist[Math.floor((v - lo) / 0.04)]!++;
+  let peak = 0;
+  let best = -1;
+  for (let i = 0; i < nb; i++) {
+    let v = 0;
+    for (let d = -3; d <= 3; d++) if (i + d >= 0 && i + d < nb) v += hist[i + d]! * (4 - Math.abs(d));
+    if (v > best) {
+      best = v;
+      peak = i;
+    }
+  }
+  const mode = lo + (peak + 0.5) * 0.04;
+  // Coordinates scaled to ~±1 over the photo for a well-conditioned fit.
+  const span = Math.max(1, ...singles.map((p) => Math.hypot(p.centreMm[0], p.centreMm[1])));
+  let pts = singles.map((p, i) => ({ x: p.centreMm[0] / span, y: p.centreMm[1] / span, l: logs[i]! })).filter((q) => Math.abs(q.l - mode) < 0.5);
+  if (pts.length < 5) return null;
+  let c = mode;
+  for (let iter = 0; iter < 3; iter++) {
+    const fit = pts.length >= 12 ? planeFit(pts) : null;
+    const f = fit ?? [median(pts.map((q) => q.l)), 0, 0];
+    c = f[0]!;
+    const res = pts.map((q) => q.l - (f[0]! + f[1]! * q.x + f[2]! * q.y));
+    const mad = median(res.map(Math.abs)) * 1.48 || 1e-6;
+    const kept = pts.filter((_, i) => Math.abs(res[i]!) < 2.5 * mad);
+    if (kept.length === pts.length || kept.length < 5) break;
+    pts = kept;
+  }
+  return ppm * Math.sqrt(Math.exp(c) / (areaShare * pitchMm * pitchMm));
+}
+
+function planeFit(pts: Array<{ x: number; y: number; l: number }>): number[] | null {
+  const A = [
+    [0, 0, 0],
+    [0, 0, 0],
+    [0, 0, 0],
+  ];
+  const r = [0, 0, 0];
+  for (const p of pts) {
+    const v = [1, p.x, p.y];
+    for (let i = 0; i < 3; i++) {
+      r[i]! += v[i]! * p.l;
+      for (let j = 0; j < 3; j++) A[i]![j]! += v[i]! * v[j]!;
+    }
+  }
+  return solve3(A, r);
+}
+
+/** Rescales a result's mm outputs by k (the provisional frame is linear about the image centre). */
+function rescale(r: FindResult, k: number): FindResult {
+  const sc = (v: number[]) => v.map((x) => x * k);
+  return {
+    ...r,
+    pieces: r.pieces.map((p) => ({ ...p, outlineMm: sc(p.outlineMm), centreMm: [p.centreMm[0] * k, p.centreMm[1] * k] as Vec2, areaMm2: p.areaMm2 * k * k, sizeMm: [p.sizeMm[0] * k, p.sizeMm[1] * k] as Vec2 })),
+    regions: r.regions.map((g) => ({ ...g, outlineMm: sc(g.outlineMm), areaMm2: g.areaMm2 * k * k })),
+  };
 }

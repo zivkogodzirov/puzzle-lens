@@ -112,10 +112,28 @@ export interface SceneLight {
   ambient?: number;
 }
 
+/** A non-piece thing on the table (a remote, a coaster, a phone…): matte, drawn flat with a shadow. */
+export interface SceneObject {
+  shape: 'rect' | 'disc';
+  centreMm: [number, number];
+  /** [width, height] for a rect, [diameter, diameter] for a disc. */
+  sizeMm: [number, number];
+  angleDeg?: number;
+  rgb: [number, number, number];
+}
+
 export interface SceneOptions {
   puzzle: SynthPuzzle;
   /** Pieces on the table (default: all). */
   pieceIds?: string[];
+  /**
+   * Pieces already put together: placed at their solved positions (cell centre = originMm +
+   * rotated (col + ½, row + ½) × cell), touching their neighbours (so they never count as "should
+   * be found"). Loose pieces are laid out clear of each assembled piece (they can lie inside an assembled frame).
+   */
+  assembled?: { ids: string[]; originMm: [number, number]; angleDeg?: number };
+  /** Non-piece objects on the table; loose pieces are laid out clear of them. */
+  objects?: SceneObject[];
   seed: number;
   layout?: SceneLayout;
   /** 'suggested' (default) = suggestedMarkerCentres for the layout's area, all at 0°. */

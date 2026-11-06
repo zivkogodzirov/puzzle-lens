@@ -190,16 +190,51 @@ export async function renderScene(opts: SceneOptions): Promise<SynthScene> {
   const wanted = opts.pieceIds ? new Set(opts.pieceIds) : null;
   const pieces = wanted ? puzzle.pieces.filter((p) => wanted.has(p.id)) : puzzle.pieces;
   if (wanted && pieces.length !== wanted.size) throw new Error('renderScene: unknown piece ids');
+  // An assembled block (pieces at their solved positions, all touching) and non-piece objects.
+  const asm = opts.assembled ?? null;
+  const asmIds = new Set(asm?.ids ?? []);
+  const asmPlaced: PlacedPiece[] = [];
+  if (asm) {
+    const a = ((asm.angleDeg ?? 0) * Math.PI) / 180;
+    const [cw0, ch0] = puzzle.cellMm;
+    const byId = new Map(puzzle.pieces.map((p) => [p.id, p]));
+    const at = new Map(asm.ids.map((id) => [`${byId.get(id)!.col},${byId.get(id)!.row}`, id]));
+    for (const id of asm.ids) {
+      const sp = byId.get(id);
+      if (!sp) throw new Error(`renderScene: unknown assembled piece ${id}`);
+      const u = (sp.col + 0.5) * cw0;
+      const v = (sp.row + 0.5) * ch0;
+      const cx = asm.originMm[0] + u * Math.cos(a) - v * Math.sin(a);
+      const cy = asm.originMm[1] + u * Math.sin(a) + v * Math.cos(a);
+      const touching = [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ]
+        .map(([dc, dr]) => at.get(`${sp.col + dc!},${sp.row + dr!}`))
+        .filter((x): x is string => Boolean(x));
+      asmPlaced.push({ id, centreMm: [cx, cy], angleDeg: asm.angleDeg ?? 0, faceDown: false, touching, outlineMm: placePoly(sp.outlineMm, cx, cy, asm.angleDeg ?? 0, false) });
+    }
+  }
+  const objPolys = (opts.objects ?? []).map((o) => objectPolygon(o));
+  const keepOut = [...cardPolys, ...objPolys.map((p) => grow(p, 6))];
+  // Each assembled piece keeps out its cell grown by its knobs and the gap, so loose pieces can
+  // still lie inside an assembled frame.
+  for (const p of asmPlaced) {
+    const [cw0, ch0] = puzzle.cellMm;
+    keepOut.push(objectPolygon({ shape: 'rect', centreMm: p.centreMm, sizeMm: [cw0 + 12, ch0 + 12], angleDeg: p.angleDeg }));
+  }
   const placed: PlacedPiece[] = layoutPieces({
-    pieces,
+    pieces: pieces.filter((p) => !asmIds.has(p.id)),
     originMm: origin,
     areaMm: [areaW, areaH],
     gapMm: layout.gapMm ?? 3,
     touchingShare: layout.touchingShare ?? 0.03,
     faceDownShare: layout.faceDownShare ?? 0.02,
-    keepOut: cardPolys,
+    keepOut,
     seed: opts.seed,
-  });
+  }).concat(asmPlaced);
   lap('layout');
 
   // ---- Table-space canvas -------------------------------------------------------------------
@@ -321,6 +356,32 @@ export async function renderScene(opts: SceneOptions): Promise<SynthScene> {
       }
   }
   ctx.fill();
+
+  // Objects: a soft contact shadow, then the object itself (matte: no glare on it).
+  if (objPolys.length) {
+    ctx.save();
+    ctx.shadowOffsetX = BIG;
+    ctx.shadowColor = `rgba(0,0,0,${(1 - ambient) * 0.6})`;
+    ctx.shadowBlur = Math.max(0.5, 2 * 2 * s);
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    for (const poly of objPolys)
+      tracePoly(ctx, poly, (x, y) => {
+        const c = toC(x - toLight[0] * 6, y - toLight[1] * 6);
+        return [c[0] - BIG, c[1]];
+      });
+    ctx.fill();
+    ctx.restore();
+    (opts.objects ?? []).forEach((o, i) => {
+      ctx.fillStyle = rgbStr(o.rgb);
+      ctx.beginPath();
+      tracePoly(ctx, objPolys[i]!, toC);
+      ctx.fill();
+      mctx.beginPath();
+      tracePoly(mctx, objPolys[i]!, toC);
+      mctx.fill();
+    });
+  }
 
   // Cardboard walls (all walls before any top: a top face is never hidden by a wall).
   const shades = [0.6, 0.72, 0.86, 1];
@@ -766,6 +827,50 @@ export async function renderScene(opts: SceneOptions): Promise<SynthScene> {
     timings,
     aeGain,
   };
+}
+
+/** Outline (table mm, flat) of a scene object. */
+function objectPolygon(o: { shape: 'rect' | 'disc'; centreMm: [number, number]; sizeMm: [number, number]; angleDeg?: number }): number[] {
+  const a = ((o.angleDeg ?? 0) * Math.PI) / 180;
+  const out: number[] = [];
+  if (o.shape === 'disc') {
+    for (let k = 0; k < 64; k++) {
+      const t = (k / 64) * 2 * Math.PI;
+      out.push(o.centreMm[0] + (o.sizeMm[0] / 2) * Math.cos(t), o.centreMm[1] + (o.sizeMm[1] / 2) * Math.sin(t));
+    }
+    return out;
+  }
+  const hw = o.sizeMm[0] / 2;
+  const hh = o.sizeMm[1] / 2;
+  for (const [u, v] of [
+    [-hw, -hh],
+    [hw, -hh],
+    [hw, hh],
+    [-hw, hh],
+  ] as const)
+    out.push(o.centreMm[0] + u * Math.cos(a) - v * Math.sin(a), o.centreMm[1] + u * Math.sin(a) + v * Math.cos(a));
+  return out;
+}
+
+/** A polygon pushed out from its centroid by d mm (enough for keep-out zones of convex shapes). */
+function grow(poly: number[], d: number): number[] {
+  let cx = 0;
+  let cy = 0;
+  const n = poly.length / 2;
+  for (let i = 0; i < n; i++) {
+    cx += poly[2 * i]!;
+    cy += poly[2 * i + 1]!;
+  }
+  cx /= n;
+  cy /= n;
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = poly[2 * i]! - cx;
+    const y = poly[2 * i + 1]! - cy;
+    const l = Math.hypot(x, y) || 1;
+    out.push(cx + x * (1 + d / l), cy + y * (1 + d / l));
+  }
+  return out;
 }
 
 function pointIn(poly: number[], x: number, y: number): boolean {

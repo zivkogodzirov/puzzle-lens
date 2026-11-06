@@ -85,6 +85,10 @@ export interface Project {
    * reference; default) or 'markers' (printed marker cards). Missing = 'pieces'.
    */
   tracking?: 'pieces' | 'markers';
+  /** The coin put next to the pieces for true size (src/cv/coin.ts MK_COINS id), or null. */
+  coin?: string | null;
+  /** Where sizes in mm come from: a measured coin, printed markers, or the typical-piece estimate. */
+  scaleSource?: 'coin' | 'markers' | 'estimate';
 }
 
 export type PieceStatus = 'table' | 'tray' | 'placed' | 'missing' | 'pending';

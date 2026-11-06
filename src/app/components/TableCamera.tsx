@@ -13,7 +13,7 @@ import { level, levelPermission, requestLevelSensor } from '../../scan/levelSens
 import { MARKER_COUNT } from '../../markers/layout';
 import type { TableFix } from '../../geo/tableFix';
 import type { MarkerMap, PieceRow, Vec2 } from '../../project/types';
-import { logWarn } from '../../log/logger';
+import { logInfo, logWarn } from '../../log/logger';
 
 export type TableCameraMode = 'setup' | CaptureKind;
 
@@ -218,7 +218,10 @@ export function TableCamera(props: {
         // The tilt sensor's lean is already in screen coordinates.
         if ((c.free || (!f.table && c.mode === 'detail')) && level.value) g = { ...g, leanImg: level.value.lean };
         setGauge(g);
-        if (g.status === 'ready' && c.autoCapture && !c.busy) void take(true);
+        if (g.status === 'ready' && c.autoCapture && !c.busy && !taking.current) {
+          logInfo('scan', `Automatic ${c.mode} photo`, { heightMm: g.heightMm, tiltDeg: g.tiltDeg, pieces: f.pieces, frame: [f.width, f.height] });
+          void take(true);
+        }
       }),
     [],
   );

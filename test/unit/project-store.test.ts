@@ -179,3 +179,14 @@ describe('tracking mode', () => {
     expect(normalizeProject({ id: 'd', setupStep: 6, tracking: 'pieces' }).tracking).toBe('pieces');
   });
 });
+
+describe('scale source', () => {
+  it('coin wins; marker puzzles are measured by markers; otherwise estimated', async () => {
+    const { normalizeProject } = await import('../../src/project/store');
+    expect(normalizeProject({ id: 'a', setupStep: 1 }).scaleSource).toBe('estimate');
+    expect(normalizeProject({ id: 'b', setupStep: 4, tracking: 'markers' }).scaleSource).toBe('markers');
+    expect(normalizeProject({ id: 'c', setupStep: 6, tracking: 'pieces', scaleSource: 'coin' }).scaleSource).toBe('coin');
+    // A marker puzzle saved as "estimate" before its map existed is corrected.
+    expect(normalizeProject({ id: 'd', setupStep: 6, tracking: 'markers', scaleSource: 'estimate' }).scaleSource).toBe('markers');
+  });
+});

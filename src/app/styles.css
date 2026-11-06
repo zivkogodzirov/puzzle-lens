@@ -880,3 +880,7 @@ pre.logbox {
 .table-camera .scan-note { font-size: 14px; padding: 8px 10px; max-height: 18vh; }
 .coverage-map { max-height: 16vh; }
 .photo-result { z-index: 50; }
+.coin-pick select { margin-left: 4px; background: rgba(0,0,0,0.5); color: #fff; min-height: 32px; }
+.scan-note-top { position: fixed; left: 12px; right: 12px; top: calc(var(--safe-top) + 196px); z-index: 6; max-height: 24vh; overflow: auto; font-size: 14px; color: var(--text); background: var(--panel); }
+.res-assembled { stroke: #3ccf7a; stroke-width: 3; }
+.res-object { stroke: #ff6b6b; stroke-dasharray: 3 3; }

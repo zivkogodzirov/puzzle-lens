@@ -52,6 +52,9 @@ export function normalizeProject(row: Partial<Project> & { id: string }): Projec
     // Puzzles saved before marker-free mode existed and already using markers (a marker map, or past
     // the printing step) stay marker puzzles.
     tracking: row.tracking === 'markers' || row.tracking === 'pieces' ? row.tracking : row.markerMap || (row.setupStep ?? 0) >= 5 ? 'markers' : 'pieces',
+    coin: typeof row.coin === 'string' ? row.coin : null,
+    // A coin measurement wins; marker puzzles are measured by their markers; otherwise estimated.
+    scaleSource: row.scaleSource === 'coin' ? 'coin' : row.tracking === 'markers' || row.markerMap ? 'markers' : 'estimate',
   };
 }
 

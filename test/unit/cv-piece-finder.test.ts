@@ -267,8 +267,8 @@ describe('mergeGlare', () => {
   it('replaces glare-covered pieces from the second photo and adds pieces lost under glare', () => {
     const mask = { width: 100, height: 100, factor: 1, data: new Uint8Array(100 * 100) };
     for (let y = 60; y < 80; y++) for (let x = 60; x < 80; x++) mask.data[y * 100 + x] = 1;
-    const a: FindResult = { pieces: [piece(10, 10), piece(30, 30, { glare: true })], glareShare: 0.04, glareMaskImg: mask, timings: {} };
-    const b: FindResult = { pieces: [piece(10.5, 10), piece(31, 30), piece(65, 65), piece(5, 85)], glareShare: 0, timings: {} };
+    const a: FindResult = { pieces: [piece(10, 10), piece(30, 30, { glare: true })], regions: [], glareShare: 0.04, glareMaskImg: mask, timings: {} };
+    const b: FindResult = { pieces: [piece(10.5, 10), piece(31, 30), piece(65, 65), piece(5, 85)], regions: [], glareShare: 0, timings: {} };
     const merged = mergeGlare({ result: a, tableToImg: I }, { result: b, tableToImg: I });
     expect(merged.map((p) => [p.centreMm, p.source])).toEqual([
       [[15, 15], 0],

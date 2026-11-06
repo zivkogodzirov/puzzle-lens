@@ -4,6 +4,14 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### Real table photos (2026-11-07)
+- Checked on your own photo of the table: the half-built puzzle and objects like headphones are now recognised and ignored (shown in green and red on "See the last photo"), and loose pieces inside the puzzle's frame are found. Faster: about 2.3 s on the Mac per photo.
+- A close-up is placed even when the camera reports the wrong zoom.
+
+### A coin for true size (2026-11-07)
+- Optional: put one Macedonian coin (1, 2, 5, 10 or 50 denari) next to the pieces and pick it before the overview. The app finds it, measures it (to about 1 % in tests), and turns the estimated sizes into measured ones. The coin is never counted as a piece.
+- Coin sizes: 1 denar 23.8 mm and 5 denari 27.5 mm (National Bank decisions); 2 denari 23.5 mm, 10 denari 24.5 mm and 50 denari 26.5 mm (coin catalogues).
+
 ### No printer needed (2026-11-07; not yet checked on your iPhone)
 - New puzzles need **no printed markers**: the pieces themselves tell the app where each photo was taken. Printed markers remain an option for extra precision.
 - The gauge uses the phone's tilt sensor (one tap to allow) and how big the pieces look ("Move the phone lower", "no piece cut off").

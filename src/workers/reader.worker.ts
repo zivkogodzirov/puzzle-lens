@@ -18,6 +18,7 @@ import { PhotoChecker } from '../cv/photoCheck';
 import { setupFromPhoto, toGray } from '../cv/tableSetup';
 import { ensureRgba, scanPixels, tableFromPixels } from '../cv/scanPhoto';
 import { scanMarkerless } from '../cv/scanMarkerless';
+import { findCoin } from '../cv/coin';
 import type { FreeScanOptions, FreeScanReply, ScanOptions, ScanReply, TableSetupReply } from '../shared/apis';
 import type { TableModel } from '../project/types';
 import { decodeAtMost, findBoxQuad, RECTIFIED_MAX_SIDE, rectifyQuad, type Point, type RectifyBoxResult } from '../cv/rectify';
@@ -298,11 +299,49 @@ const api: ReaderApi = {
       checker ??= new PhotoChecker(c);
       const gray = toGray(c, rgba, 'RGBA');
       const check = checker.check(gray, { map: null, zoom: opts.zoom, kind: opts.kind });
-      const r = scanMarkerless(c, rgba, { catalog: opts.catalog, pitchMm: opts.pitchMm, zoom: opts.zoom, kind: opts.kind, table: opts.table });
+      let r = scanMarkerless(c, rgba, { catalog: opts.catalog, pitchMm: opts.pitchMm, zoom: opts.zoom, kind: opts.kind, table: opts.table });
+      // The camera's zoom reading isn't always right (and a close-up may be taken at 1×): if the
+      // photo couldn't be used, try once more assuming the other zoom.
+      // Only when it found too few single pieces to measure a scale (a wrong zoom guess); a photo
+      // that was measured but didn't match is not retried (that would only double the time).
+      const unusable = (x: typeof r) => x.pieces.filter((p) => !p.flags.cut && !p.flags.clump).length < 5;
+      if (unusable(r)) {
+        const other = scanMarkerless(c, rgba, { catalog: opts.catalog, pitchMm: opts.pitchMm, zoom: opts.zoom >= 1.5 ? 1 : 2, kind: opts.kind, table: opts.table });
+        if (!unusable(other)) r = { ...other, timings: { ...other.timings, retriedOtherZoom: 1 } };
+      }
+      // A coin for true size: found in the photo, measured in catalog mm at its own position.
+      let coin: FreeScanReply['coin'] = null;
+      if (opts.findCoin && r.imgToCatalog && r.pxPerMm) {
+        const found = findCoin(c, rgba, { pxPerMm: r.pxPerMm });
+        if (found) {
+          const H = r.imgToCatalog;
+          const at = (x: number, y: number): [number, number] => {
+            const w = H[6]! * x + H[7]! * y + H[8]!;
+            return [(H[0]! * x + H[1]! * y + H[2]!) / w, (H[3]! * x + H[4]! * y + H[5]!) / w];
+          };
+          const [cx, cy] = found.centre;
+          const rad = found.diameterPx / 2;
+          // Average the catalog-mm length of 4 radii (the photo may be slightly tilted).
+          let mm = 0;
+          for (const [dx, dy] of [[1, 0], [0, 1], [-1, 0], [0, -1]] as const) {
+            const p0 = at(cx, cy);
+            const p1 = at(cx + dx * rad, cy + dy * rad);
+            mm += Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+          }
+          coin = { ...found, diameterCatalogMm: (2 * mm) / 4 };
+          // The coin itself is not a piece.
+          r.pieces = r.pieces.filter((p) => {
+            const [x, y, w, h] = p.bboxImg;
+            return Math.hypot(x + w / 2 - cx, y + h / 2 - cy) > 0.8 * rad;
+          });
+        }
+      }
       const { thumbs, preview, previewScale } = await thumbsAndPreview(rgba, r.pieces.map((p) => p.bboxImg));
       const outlinesPreview = r.pieces.map((p) => p.outlineImg.filter((_, i) => i % 4 < 2).map((v) => v * previewScale));
+      const regionsPreview = (r.regions ?? []).map((g) => ({ kind: g.kind, points: g.outlineImg.filter((_, i) => i % 4 < 2).map((v) => v * previewScale) }));
       return {
         ...r,
+        coin,
         // Without markers, blur is judged from the photo's own sharpness only where markers would be: report tilt/glare reasons from the checker except "no markers".
         reasons: check.quality.reasons.filter((q) => !/marker/i.test(q)),
         sharpness: check.quality.sharpness,
@@ -311,6 +350,7 @@ const api: ReaderApi = {
         preview,
         previewSize: { width: Math.round(rgba.width * previewScale), height: Math.round(rgba.height * previewScale) },
         outlinesPreview,
+        regionsPreview,
         width: rgba.width,
         height: rgba.height,
         ms: performance.now() - t0,

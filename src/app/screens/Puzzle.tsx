@@ -247,8 +247,14 @@ export function PuzzleScreen() {
             {pieces ?? '—'}
             {p.piecePitch && (
               <div class="muted small" data-testid="puzzle-size">
-                Measured piece size ≈ {p.piecePitch.wMm.toFixed(1)} × {p.piecePitch.hMm.toFixed(1)} mm
-                {p.grid ? ` → finished puzzle ≈ ${Math.round((p.grid.cols * p.piecePitch.wMm) / 10)} × ${Math.round((p.grid.rows * p.piecePitch.hMm) / 10)} cm (rough)` : ''}
+                Measured piece size {p.scaleSource === 'estimate' ? '≈ ' : ''}
+                {p.piecePitch.wMm.toFixed(1)} × {p.piecePitch.hMm.toFixed(1)} mm
+                {p.grid ? ` → finished puzzle ≈ ${Math.round((p.grid.cols * p.piecePitch.wMm) / 10)} × ${Math.round((p.grid.rows * p.piecePitch.hMm) / 10)} cm` : ''}
+                {p.scaleSource === 'estimate'
+                  ? ' (estimated from a typical piece; put a coin next to the pieces in the next overview for true sizes)'
+                  : p.scaleSource === 'coin'
+                    ? ' (measured with your coin)'
+                    : ''}
               </div>
             )}
             {!canScan(p) && <div class="muted small">Reading pieces starts after the set-up.</div>}

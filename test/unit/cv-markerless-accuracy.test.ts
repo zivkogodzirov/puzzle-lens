@@ -111,7 +111,7 @@ describe.skipIf(!RUN)('marker-free scanning accuracy', () => {
             const est = estimatePxPerMm(cv, buf(s), { zoom: sh.zoom });
             if (est) scaleErr.push(est.pxPerMm / s.truth.pxPerMm - 1);
             const t0 = performance.now();
-            const r: ScanMarkerlessResult = scanMarkerless(cv, buf(s), { catalog, zoom: sh.zoom, kind: sh.zoom === 2 ? 'detail' : 'overview', table: null });
+            const r: ScanMarkerlessResult = scanMarkerless(cv, buf(s), { catalog, zoom: sh.zoom, kind: sh.zoom === 2 ? 'detail' : 'overview', table: null, pieceAreaShare: 1 });
             ms.push(performance.now() - t0);
             photos++;
             if (!r.registered) continue;
@@ -153,14 +153,14 @@ describe.skipIf(!RUN)('marker-free scanning accuracy', () => {
           const otherItem = set.items.find((i) => i.puzzleKey === otherKey && i.kind === 'detail')!;
           const other = await renderScene({ ...sceneOptions(otherItem), markers: [] });
           refusalTries++;
-          if (!scanMarkerless(cv, buf(other), { catalog, zoom: 2, kind: 'detail', table: null }).registered) refusals++;
+          if (!scanMarkerless(cv, buf(other), { catalog, zoom: 2, kind: 'detail', table: null, pieceAreaShare: 1 }).registered) refusals++;
           // 10 % moved, 10 % removed.
           if (lastDetail) {
             let seed = 7 + k;
             const rnd = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296;
             const changed = catalog.filter(() => rnd() > 0.1).map((c) => (rnd() < 0.11 ? { ...c, table: { ...c.table, x: c.table.x + (rnd() - 0.5) * 120, y: c.table.y + (rnd() - 0.5) * 120 } } : c));
             movedTries++;
-            if (scanMarkerless(cv, buf(lastDetail), { catalog: changed, zoom: 2, kind: 'detail', table: null }).registered) movedOk++;
+            if (scanMarkerless(cv, buf(lastDetail), { catalog: changed, zoom: 2, kind: 'detail', table: null, pieceAreaShare: 1 }).registered) movedOk++;
           }
         }
         console.log(

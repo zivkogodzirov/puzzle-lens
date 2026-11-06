@@ -16,6 +16,7 @@ import type { RectifyBoxResult } from '../cv/rectify';
 import type { TableSetupResult } from '../cv/tableSetup';
 import type { ScanPhotoResult } from '../cv/scanPhoto';
 import type { PieceRowLike, ScanMarkerlessResult } from '../cv/scanMarkerless';
+import type { CoinFound } from '../cv/coin';
 import type { TableModel } from '../project/types';
 import type { CaptureKind } from '../scan/autoCapture';
 
@@ -35,9 +36,13 @@ export interface FreeScanOptions {
   zoom: number;
   kind: CaptureKind;
   table: TableModel | null;
+  /** Look for a coin (for true size) in this photo. */
+  findCoin?: boolean;
 }
 
 export type FreeScanReply = ScanMarkerlessResult & {
+  /** The coin, if one was asked for and found: its size in the catalog's current mm. */
+  coin: (CoinFound & { diameterCatalogMm: number }) | null;
   reasons: string[];
   sharpness: number;
   clippedShare: number;
@@ -46,6 +51,8 @@ export type FreeScanReply = ScanMarkerlessResult & {
   previewSize: { width: number; height: number };
   /** Each piece's outline in preview pixels (every other point). */
   outlinesPreview: number[][];
+  /** Assembled parts and other objects (not pieces), in preview pixels. */
+  regionsPreview: Array<{ kind: 'assembled' | 'object'; points: number[] }>;
   width: number;
   height: number;
   ms: number;

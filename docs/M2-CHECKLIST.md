@@ -25,25 +25,28 @@ Do this in the **Home Screen app** (your puzzle stays there). Allow about 30–4
 2. Light from the side if you can: a window or a lamp off to one side, not straight above.
 3. On the puzzle screen, tap **📷 Scan pieces**.
 4. Tap **Allow the tilt sensor**, and allow motion access when iPhone asks.
-5. **Overview:**
+5. **Optional, for true sizes:** put one Macedonian coin flat on the table next to the pieces, not touching them. Then pick it at **Coin for true size** (1, 2, 5, 10 or 50 denari) before the overview photo.
+   - When the overview is taken it should say **Coin found ✓**, and sizes are then measured instead of estimated.
+   - You can pick up the coin after the overview.
+6. **Overview:**
    1. Stand at the table and hold the phone flat over the pieces, high enough that **no piece is cut off** at the edge of the picture.
    2. The gauge shows a bubble (green = flat). It fills a ring while you hold still, then the photo takes itself.
    3. Tip the phone a little to one side: the bubble should move towards the side you lifted, like a spirit level. Tell me if it goes the other way.
    4. It says "Found N pieces".
-6. Tap **See the last photo**. Check the outlines:
+7. Tap **See the last photo**. Check the outlines:
    - grey around each piece;
    - **orange dashes** where pieces touch;
    - **yellow** for pale pieces to check.
 
    Are any pieces missing an outline?
-7. **Close-ups:**
+8. **Close-ups:**
    1. The screen switches to **Close-ups 2×**.
    2. A small map shows your pieces as dots. Green parts already have a close-up; a **dashed box** shows where to aim next.
    3. Hold the phone over that part of the table, flat and a little lower. The photo takes itself.
    4. Keep going until it says all close-ups are done, or you've taken about 6.
 
    Each close-up should say "Close-up read: N pieces (0 new)" or only a few new. Many "new" pieces would mean it counted pieces twice: tell me.
-8. Tap **‹ Back**. The puzzle screen shows thumbnails of the pieces found and a **measured piece size**.
+9. Tap **‹ Back**. The puzzle screen shows thumbnails of the pieces found and the **piece size**: "measured with your coin" if the coin was found, otherwise an estimate (≈).
 
 Tell me:
 - How many pieces did you lay out, and how many did it find?
@@ -58,7 +61,7 @@ Tell me:
 
 ## Known limits in this version
 - **Pale pieces on your white table** are the hardest case. On computer-made test photos the app finds about 94–95 % of all pieces, but only about a third of the very palest. Your photos will give the real number.
-- **Sizes are estimates.** Without anything of known size on the table, the app assumes a typical piece (about 18.6 mm), so the measured sizes and the finished size are marked "≈".
+- **Sizes are estimates unless you use a coin.** Without anything of known size on the table, the app assumes a typical piece (about 18.6 mm). With a coin, sizes are measured (the coin is measured to about 1 % in tests). The sizes of the 2, 10 and 50 denar coins come from coin catalogues; the 1 and 5 denar sizes come from the National Bank.
 - **Each close-up must show some of the pieces already scanned** (about half the picture), so the app can tell where it was taken. If it can't, it says so and adds nothing.
 - **Outlines don't follow the pieces live yet**: you see them on each photo. Live outlines without markers come in M5.
 - **Moved pieces:** if you move pieces between photos, a moved piece may be counted twice. Recognising moved pieces comes in M5.

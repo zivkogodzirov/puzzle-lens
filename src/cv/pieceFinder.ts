@@ -95,8 +95,21 @@ export interface GlareMask {
   data: Uint8Array;
 }
 
+/** A blob much bigger than a piece (an assembled area, or a non-piece object), or a piece-sized blob whose shape is not a piece's. */
+export interface FoundRegion {
+  kind: 'assembled' | 'object';
+  /** OUTER outline in photo px (traced at detection resolution, flat x, y); holes (table seen inside an assembled frame) are not represented. */
+  outlineImg: number[];
+  /** Same outline in table mm. */
+  outlineMm: number[];
+  /** Area inside the outer outline (mm²). */
+  areaMm2: number;
+}
+
 export interface FindResult {
   pieces: FoundPiece[];
+  /** Assembled areas and objects on the table (not pieces; never counted as pieces). */
+  regions: FoundRegion[];
   /** Share of the visible sorting area (or, without a map, of the table) under glare. */
   glareShare: number;
   glareMaskImg?: GlareMask;
@@ -138,10 +151,44 @@ const PALE = 5;
 
 /** Thresholds (tuned on val48/val300 only). */
 export const SEG = {
+  /** Holes bigger than this (× expected piece area) stay open (table seen inside an assembled area). */
+  maxHole: 1.5,
+  /** Blobs bigger than this (× expected area) are an assembled area or an object, not pieces. */
+  regionArea: 4,
+  /** …and an assembled area when at least this big (smaller ones are objects: a remote, a coaster). */
+  assembledArea: 12,
+  /** …and printed: the interquartile range of its brightness (8-bit luma) above this. */
+  assembledMinIqr: 20,
+  /** Table region: the biggest connected table-like area (and what lies on it); off below this share of the image. */
+  tableMinShare: 0.15,
+  tableMinAlpha: 0.85,
+  /** Closing across pieces when finding the table (mm). */
+  tableCloseMm: 30,
+  /** No pale cue within this distance (mm) of the table's edge. */
+  tableEdgeMm: 30,
+  /** Shape gate for a single piece: solidity above this, or a box this elongated, is an object. */
+  objectSolidity: 0.94,
+  objectAspect: 1.9,
+  /** Median membership gradient across the outline (1/mm) below which a blob has no real edge. */
+  minEdgeSharp: 0.3,
+  /** Weak blobs scoring below this and within this ΔE of the table's white are dropped. */
+  minWeakScore: 0.3,
+  /** A weak clump with less than this share of strong pixels is an object. */
+  weakClumpStrong: 0.1,
+  tableLikeDeltaE: 6,
+  /** Peeling loose pieces off regions: opening radius (× √expected area) and piece-part size range. */
+  peelRadius: 0.22,
+  peelPartMin: 0.3,
+  peelPartMax: 1.8,
   /** Width of the pre-pass copy for estimatePxPerMm (px). */
   scaleWidth: 1000,
+  /** Blobs used for the scale: solidity range and largest box aspect of a single piece. */
+  scaleSolidity: [0.62, 0.95] as [number, number],
+  scaleAspect: 1.6,
   /** Detection resolution (small image px per mm). */
   detectPxPerMm: DETECT_PX_PER_MM,
+  /** …but never more than this many small-image pixels (speed: the phone budget). */
+  detectMaxPixels: 6e6,
   /** α below this: a piece whatever its colour (darker than any side shadow). */
   darkStrong: 0.3,
   darkWeak: 0.38,
@@ -181,6 +228,8 @@ export const SEG = {
   greyCoreMm: 3.5,
   /** …and from coloured print (mm) are print, not shadow. 0 disables. */
   greyFgMm: 1.5,
+  /** Grey-print patches bigger than this (× expected area) are a soft shadow, not print. */
+  greyMaxArea: 2.5,
   /** 8-bit luma counted as blown out, and the headroom the table needs for that to mean glare. */
   clipY: 250,
   glareHeadroom: 4,
@@ -276,7 +325,7 @@ function run(cv: Cv, sc: CvScope, rgba: PixelBuffer, opts: FindOptions): FindRes
   const geo = geometry(W, H, opts);
 
   // 1. Shrink.
-  const factor = Math.max(1, opts.pxPerMm / SEG.detectPxPerMm);
+  const factor = Math.max(1, opts.pxPerMm / SEG.detectPxPerMm, Math.sqrt((W * H) / SEG.detectMaxPixels));
   const img = shrinkRgb(rgba, factor);
   const { width: w, height: h } = img;
   const sppm = opts.pxPerMm / factor;
@@ -293,7 +342,21 @@ function run(cv: Cv, sc: CvScope, rgba: PixelBuffer, opts: FindOptions): FindRes
   lap('field');
 
   // 3. Classify.
-  const cls = classify(img, field, cardIgnore, sppm);
+  const alpha = new Float32Array(w * h);
+  const cls = classify(img, field, cardIgnore, sppm, alpha);
+  // Only look for pieces on the table: everything off the largest table-like area (floor, the
+  // table's dark edge, things beyond it) counts like a marker card (ignored; touching = cut).
+  const onTable = tableRegion(cv, cls, alpha, w, h, sppm);
+  if (onTable) {
+    for (let p = 0; p < w * h; p++) if (!onTable[p]) cardZone[p] = 1;
+    // Near the table's edge the lighting field is least reliable (it mixes in the floor), so the
+    // faint "pale" cues there are not trusted.
+    const off = new Uint8Array(w * h);
+    for (let p = 0; p < w * h; p++) off[p] = onTable[p] ? 0 : 1;
+    const nearEdge = dilateBox(off, 1, w, h, Math.round(SEG.tableEdgeMm * sppm));
+    for (let p = 0; p < w * h; p++) if (nearEdge[p] && cls[p] === PALE) cls[p] = TABLE;
+  }
+  if (opts.debug) opts.debug.onTable = onTable;
   const shadow = SEG.shadowRuns ? explainShadows(cls, w, h, sppm, cardIgnore) : null;
   if (opts.debug) opts.debug.shadow = shadow && { dir: shadow.dir, lengthMm: shadow.lengthMm, haloMm: shadow.haloMm };
   lap('classify');
@@ -330,19 +393,19 @@ function run(cv: Cv, sc: CvScope, rgba: PixelBuffer, opts: FindOptions): FindRes
 
   // 7–9. Blobs → pieces.
   const prof = { outline: 0, colour: 0, flags: 0 };
-  const pieces = withScope((s2) => blobsToPieces(cv, s2, { prof, rgba, img, field, cls, pieceMask, cardZone, glare, geo, factor, sppm, prior, W, H }));
+  const { pieces, regions } = withScope((s2) => blobsToPieces(cv, s2, { prof, rgba, img, field, cls, pieceMask, cardZone, glare, geo, factor, sppm, prior, W, H }));
   lap('pieces');
   for (const [k, v] of Object.entries(prof)) timings[`pieces.${k}`] = v;
   timings.total = performance.now() - T0;
 
-  const out: FindResult = { pieces, glareShare: areaN ? glareN / areaN : 0, timings };
+  const out: FindResult = { pieces, regions, glareShare: areaN ? glareN / areaN : 0, timings };
   if (opts.withGlareMask !== false) out.glareMaskImg = { width: w, height: h, factor, data: glare };
   return out;
 }
 
 // ---- Classification ------------------------------------------------------------------------------
 
-function classify(img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: number): Uint8Array {
+function classify(img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: number, alphaOut?: Float32Array): Uint8Array {
   const { width: w, height: h, rgb, minY, factor } = img;
   const n = w * h;
   const cls = new Uint8Array(n);
@@ -370,6 +433,7 @@ function classify(img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: nu
       const ee = eR * eR + eG * eG + eB * eB;
       const a = (R * eR + G * eG + B * eB) / ee;
       alpha[p] = a;
+      if (alphaOut) alphaOut[p] = a;
       const dr = R - a * eR;
       const dg = G - a * eG;
       const db = B - a * eB;
@@ -479,9 +543,9 @@ function explainShadows(cls: Uint8Array, w: number, h: number, sppm: number, ign
       normals.push(nx / nl, ny / nl);
     }
   if (samples.length < 200) return null;
-  const step = Math.max(1, Math.floor(samples.length / 20000));
+  const step = Math.max(1, Math.floor(samples.length / 6000));
   const Ls: number[] = [];
-  for (let mm = 0.3; mm <= 4.5; mm += 0.3) Ls.push(mm);
+  for (let mm = 0.3; mm <= 4.5; mm += 0.5) Ls.push(mm);
   const expect = (theta: number): number => {
     const c = Math.cos(theta);
     const sn = Math.sin(theta);
@@ -503,13 +567,13 @@ function explainShadows(cls: Uint8Array, w: number, h: number, sppm: number, ign
         tot++;
         if (k === SHADOW) sh++;
       }
-      if (tot) len += (sh / tot) * 0.3;
+      if (tot) len += (sh / tot) * 0.5;
     }
     return len;
   };
   let best = 0;
   let bestL = -1;
-  const n = 36;
+  const n = 24;
   const lens: number[] = [];
   for (let i = 0; i < n; i++) {
     const L = expect((i / n) * 2 * Math.PI);
@@ -620,6 +684,55 @@ function dilateBox(cls: Uint8Array, k: number, w: number, h: number, r: number):
   return out;
 }
 
+/**
+ * The table: the largest connected table-like area (table, shadow, pale, glare classes) plus
+ * everything it encloses (pieces, assembled areas, objects lying on it). Null when no area
+ * covers at least `tableMinShare` of the photo (then the whole photo is searched).
+ */
+function tableRegion(cv: Cv, cls: Uint8Array, alpha: Float32Array, w: number, h: number, sppm: number): Uint8Array | null {
+  return withScope((sc) => {
+    // Coarse grid (~2 mm cells): a cell is table when ≥ 30 % of it looks like table.
+    const B = Math.max(1, Math.round(2 * sppm));
+    const cw = Math.ceil(w / B);
+    const ch = Math.ceil(h / B);
+    const cnt = new Uint16Array(cw * ch);
+    const tot = new Uint16Array(cw * ch);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const p = y * w + x;
+        const g = Math.floor(y / B) * cw + Math.floor(x / B);
+        tot[g]!++;
+        const k = cls[p];
+        // Table-coloured and nearly as bright (piece shadows are enclosed anyway; a grey rug or
+        // the floor beyond the table edge is darker).
+        if (k === TABLE || k === PALE || k === GLARE || (k === SHADOW && alpha[p]! > SEG.tableMinAlpha)) cnt[g]!++;
+      }
+    const t = new Uint8Array(cw * ch);
+    for (let g = 0; g < cw * ch; g++) t[g] = cnt[g]! >= 0.3 * tot[g]! ? 255 : 0;
+    // Close across pieces lying on the table (≤ ~30 mm), so the gaps between pieces stay one table.
+    const m = toMat(cv, sc, t, cw, ch);
+    const r = Math.max(1, Math.round(SEG.tableCloseMm / 2));
+    const k = sc.keep(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(2 * r + 1, 2 * r + 1)));
+    cv.morphologyEx(m, m, cv.MORPH_CLOSE, k, new cv.Point(-1, -1), 1, cv.BORDER_REPLICATE);
+    const l = sc.keep(new cv.Mat());
+    const st = sc.keep(new cv.Mat());
+    const ce = sc.keep(new cv.Mat());
+    const n: number = cv.connectedComponentsWithStats(m, l, st, ce, 4, cv.CV_32S);
+    const s: Int32Array = st.data32S.slice();
+    let best = 0;
+    for (let i = 1; i < n; i++) if (!best || s[i * 5 + 4]! > s[best * 5 + 4]!) best = i;
+    if (!best || s[best * 5 + 4]! < SEG.tableMinShare * cw * ch) return null;
+    const lab: Int32Array = l.data32S.slice();
+    const only = new Uint8Array(cw * ch);
+    for (let g = 0; g < cw * ch; g++) only[g] = lab[g] === best ? 255 : 0;
+    const filled = fillHoles(cv, sc, toMat(cv, sc, only, cw, ch));
+    const f: Uint8Array = filled.data.slice();
+    const out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) out[y * w + x] = f[Math.floor(y / B) * cw + Math.floor(x / B)]!;
+    return out;
+  });
+}
+
 // ---- Masks ----------------------------------------------------------------------------------------
 
 function toMat(cv: Cv, sc: CvScope, data: Uint8Array, w: number, h: number): Mat {
@@ -636,6 +749,35 @@ function fillHoles(cv: Cv, sc: CvScope, src: Mat): Mat {
   const dst = sc.keep(cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC1));
   cv.drawContours(dst, contours, -1, new cv.Scalar(255), -1, cv.LINE_8);
   return dst;
+}
+
+/**
+ * Fills only holes no bigger than `maxArea` px: the table seen through a gap in an assembled area
+ * (or inside a ring of loose pieces) is table, not piece.
+ */
+function fillHolesMax(cv: Cv, sc: CvScope, src: Mat, maxArea: number): Mat {
+  const inv = sc.keep(new cv.Mat());
+  cv.bitwise_not(src, inv);
+  const l = sc.keep(new cv.Mat());
+  const st = sc.keep(new cv.Mat());
+  const ce = sc.keep(new cv.Mat());
+  const n: number = cv.connectedComponentsWithStats(inv, l, st, ce, 4, cv.CV_32S);
+  const s: Int32Array = st.data32S.slice();
+  const lab: Int32Array = l.data32S.slice();
+  const w = src.cols;
+  const h = src.rows;
+  const fill = new Uint8Array(n);
+  for (let i = 1; i < n; i++) {
+    const x = s[i * 5]!;
+    const y = s[i * 5 + 1]!;
+    const touches = x === 0 || y === 0 || x + s[i * 5 + 2]! >= w || y + s[i * 5 + 3]! >= h;
+    fill[i] = !touches && s[i * 5 + 4]! <= maxArea ? 1 : 0;
+  }
+  const out = sc.keep(new cv.Mat(h, w, cv.CV_8UC1));
+  const d: Uint8Array = src.data.slice();
+  for (let p = 0; p < w * h; p++) if (fill[lab[p]!]) d[p] = 255;
+  out.data.set(d);
+  return out;
 }
 
 /**
@@ -718,8 +860,17 @@ function buildMask(cv: Cv, cls: Uint8Array, cardZone: Uint8Array, w: number, h: 
         cv.dilate(coreMat, coreMat, k3);
         cv.bitwise_and(coreMat, growMat, coreMat);
       }
-      const cd: Uint8Array = coreMat.data.slice();
-      for (let p = 0; p < n; p++) if (cd[p]) fg[p] = 255;
+      // Grey print of loose pieces comes in piece-sized patches; a large patch is the soft shadow
+      // of a person or the phone, not print.
+      const gl = sc.keep(new cv.Mat());
+      const gs = sc.keep(new cv.Mat());
+      const gc = sc.keep(new cv.Mat());
+      const ng: number = cv.connectedComponentsWithStats(coreMat, gl, gs, gc, 8, cv.CV_32S);
+      const gst: Int32Array = gs.data32S.slice();
+      const glab: Int32Array = gl.data32S.slice();
+      const ok = new Uint8Array(ng);
+      for (let i = 1; i < ng; i++) ok[i] = gst[i * 5 + 4]! <= SEG.greyMaxArea * priorPx ? 1 : 0;
+      for (let p = 0; p < n; p++) if (ok[glab[p]!]) fg[p] = 255;
     }
   });
 
@@ -796,7 +947,7 @@ function buildMask(cv: Cv, cls: Uint8Array, cardZone: Uint8Array, w: number, h: 
     const k3 = sc.keep(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3)));
     const closed = sc.keep(new cv.Mat());
     cv.morphologyEx(candMat, closed, cv.MORPH_CLOSE, k3);
-    const filled = fillHoles(cv, sc, closed);
+    const filled = fillHolesMax(cv, sc, closed, SEG.maxHole * priorPx);
     const opened = sc.keep(new cv.Mat());
     cv.morphologyEx(filled, opened, cv.MORPH_OPEN, k3);
     return new Uint8Array(opened.data);
@@ -849,18 +1000,121 @@ interface BlobCtx {
 }
 
 /**
+ * Loose pieces touching an assembled area or an object (blobs > `regionArea` × a piece) are cut
+ * off: an opening with a disc of ~¼ piece side separates them (interlocked pieces stay joined
+ * along whole edges), piece-sized parts (0.3–1.8 × expected) get labels of their own, and every
+ * other pixel of the blob goes to its nearest part (breadth-first), so the assembled area keeps
+ * its outline.
+ */
+function peelRegions(cv: Cv, cc: { nl: number; st: Int32Array; lab: Int32Array }, w: number, h: number, expAt: (x: number, y: number) => number): { nl: number; st: Int32Array; lab: Int32Array } {
+  const lab = cc.lab;
+  const st: number[] = Array.from(cc.st);
+  let nl = cc.nl;
+  for (let i = 1; i < cc.nl; i++) {
+    const x0 = st[i * 5]!;
+    const y0 = st[i * 5 + 1]!;
+    const bw = st[i * 5 + 2]!;
+    const bh = st[i * 5 + 3]!;
+    const expPx = expAt(x0 + bw / 2, y0 + bh / 2);
+    if (st[i * 5 + 4]! <= SEG.regionArea * expPx) continue;
+    const r = Math.max(1, Math.round(SEG.peelRadius * Math.sqrt(expPx)));
+    const roi = new Uint8Array(bw * bh);
+    for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) if (lab[(y0 + y) * w + x0 + x] === i) roi[y * bw + x] = 255;
+    const parts = withScope((sc) => {
+      const m = toMat(cv, sc, roi, bw, bh);
+      const k = sc.keep(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(2 * r + 1, 2 * r + 1)));
+      const o = sc.keep(new cv.Mat());
+      cv.morphologyEx(m, o, cv.MORPH_OPEN, k);
+      const l = sc.keep(new cv.Mat());
+      const pst = sc.keep(new cv.Mat());
+      const pce = sc.keep(new cv.Mat());
+      const n: number = cv.connectedComponentsWithStats(o, l, pst, pce, 4, cv.CV_32S);
+      return { n, lab: l.data32S.slice() as Int32Array, st: pst.data32S.slice() as Int32Array };
+    });
+    // Seeds: every opened part; piece-sized ones become pieces.
+    const isPiece = new Uint8Array(parts.n);
+    let pieceParts = 0;
+    for (let j = 1; j < parts.n; j++) {
+      const a = parts.st[j * 5 + 4]!;
+      // Opening shrinks a piece a little (knob tips): compare with a slightly lower range.
+      if (a >= SEG.peelPartMin * expPx && a <= SEG.peelPartMax * expPx) {
+        isPiece[j] = 1;
+        pieceParts++;
+      }
+    }
+    if (!pieceParts) continue;
+    const owner = new Int32Array(bw * bh).fill(-1);
+    const queue: number[] = [];
+    for (let q = 0; q < bw * bh; q++) {
+      const j = parts.lab[q]!;
+      if (j > 0) {
+        owner[q] = j;
+        queue.push(q);
+      }
+    }
+    for (let qi = 0; qi < queue.length; qi++) {
+      const q = queue[qi]!;
+      const x = q % bw;
+      const y = (q - x) / bw;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const xx = x + dx;
+        const yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= bw || yy >= bh) continue;
+        const t = yy * bw + xx;
+        if (!roi[t] || owner[t]! >= 0) continue;
+        owner[t] = owner[q]!;
+        queue.push(t);
+      }
+    }
+    const newId = new Int32Array(parts.n);
+    for (let j = 1; j < parts.n; j++) if (isPiece[j]) newId[j] = nl++;
+    const boxes = new Map<number, number[]>();
+    for (let q = 0; q < bw * bh; q++) {
+      if (!roi[q]) continue;
+      const o = owner[q]!;
+      const id = o > 0 && isPiece[o] ? newId[o]! : i;
+      const x = x0 + (q % bw);
+      const y = y0 + Math.floor(q / bw);
+      lab[y * w + x] = id;
+      let b = boxes.get(id);
+      if (!b) boxes.set(id, (b = [Infinity, Infinity, -Infinity, -Infinity, 0]));
+      b[0] = Math.min(b[0]!, x);
+      b[1] = Math.min(b[1]!, y);
+      b[2] = Math.max(b[2]!, x);
+      b[3] = Math.max(b[3]!, y);
+      b[4] = b[4]! + 1;
+    }
+    for (const [id, b] of boxes) {
+      st[id * 5] = b[0]!;
+      st[id * 5 + 1] = b[1]!;
+      st[id * 5 + 2] = b[2]! - b[0]! + 1;
+      st[id * 5 + 3] = b[3]! - b[1]! + 1;
+      st[id * 5 + 4] = b[4]!;
+    }
+    if (!boxes.has(i)) st[i * 5 + 4] = 0;
+  }
+  return { nl, st: Int32Array.from(st), lab };
+}
+
+/**
  * Two pieces joined by a thin bridge (a shadow-filled gap, a pale band) are cut apart: a blob
  * bigger than a piece is opened with a ~1 mm disc; when that leaves two or more piece-sized
  * parts, every pixel of the blob goes to the nearest part (breadth-first through the blob).
  * Truly touching pieces usually survive the opening as one part and stay a flagged clump.
  */
-function splitNecks(cv: Cv, cc: { nl: number; st: Int32Array; lab: Int32Array }, w: number, h: number, expPx: number, sppm: number): { nl: number; st: Int32Array; lab: Int32Array } {
+function splitNecks(cv: Cv, cc: { nl: number; st: Int32Array; lab: Int32Array }, w: number, h: number, expAt: (x: number, y: number) => number, sppm: number): { nl: number; st: Int32Array; lab: Int32Array } {
   const lab = cc.lab;
   const st: number[] = Array.from(cc.st);
   let nl = cc.nl;
   const r = Math.max(1, Math.round(SEG.neckMm * sppm));
   for (let i = 1; i < cc.nl; i++) {
-    if (st[i * 5 + 4]! < SEG.neckSplitArea * expPx) continue;
+    const expPx = expAt(st[i * 5]! + st[i * 5 + 2]! / 2, st[i * 5 + 1]! + st[i * 5 + 3]! / 2);
+    if (st[i * 5 + 4]! < SEG.neckSplitArea * expPx || st[i * 5 + 4]! > SEG.regionArea * expPx) continue;
     const x0 = st[i * 5]!;
     const y0 = st[i * 5 + 1]!;
     const bw = st[i * 5 + 2]!;
@@ -936,7 +1190,7 @@ function splitNecks(cv: Cv, cc: { nl: number; st: Int32Array; lab: Int32Array },
   return { nl, st: Int32Array.from(st), lab };
 }
 
-function blobsToPieces(cv: Cv, sc: CvScope, c: BlobCtx): FoundPiece[] {
+function blobsToPieces(cv: Cv, sc: CvScope, c: BlobCtx): { pieces: FoundPiece[]; regions: FoundRegion[] } {
   const { img, pieceMask, sppm } = c;
   const { width: w, height: h } = img;
   void sc;
@@ -958,7 +1212,50 @@ function blobsToPieces(cv: Cv, sc: CvScope, c: BlobCtx): FoundPiece[] {
   }
   plausible.sort((a, b) => a - b);
   const expPx = plausible.length >= 5 ? plausible[plausible.length >> 1]! : priorPx;
-  const { nl, st, lab } = splitNecks(cv, cc, w, h, expPx, sppm);
+  const expAt = expectedAreaField(cc, w, h, expPx);
+  const { nl, st, lab } = peelRegions(cv, splitNecks(cv, cc, w, h, expAt, sppm), w, h, expAt);
+  const expOf = (i: number) => expAt(st[i * 5]! + st[i * 5 + 2]! / 2, st[i * 5 + 1]! + st[i * 5 + 3]! / 2);
+
+  // Blobs much bigger than a piece: an assembled area or an object. Loose pieces that merely
+  // touch one (knob tips, a corner) are cut off first: an opening with a disc of ~¼ piece side
+  // separates them (interlocked pieces stay joined along whole edges); piece-sized parts become
+  // blobs of their own. The rest is reported as a region, never traced or counted as pieces.
+  const regions: FoundRegion[] = [];
+  const isRegion = new Uint8Array(nl);
+  for (let i = 1; i < nl; i++) {
+    if (st[i * 5 + 4]! <= SEG.regionArea * expOf(i)) continue;
+    isRegion[i] = 1;
+    const outlineImg = withScope((s3) => regionOutline(cv, s3, lab, i, st, w, h, c.factor));
+    if (outlineImg.length < 6) continue;
+    const outlineMm: number[] = [];
+    for (let k = 0; k < outlineImg.length; k += 2) {
+      const q = applyH(c.geo.imgToTable, [outlineImg[k]!, outlineImg[k + 1]!]);
+      outlineMm.push(q[0], q[1]);
+    }
+    // An assembled area is printed (varied tones); an object (a phone, a coaster) is mostly plain.
+    const hist = new Uint32Array(256);
+    let cnt = 0;
+    const x0 = st[i * 5]!;
+    const y0 = st[i * 5 + 1]!;
+    for (let y = y0; y < y0 + st[i * 5 + 3]!; y += 2)
+      for (let x = x0; x < x0 + st[i * 5 + 2]!; x += 2) {
+        const q = y * w + x;
+        if (lab[q] !== i) continue;
+        hist[Math.round((c.img.rgb[q * 3]! + 2 * c.img.rgb[q * 3 + 1]! + c.img.rgb[q * 3 + 2]!) / 4)]!++;
+        cnt++;
+      }
+    const pct = (f: number) => {
+      let acc = 0;
+      for (let v = 0; v < 256; v++) {
+        acc += hist[v]!;
+        if (acc >= f * cnt) return v;
+      }
+      return 255;
+    };
+    // Interquartile range: robust to the object's rim and shadow.
+    const printed = pct(0.75) - pct(0.25) > SEG.assembledMinIqr;
+    regions.push({ kind: printed && st[i * 5 + 4]! >= SEG.assembledArea * expOf(i) ? 'assembled' : 'object', outlineImg, outlineMm, areaMm2: polyAreaCentroid(outlineMm).area });
+  }
 
   // Fragments: a piece whose print has a near-white band can fall apart into pieces of a piece.
   // A small blob is joined to a neighbour within ~1.5 mm when the two together are still
@@ -979,7 +1276,7 @@ function blobsToPieces(cv: Cv, sc: CvScope, c: BlobCtx): FoundPiece[] {
   const reach = Math.max(2, Math.round(SEG.fragmentGapMm * sppm));
   const order = Array.from({ length: nl - 1 }, (_, k) => k + 1).sort((a, b) => st[a * 5 + 4]! - st[b * 5 + 4]!);
   for (const i of order) {
-    if (gArea[find(i)]! >= SEG.fragmentMax * expPx) continue;
+    if (isRegion[i] || gArea[find(i)]! >= SEG.fragmentMax * expOf(i)) continue;
     const x0 = Math.max(0, st[i * 5]! - reach);
     const y0 = Math.max(0, st[i * 5 + 1]! - reach);
     const x1 = Math.min(w - 1, st[i * 5]! + st[i * 5 + 2]! - 1 + reach);
@@ -989,7 +1286,7 @@ function blobsToPieces(cv: Cv, sc: CvScope, c: BlobCtx): FoundPiece[] {
     for (let y = y0; y <= y1; y++)
       for (let x = x0; x <= x1; x++) {
         const j = lab[y * w + x]!;
-        if (j === 0 || j === i) continue;
+        if (j === 0 || j === i || isRegion[j]) continue;
         let d = Infinity;
         for (let dy = -reach; dy <= reach && d > 1; dy++) {
           const yy = y + dy;
@@ -1007,7 +1304,7 @@ function blobsToPieces(cv: Cv, sc: CvScope, c: BlobCtx): FoundPiece[] {
       const gi = find(i);
       const gj = find(j);
       if (gi === gj) continue;
-      if (gArea[gi]! + gArea[gj]! <= SEG.fragmentUnion * expPx) {
+      if (gArea[gi]! + gArea[gj]! <= SEG.fragmentUnion * expOf(i)) {
         parent[gj] = gi;
         gArea[gi]! += gArea[gj]!;
       }
@@ -1017,6 +1314,7 @@ function blobsToPieces(cv: Cv, sc: CvScope, c: BlobCtx): FoundPiece[] {
 
   const groups = new Map<number, number[]>();
   for (let i = 1; i < nl; i++) {
+    if (isRegion[i]) continue;
     const g = find(i);
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g)!.push(i);
@@ -1036,7 +1334,8 @@ function blobsToPieces(cv: Cv, sc: CvScope, c: BlobCtx): FoundPiece[] {
       bx1 = Math.max(bx1, st[i * 5]! + st[i * 5 + 2]!);
       by1 = Math.max(by1, st[i * 5 + 1]! + st[i * 5 + 3]!);
     }
-    if (area < SEG.minArea * expPx) continue;
+    const expHere = expAt((bx0 + bx1) / 2, (by0 + by1) / 2);
+    if (area < SEG.minArea * expHere) continue;
     const piece = withScope((s2) => {
       const pad = 3 + closeR;
       const rx0 = Math.max(0, bx0 - pad);
@@ -1088,14 +1387,110 @@ function blobsToPieces(cv: Cv, sc: CvScope, c: BlobCtx): FoundPiece[] {
         roi[q] = fr[q] && (l === 0 || set.has(l)) ? 255 : 0;
         if (roi[q]) a2++;
       }
-      return onePiece(cv, s2, c, roi, [rx0, ry0, rw, rh], a2, expPx);
+      return onePiece(cv, s2, c, roi, [rx0, ry0, rw, rh], a2, expHere);
     });
-    if (piece) pieces.push(piece);
+    if (!piece) continue;
+    if ('kind' in piece) regions.push(piece);
+    else pieces.push(piece);
   }
-  return pieces;
+  return { pieces, regions };
 }
 
-function onePiece(cv: Cv, sc: CvScope, c: BlobCtx, roi: Uint8Array, box: [number, number, number, number], area: number, expPx: number): FoundPiece | null {
+/**
+ * Expected single-piece area (small px²) across the photo: a phone that isn't quite flat sees
+ * nearer pieces bigger. A trimmed plane fit of log(area) over piece-sized blobs (0.5–2 × the
+ * median), clamped to 0.6–1.6 × the median; the median everywhere when there are < 12 blobs.
+ */
+function expectedAreaField(cc: { nl: number; st: Int32Array }, w: number, h: number, med: number): (x: number, y: number) => number {
+  let pts: Array<{ x: number; y: number; l: number }> = [];
+  for (let i = 1; i < cc.nl; i++) {
+    const a = cc.st[i * 5 + 4]!;
+    if (a < 0.5 * med || a > 2 * med) continue;
+    pts.push({ x: (cc.st[i * 5]! + cc.st[i * 5 + 2]! / 2) / w - 0.5, y: (cc.st[i * 5 + 1]! + cc.st[i * 5 + 3]! / 2) / h - 0.5, l: Math.log(a) });
+  }
+  if (pts.length < 12) return () => med;
+  let f: number[] = [Math.log(med), 0, 0];
+  for (let iter = 0; iter < 3; iter++) {
+    const A = [
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+    ];
+    const r = [0, 0, 0];
+    for (const p of pts) {
+      const v = [1, p.x, p.y];
+      for (let i = 0; i < 3; i++) {
+        r[i]! += v[i]! * p.l;
+        for (let j = 0; j < 3; j++) A[i]![j]! += v[i]! * v[j]!;
+      }
+    }
+    const sol = solve3x3(A, r);
+    if (!sol) break;
+    f = sol;
+    const res = pts.map((p) => p.l - (f[0]! + f[1]! * p.x + f[2]! * p.y));
+    const sorted = res.map(Math.abs).sort((a, b) => a - b);
+    const mad = (sorted[sorted.length >> 1] ?? 0) * 1.48 || 1e-6;
+    const kept = pts.filter((_, i) => Math.abs(res[i]!) < 2.5 * mad);
+    if (kept.length === pts.length || kept.length < 12) break;
+    pts = kept;
+  }
+  return (x: number, y: number) => {
+    const v = Math.exp(f[0]! + f[1]! * (x / w - 0.5) + f[2]! * (y / h - 0.5));
+    return Math.min(1.6 * med, Math.max(0.6 * med, v));
+  };
+}
+
+function solve3x3(A: number[][], b: number[]): number[] | null {
+  const M = A.map((r, i) => [...r, b[i]!]);
+  for (let c = 0; c < 3; c++) {
+    let p = c;
+    for (let r = c + 1; r < 3; r++) if (Math.abs(M[r]![c]!) > Math.abs(M[p]![c]!)) p = r;
+    if (Math.abs(M[p]![c]!) < 1e-12) return null;
+    [M[c], M[p]] = [M[p]!, M[c]!];
+    for (let r = 0; r < 3; r++) {
+      if (r === c) continue;
+      const k = M[r]![c]! / M[c]![c]!;
+      for (let j = c; j < 4; j++) M[r]![j]! -= k * M[c]![j]!;
+    }
+  }
+  return [M[0]![3]! / M[0]![0]!, M[1]![3]! / M[1]![1]!, M[2]![3]! / M[2]![2]!];
+}
+
+/** Outer outline (photo px) of component `id` of a label image. */
+function regionOutline(cv: Cv, sc: CvScope, lab: Int32Array, id: number, st: Int32Array, w: number, h: number, factor: number): number[] {
+  const x0 = Math.max(0, st[id * 5]! - 1);
+  const y0 = Math.max(0, st[id * 5 + 1]! - 1);
+  const x1 = Math.min(w, st[id * 5]! + st[id * 5 + 2]! + 1);
+  const y1 = Math.min(h, st[id * 5 + 1]! + st[id * 5 + 3]! + 1);
+  const rw = x1 - x0;
+  const rh = y1 - y0;
+  const roi = new Uint8Array(rw * rh);
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (lab[y * w + x] === id) roi[(y - y0) * rw + (x - x0)] = 255;
+  const m = toMat(cv, sc, roi, rw, rh);
+  const contours = sc.keep(new cv.MatVector());
+  const hier = sc.keep(new cv.Mat());
+  cv.findContours(m, contours, hier, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+  let best: Mat = null;
+  let bestA = 0;
+  const n: number = contours.size();
+  for (let k = 0; k < n; k++) {
+    const ct = sc.keep(contours.get(k));
+    const a = cv.contourArea(ct);
+    if (a > bestA) {
+      bestA = a;
+      best = ct;
+    }
+  }
+  if (!best) return [];
+  const ap = sc.keep(new cv.Mat());
+  cv.approxPolyDP(best, ap, 1.0, true);
+  const d: Int32Array = ap.data32S.slice();
+  const out: number[] = [];
+  for (let k = 0; k < d.length; k += 2) out.push((x0 + d[k]! + 0.5) * factor - 0.5, (y0 + d[k + 1]! + 0.5) * factor - 0.5);
+  return out;
+}
+
+function onePiece(cv: Cv, sc: CvScope, c: BlobCtx, roi: Uint8Array, box: [number, number, number, number], area: number, expPx: number): FoundPiece | FoundRegion | null {
   const { img, cls, cardZone, glare, geo, factor, W, H } = c;
   const { width: w, height: h } = img;
   const [rx0, ry0, rw, rh] = box;
@@ -1153,7 +1548,10 @@ function onePiece(cv: Cv, sc: CvScope, c: BlobCtx, roi: Uint8Array, box: [number
   const traced = traceOutline(cv, sc, c, roi, rx0, ry0, rw, rh, geo.wallShift(cImg));
   c.prof.outline += performance.now() - tA;
   if (!traced) return null;
-  const { outlineImg, solidity } = traced;
+  const { outlineImg, solidity, edgeSharp } = traced;
+  // No sharp edge anywhere: a soft shadow or a reflection, not a piece.
+
+  if (edgeSharp < SEG.minEdgeSharp) return null;
   if (outlineImg.length < 6) return null;
 
   // Table coordinates through the top plane.
@@ -1184,6 +1582,13 @@ function onePiece(cv: Cv, sc: CvScope, c: BlobCtx, roi: Uint8Array, box: [number
   const strongShare = strongN / Math.max(1, area);
   const flags: PieceFlags = {};
   if (touchesEdge || nearCard || minX < 1 || minY < 1 || maxX > W - 2 || maxY > H - 2) flags.cut = true;
+  // Not a piece's shape (a remote, a coaster, a phone): too convex or too elongated. Pieces have
+  // knobs and blanks (solidity ≈ 0.75–0.92) and are near-square (aspect ≤ ~1.5 with knobs).
+  const aspect = Math.max(rect.size[0], rect.size[1]) / Math.max(1e-6, Math.min(rect.size[0], rect.size[1]));
+  const relA = area / expPx;
+  if (!flags.cut && ((relA <= SEG.clumpArea && (solidity > SEG.objectSolidity || aspect > SEG.objectAspect)) || (relA > SEG.clumpArea && (solidity > SEG.objectSolidity || aspect > 3)))) {
+    return { kind: 'object', outlineImg, outlineMm, areaMm2 };
+  }
   if (glareIn > 0.01 * area || glareRing > 0.08 * Math.max(1, ringN)) flags.glare = true;
   const rel = area / expPx;
   // Too big, big and not solid, or longer than any piece: probably more than one piece (or a
@@ -1191,8 +1596,14 @@ function onePiece(cv: Cv, sc: CvScope, c: BlobCtx, roi: Uint8Array, box: [number
   const expSideMm = Math.sqrt(expPx) / c.sppm;
   if (rel > SEG.clumpArea || (rel > SEG.clumpSolidArea && solidity < SEG.clumpSolidity) || Math.max(rect.size[0], rect.size[1]) > SEG.clumpLength * expSideMm) flags.clump = true;
   if (strongShare < 0.25) flags.weak = true;
+  // Bigger than a piece with hardly any clear print: a grey/plain object (a display, a lid), or
+  // pale pieces we can't separate anyway. Not reported as pieces.
+  if (flags.weak && flags.clump && !flags.cut && strongShare < SEG.weakClumpStrong) return { kind: 'object', outlineImg, outlineMm, areaMm2 };
   const shapeOk = Math.exp(-Math.pow(Math.log(Math.max(0.05, rel)) / 0.35, 2)) * Math.min(1, solidity / 0.8);
   const score = Math.max(0, Math.min(1, (0.4 + 0.6 * Math.min(1, strongShare / 0.6)) * shapeOk * (flags.glare ? 0.7 : 1) * (flags.cut ? 0.5 : 1)));
+  // A faint, badly shaped blob the colour of the table (a soft shadow's or reflection's edge).
+  const white = rgbToLab(240, 240, 240);
+  if (flags.weak && score < SEG.minWeakScore && Math.hypot(colour.meanLab[0] - white[0], colour.meanLab[1], colour.meanLab[2]) < SEG.tableLikeDeltaE) return null;
 
   return {
     outlineImg,
@@ -1223,7 +1634,7 @@ const MIN_EDGE_CONTRAST = 14;
  * is then removed by erosion along the parallax direction d (photo px), and the outer contour is
  * traced on a 2× upsampled membership map when the photo has fewer than 7 px/mm.
  */
-function traceOutline(cv: Cv, sc: CvScope, c: BlobCtx, roi: Uint8Array, rx0: number, ry0: number, rw: number, rh: number, d: Vec2): { outlineImg: number[]; solidity: number } | null {
+function traceOutline(cv: Cv, sc: CvScope, c: BlobCtx, roi: Uint8Array, rx0: number, ry0: number, rw: number, rh: number, d: Vec2): { outlineImg: number[]; solidity: number; edgeSharp: number } | null {
   const { rgba, factor: f, W, H } = c;
   const ppm = c.sppm * f;
   const X0 = Math.max(0, Math.ceil(rx0 * f - 0.5));
@@ -1323,6 +1734,21 @@ function traceOutline(cv: Cv, sc: CvScope, c: BlobCtx, roi: Uint8Array, rx0: num
     }
     md[p] = Math.max(0, Math.min(255, Math.round(m * 255)));
   }
+  // Edge sharpness: how fast membership changes across the edge, per mm (a die-cut edge is
+  // sharp; the soft edge of a person's or the phone's shadow is not).
+  const grads: number[] = [];
+  for (let y = 1; y < fh - 1; y++)
+    for (let x = 1; x < fw - 1; x++) {
+      const p = y * fw + x;
+      const v = md[p]!;
+      if (v < 90 || v > 165) continue;
+      const gx = (md[p + 1]! - md[p - 1]!) / 2;
+      const gy = (md[p + fw]! - md[p - fw]!) / 2;
+      grads.push(Math.hypot(gx, gy));
+    }
+  grads.sort((a, b) => a - b);
+  // No half-way pixels at all = an abrupt edge (inner and outer zones touch): sharp.
+  const edgeSharp = grads.length >= 5 ? (grads[grads.length >> 1]! / 255) * ppm : Infinity;
 
   // Sub-pixel: trace on a 2× upsampled map when pixels are coarse.
   const U = ppm < 7 ? 2 : 1;
@@ -1393,7 +1819,7 @@ function traceOutline(cv: Cv, sc: CvScope, c: BlobCtx, roi: Uint8Array, rx0: num
     const uy = pts[2 * k + 1]! + 0.5 * ny;
     outlineImg.push(X0 + (ux + 0.5) / U - 0.5, Y0 + (uy + 0.5) / U - 0.5);
   }
-  return { outlineImg, solidity };
+  return { outlineImg, solidity, edgeSharp };
 }
 
 function polySigned(pts: ArrayLike<number>): number {
@@ -1624,33 +2050,60 @@ export function estimatePxPerMm(cv: Cv, rgba: PixelBuffer, opts: { pitchMm?: num
     for (let iter = 0; iter < 3; iter++) {
       const sppm = ppm / factor;
       const field = estimateField(img, { pxPerMm: sppm, ignore: none, chromaPrior: opts.table ? tableChroma(opts.table) : null });
-      const cls = classify(img, field, none, sppm);
+      const alpha = new Float32Array(w * h);
+      const cls = classify(img, field, none, sppm, alpha);
       const shadow = SEG.shadowRuns ? explainShadows(cls, w, h, sppm, none) : null;
       const expPx = pitch * pitch * sppm * sppm;
-      const mask = buildMask(cv, cls, none, w, h, expPx, sppm, shadow?.explained ?? null);
+      const onTable = tableRegion(cv, cls, alpha, w, h, sppm);
+      const off = new Uint8Array(w * h);
+      if (onTable) for (let p = 0; p < w * h; p++) off[p] = onTable[p] ? 0 : 1;
+      const mask = buildMask(cv, cls, off, w, h, expPx, sppm, shadow?.explained ?? null);
+      // Single-piece-like blobs only: not cut by the edge, piece-like solidity and squareness (not
+      // clumps, assembled areas or objects), then the MODE of their log-area.
       const areas = withScope((sc) => {
         const m = toMat(cv, sc, mask, w, h);
-        const l = sc.keep(new cv.Mat());
-        const st = sc.keep(new cv.Mat());
-        const ce = sc.keep(new cv.Mat());
-        const n: number = cv.connectedComponentsWithStats(m, l, st, ce, 8, cv.CV_32S);
-        const s: Int32Array = st.data32S.slice();
+        const contours = sc.keep(new cv.MatVector());
+        const hier = sc.keep(new cv.Mat());
+        cv.findContours(m, contours, hier, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
         const out: number[] = [];
-        for (let i = 1; i < n; i++) {
-          const x = s[i * 5]!;
-          const y = s[i * 5 + 1]!;
-          if (x <= 0 || y <= 0 || x + s[i * 5 + 2]! >= w || y + s[i * 5 + 3]! >= h) continue; // cut by the edge
-          out.push(s[i * 5 + 4]!);
+        const n: number = contours.size();
+        for (let k = 0; k < n; k++) {
+          const ct = sc.keep(contours.get(k));
+          const a = cv.contourArea(ct);
+          if (a < 0.15 * expPx || a > 6 * expPx) continue;
+          const r = cv.boundingRect(ct);
+          if (r.x <= 0 || r.y <= 0 || r.x + r.width >= w || r.y + r.height >= h) continue;
+          const hull = sc.keep(new cv.Mat());
+          cv.convexHull(ct, hull, false, true);
+          const sol = a / Math.max(1, cv.contourArea(hull));
+          const rr = cv.minAreaRect(ct);
+          const asp = Math.max(rr.size.width, rr.size.height) / Math.max(1e-6, Math.min(rr.size.width, rr.size.height));
+          if (sol < SEG.scaleSolidity[0] || sol > SEG.scaleSolidity[1] || asp > SEG.scaleAspect) continue;
+          out.push(a);
         }
         return out;
       });
-      // Robust median: first among everything bigger than specks, then among blobs near it.
-      let cand = areas.filter((a) => a > 0.15 * expPx && a < 6 * expPx).sort((a, b) => a - b);
+      if (areas.length < 5) return result;
+      // Mode of log(area) (0.04 bins, smoothed), then the median of blobs within ±20 % of it.
+      const logs = areas.map((a) => Math.log(a));
+      const lo = Math.min(...logs);
+      const nb = Math.ceil((Math.max(...logs) - lo) / 0.04) + 1;
+      const hist = new Float64Array(nb);
+      for (const v of logs) hist[Math.floor((v - lo) / 0.04)]!++;
+      let peak = 0;
+      let peakN = -1;
+      for (let i = 0; i < nb; i++) {
+        let v = 0;
+        for (let d = -3; d <= 3; d++) if (i + d >= 0 && i + d < nb) v += hist[i + d]! * (4 - Math.abs(d));
+        if (v > peakN) {
+          peakN = v;
+          peak = i;
+        }
+      }
+      const mode = lo + (peak + 0.5) * 0.04;
+      const cand = areas.filter((a) => Math.abs(Math.log(a) - mode) < 0.2).sort((x, y) => x - y);
       if (cand.length < 5) return result;
-      let med = cand[cand.length >> 1]!;
-      cand = cand.filter((a) => a > 0.6 * med && a < 1.6 * med);
-      if (cand.length < 5) return result;
-      med = cand[cand.length >> 1]!;
+      const med = cand[cand.length >> 1]!;
       const next = (Math.sqrt(med / SCALE_AREA_BIAS) / pitch) * factor;
       result = { pxPerMm: next, nPieces: cand.length };
       const change = Math.abs(next / ppm - 1);
