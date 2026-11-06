@@ -28,6 +28,8 @@ export interface FakeCameraOptions {
    * its fallback frame path (main thread → ImageBitmap → worker), as on iPhones before iOS 18.
    */
   directFrames?: boolean;
+  /** A picture (data: URL) to show instead of the moving marker, e.g. a simulated table photo. Shown still. */
+  scene?: string;
 }
 
 /** What the fake camera exposes on `window.__fakeCamera` for tests to inspect. */
@@ -96,9 +98,31 @@ export function installFakeCamera(options: FakeCameraOptions = {}): void {
   }
 
   const t0 = performance.now();
+  let sceneImg: HTMLImageElement | null = null;
+  if (options.scene) {
+    sceneImg = new Image();
+    sceneImg.src = options.scene;
+  }
   function draw(): void {
     const t = (performance.now() - t0) / 1000;
     c2d.setTransform(1, 0, 0, 1, 0, 0);
+    // A scene can also be given later through window.__fakeScene (set by a test's own init script).
+    if (typeof win.__fakeScene === 'string' && (!sceneImg || sceneImg.dataset.src !== win.__fakeScene)) {
+      const img = new Image();
+      img.dataset.src = win.__fakeScene;
+      img.src = win.__fakeScene;
+      // Keep showing the old picture until the new one has loaded.
+      if (!sceneImg) sceneImg = img;
+      else img.onload = () => (sceneImg = img);
+    }
+    if (sceneImg) {
+      if (sceneImg.complete && sceneImg.naturalWidth) c2d.drawImage(sceneImg, 0, 0, W, H);
+      // One changing pixel in the corner keeps frames distinct without moving the picture.
+      c2d.fillStyle = stats.framesDrawn % 2 ? '#fefefe' : '#fdfdfd';
+      c2d.fillRect(0, 0, 1, 1);
+      stats.framesDrawn++;
+      return;
+    }
     c2d.drawImage(background, 0, 0);
     // The marker drifts slowly in a small circle and turns a little (like a hand-held phone).
     const cell = Math.round(Math.min(W, H) / 24); // 40 px at 1280×960

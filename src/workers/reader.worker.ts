@@ -14,6 +14,12 @@ import { JPEG_HEADER_BYTES, parseJpegHeader } from '../device/jpeg';
 import { probeWorkerCapabilities } from '../shared/workerCaps';
 import type { CvBenchResult, PhotoStats, TwoXResult, WorkerInitInfo, WorkerMemory } from '../shared/types';
 import type { ReaderApi } from '../shared/apis';
+import { PhotoChecker } from '../cv/photoCheck';
+import { setupFromPhoto, toGray } from '../cv/tableSetup';
+import { ensureRgba, scanPixels, tableFromPixels } from '../cv/scanPhoto';
+import type { ScanOptions, ScanReply, TableSetupReply } from '../shared/apis';
+import type { TableModel } from '../project/types';
+import { decodeAtMost, findBoxQuad, RECTIFIED_MAX_SIDE, rectifyQuad, type Point, type RectifyBoxResult } from '../cv/rectify';
 
 const TILE = 1024;
 /**
@@ -23,6 +29,9 @@ const TILE = 1024;
 const MAX_FULL_DECODE_PIXELS = 16_000_000;
 const REDUCED_LONG_SIDE = 4032;
 let cv: Cv | null = null;
+let checker: PhotoChecker | null = null;
+/** Longest side of a piece thumbnail (px). */
+const THUMB_PX = 160;
 let openFrames = 0;
 
 async function ready(): Promise<Cv> {
@@ -186,6 +195,87 @@ const api: ReaderApi = {
   },
 
   /** Checks a Snap tile by tile (never the whole 12 MP image at once). */
+  /**
+   * Wizard step 5: the photo of the empty table with all 8 markers → marker map (and, with piece
+   * finding, the table model). The whole photo is read once (12 MP ≈ 48 MB, freed afterwards).
+   */
+  async setupTable(photo: Blob, opts: { printScale: number; snapId: string }): Promise<TableSetupReply> {
+    const c = await ready();
+    const t0 = performance.now();
+    const { reader } = await decode(photo);
+    try {
+      const rgba = await reader.read({ x: 0, y: 0, width: reader.width, height: reader.height });
+      const gray = toGray(c, rgba, rgba.order);
+      checker ??= new PhotoChecker(c);
+      const r = setupFromPhoto(c, checker, gray, opts);
+      let table: TableModel | null = null;
+      if (r.ok && r.map && r.imgToTable) {
+        try {
+          table = tableFromPixels(c, ensureRgba(rgba), { imgToTable: r.imgToTable, map: r.map, snapId: opts.snapId });
+        } catch (err) {
+          // The marker map is still good; pieces can be found without a table model (estimated per photo).
+          console.warn('Table model failed', err);
+        }
+      }
+      return { ...r, table, width: reader.width, height: reader.height, ms: performance.now() - t0 };
+    } finally {
+      reader.close();
+    }
+  },
+
+  /**
+   * One scan photo: quality gate, table position, pieces (with a small thumbnail each) and a
+   * preview. Pieces come back in table mm, ready for the catalog.
+   */
+  async scanPhoto(photo: Blob, opts: ScanOptions): Promise<ScanReply> {
+    const c = await ready();
+    const t0 = performance.now();
+    const { reader, ms: decodeMs } = await decode(photo);
+    try {
+      const rgba = ensureRgba(await reader.read({ x: 0, y: 0, width: reader.width, height: reader.height }));
+      checker ??= new PhotoChecker(c);
+      const r = scanPixels(c, checker, rgba, opts);
+      const thumbs: Array<Blob | null> = [];
+      // Thumbnails come from the (RGBA-ordered) pixels already read, so colours are right whatever the read path.
+      const rowBytes = rgba.width * 4;
+      let packed: Uint8ClampedArray<ArrayBuffer>;
+      if (rgba.stride === rowBytes) packed = new Uint8ClampedArray(rgba.data.buffer as ArrayBuffer, rgba.data.byteOffset, rowBytes * rgba.height);
+      else {
+        packed = new Uint8ClampedArray(rowBytes * rgba.height);
+        for (let y = 0; y < rgba.height; y++) packed.set(rgba.data.subarray(y * rgba.stride, y * rgba.stride + rowBytes), y * rowBytes);
+      }
+      const bmp = await createImageBitmap(new ImageData(packed, rgba.width, rgba.height));
+      try {
+        for (const p of r.pieces) {
+          const [x, y, w, h] = p.bboxImg;
+          const pad = Math.round(Math.max(w, h) * 0.12);
+          const sx = Math.max(0, x - pad);
+          const sy = Math.max(0, y - pad);
+          const sw = Math.min(rgba.width - sx, w + 2 * pad);
+          const sh = Math.min(rgba.height - sy, h + 2 * pad);
+          const s = Math.min(1, THUMB_PX / Math.max(sw, sh));
+          const canvas = new OffscreenCanvas(Math.max(1, Math.round(sw * s)), Math.max(1, Math.round(sh * s)));
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            thumbs.push(null);
+            continue;
+          }
+          ctx.drawImage(bmp, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+          thumbs.push(await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 }));
+        }
+        const ps = Math.min(1, 1024 / Math.max(rgba.width, rgba.height));
+        const pc = new OffscreenCanvas(Math.round(rgba.width * ps), Math.round(rgba.height * ps));
+        pc.getContext('2d')?.drawImage(bmp, 0, 0, pc.width, pc.height);
+        const preview = await pc.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
+        return { ...r, thumbs, preview, width: rgba.width, height: rgba.height, ms: performance.now() - t0, decodeMs };
+      } finally {
+        bmp.close();
+      }
+    } finally {
+      reader.close();
+    }
+  },
+
   async analysePhoto(blob: Blob): Promise<PhotoStats> {
     const c = await ready();
     const { reader, ms: decodeMs, original } = await decode(blob);
@@ -295,6 +385,62 @@ const api: ReaderApi = {
     canvas.getContext('2d')!.drawImage(bmp, 0, 0);
     bmp.close();
     return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
+  },
+
+  /**
+   * Box picture (wizard step 2): straightens the picture inside 4 corners given as fractions of the
+   * photo. The photo is decoded at most 3072 px long (enough for a 2048 px result) and only the
+   * part around the picture is copied into OpenCV.
+   */
+  async rectifyBox(photo: Blob, corners: Array<[number, number]>, maxSide: number = RECTIFIED_MAX_SIDE): Promise<RectifyBoxResult> {
+    const t0 = performance.now();
+    const c = await ready();
+    if (corners.length !== 4) throw new Error('Four corners are needed');
+    const original = await headerSize(photo);
+    const reader = new PhotoReader(await decodeAtMost(photo, original, 3072));
+    try {
+      const W = reader.width;
+      const H = reader.height;
+      const px = corners.map(([x, y]) => [x * W, y * H] as Point);
+      const x0 = Math.max(0, Math.floor(Math.min(...px.map((p) => p[0]))) - 2);
+      const y0 = Math.max(0, Math.floor(Math.min(...px.map((p) => p[1]))) - 2);
+      const x1 = Math.min(W, Math.ceil(Math.max(...px.map((p) => p[0]))) + 2);
+      const y1 = Math.min(H, Math.ceil(Math.max(...px.map((p) => p[1]))) + 2);
+      if (x1 - x0 < 8 || y1 - y0 < 8) throw new Error('The outline is too small. Drag the dots out to the corners of the picture.');
+      const pixels = await reader.read({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 });
+      const out = rectifyQuad(c, pixels, pixels.order, px, { maxSide, offset: [x0, y0], imageSize: { width: W, height: H } });
+      const canvas = new OffscreenCanvas(out.width, out.height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('No 2D canvas in the photo helper');
+      ctx.putImageData(new ImageData(out.data as Uint8ClampedArray<ArrayBuffer>, out.width, out.height), 0, 0);
+      const jpeg = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
+      const fw = original?.width ?? W;
+      const fh = original?.height ?? H;
+      return {
+        jpeg,
+        width: out.width,
+        height: out.height,
+        aspect: out.aspect,
+        photoWidth: fw,
+        photoHeight: fh,
+        cornersPx: corners.map(([x, y]) => [x * fw, y * fh] as Point),
+        ms: performance.now() - t0,
+      };
+    } finally {
+      reader.close();
+    }
+  },
+
+  /** Box picture: a first guess of its 4 corners (fractions of the photo), from a copy at most 800 px long. */
+  async suggestBoxCorners(photo: Blob): Promise<Array<[number, number]> | null> {
+    const c = await ready();
+    const reader = new PhotoReader(await decodeAtMost(photo, await headerSize(photo), 800));
+    try {
+      const pixels = await reader.read({ x: 0, y: 0, width: reader.width, height: reader.height });
+      return findBoxQuad(c, pixels, pixels.order);
+    } finally {
+      reader.close();
+    }
   },
 
   memory(): WorkerMemory {

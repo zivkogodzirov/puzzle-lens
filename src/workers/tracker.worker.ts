@@ -13,6 +13,7 @@ import { readVideoFrame } from '../shared/frameRead';
 import { probeWorkerCapabilities } from '../shared/workerCaps';
 import type { FrameSource, TrackerFrameResult, TrackerStatus, WorkerError, WorkerInitInfo } from '../shared/types';
 import type { TrackerApi } from '../shared/apis';
+import type { MarkerMap } from '../project/types';
 
 type FrameReader = ReadableStreamDefaultReader<VideoFrame>;
 type ProcessorCtor = new (o: { track: MediaStreamTrack }) => { readable: ReadableStream<VideoFrame> };
@@ -21,6 +22,7 @@ let core: TrackerCore | null = null;
 let initError: WorkerError | null = null;
 let source: FrameSource | null = null;
 let pendingRate = 0;
+let pendingMap: { map: MarkerMap | null; zoom: number } = { map: null, zoom: 1 };
 /** Bumped by every attach/detach; a loop keeps running only while it still holds the current number. */
 let loopGen = 0;
 /** The one direct-frames loop that may be running. */
@@ -76,6 +78,7 @@ const api: TrackerApi = {
       const cv = await loadCv();
       core = new TrackerCore(cv, new FrameAnalyser(cv, { analysisWidth: ANALYSIS_WIDTH }), browserTrackerEnv(readVideoFrame));
       core.setRate(pendingRate);
+      core.setTableMap(pendingMap.map, pendingMap.zoom);
       return { ok: true, cvLoadMs: cvLoadMs(), capabilities };
     } catch (err) {
       initError = { message: String(err), at: Date.now() };
@@ -130,6 +133,11 @@ const api: TrackerApi = {
   setRate(fps: number): void {
     pendingRate = fps;
     core?.setRate(fps);
+  },
+
+  setTableMap(map: MarkerMap | null, zoom: number): void {
+    pendingMap = { map, zoom };
+    core?.setTableMap(map, zoom);
   },
 
   /** Longest gap between camera frames inside [startAbs, endAbs] (ms since epoch). */

@@ -1,4 +1,5 @@
 /** Types shared between the main thread and the workers. Keep this file free of DOM-only APIs. */
+import type { TableFix } from '../geo/tableFix';
 
 export type StageTimings = Record<string, number>;
 
@@ -36,6 +37,8 @@ export interface TrackerFrameResult {
   flip: boolean | null;
   /** What the browser reported about the frame, recorded for the Device check and reports. */
   frameInfo: FrameInfo | null;
+  /** Where the frame is on the table (needs a marker map and at least one known marker in view). */
+  table: TableFix | null;
 }
 
 export interface FrameInfo {

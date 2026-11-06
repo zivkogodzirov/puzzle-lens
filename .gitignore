@@ -12,3 +12,6 @@ test/fixtures/real/*
 
 # Owner photos dropped in by hand: never publish
 images/
+
+# Synthetic puzzle previews (test/synth/preview.ts)
+test/synth/out/

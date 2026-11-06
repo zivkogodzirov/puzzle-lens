@@ -4,6 +4,15 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M2: set-up, markers, finding pieces, catalog (2026-11-06; not yet checked on your iPhone)
+- **Your puzzles** on Home: new puzzle, open, export a backup, import a backup, delete.
+- **New puzzle wizard:** name and piece count → box photo (drag the corners with a magnifier; the picture is straightened) → grid suggestion (28 across × 36 down for a portrait Ravensburger 1000) → print 2 marker sheets with a 100 mm ruler check → lay out the 8 cards and take one photo of the empty table, which measures where every card lies and learns your table.
+- **Scan pieces:** a hand-held overview that takes itself when the phone is flat, high enough and still; then 2× close-ups with an arrow showing where to aim. Each photo is checked (blur, tilt, glare, markers), placed on the table, and its pieces are added to the catalog. A piece seen again is updated, never added twice.
+- **Live outlines:** grey for pieces found, orange dashes for touching pieces, yellow for pale pieces to check. They stay on the pieces as you move the phone.
+- **Puzzle screen:** piece thumbnails, the measured piece size and a rough finished size.
+- **Accuracy on computer-made test photos:** about 94–95 % of pieces found (target 98 %, not met yet); near-white pieces only about a third; positions within about 0.15 mm.
+- Under the hood: database version 2 (your M1 data upgrades), marker map and camera-pose maths, a level-and-height gauge, a tilt-sensor fallback, a close-up planner, a synthetic puzzle generator with frozen test sets.
+
 ### Seventh report (2026-11-06, Safari tab): M1 checked on your iPhone
 - Everything in the M1 checklist has now worked on your phone, in the Safari tab and the Home Screen app: sharp 3024×4032 Snap with live tracking, tracking at 22–28 per second, memory headroom 1,792 MB, the marker outline right in all three positions.
 - **The 2× lens test now gives a verdict:** your phone measured 1.83 and 2.40, so it shows "True 2× lens". A low ratio says "not confirmed" and never ✗.

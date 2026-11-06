@@ -102,9 +102,10 @@ describe('every table can be written and read', () => {
     const d = new PuzzleLensDB(uniqueName('rw'));
     await d.open();
     try {
-      await d.projects.put({ id: 'p1', name: 'Seaside 1000', createdAt: 1, updatedAt: 5 });
-      await d.projects.put({ id: 'p2', name: 'Cats', createdAt: 2, updatedAt: 3 });
-      expect(await d.projects.get('p1')).toEqual({ id: 'p1', name: 'Seaside 1000', createdAt: 1, updatedAt: 5 });
+      const blank = { pieceCount: 1000, grid: null, box: null, markerMap: null, tableModel: null, piecePitch: null, setupStep: 0 };
+      await d.projects.put({ id: 'p1', name: 'Seaside 1000', createdAt: 1, updatedAt: 5, ...blank });
+      await d.projects.put({ id: 'p2', name: 'Cats', createdAt: 2, updatedAt: 3, ...blank });
+      expect(await d.projects.get('p1')).toEqual({ id: 'p1', name: 'Seaside 1000', createdAt: 1, updatedAt: 5, ...blank });
       expect((await d.projects.orderBy('updatedAt').reverse().first())?.id).toBe('p1');
 
       await d.settings.put({ key: 'units', value: { length: 'mm', nested: [1, 2] } });
@@ -209,13 +210,15 @@ function sampleRows(table: string, spec: string, version: number, n = 3): { rows
 
 /**
  * What a row written at `from` should look like after upgrading to today's version.
- * Today (only version 1) every row is unchanged. When an upgrade function transforms rows
+ * Version 2 adds fields to projects; everything else is unchanged. When an upgrade function transforms rows
  * (renames a field, moves data to a new table…), describe the expected result here.
  * Return null if the row is intentionally dropped.
  */
 function expectedAfterUpgrade(table: string, row: Record<string, unknown>, from: number): Record<string, unknown> | null {
-  void table;
-  void from;
+  // v1 → v2: projects get the M2 fields, filled with "not set yet" (existing values kept).
+  if (table === 'projects' && from < 2) {
+    return { pieceCount: 0, grid: null, box: null, markerMap: null, tableModel: null, piecePitch: null, setupStep: 0, ...row };
+  }
   return row;
 }
 

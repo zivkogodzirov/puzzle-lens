@@ -1,12 +1,12 @@
 # Puzzle Lens: plan and status
 
-_Last updated: 2026-11-06. M1 has been checked on your iPhone, in the Safari tab and the Home Screen app. The plan is now set for your setup: phone held by hand, no mat, a large white glossy table, printed markers (§2, decisions of 2026-11-06). M2 starts when you say so._
+_Last updated: 2026-11-06. M1 is checked on your iPhone. M2 (set-up wizard, markers, piece finding, catalog) is built and tested on the Mac and waits for your iPhone check (`docs/M2-CHECKLIST.md`). Setup: phone held by hand, no mat, a large white glossy table, printed markers._
 
 | Milestone | Status |
 |---|---|
 | M0 Research and plan | ✅ Approved 2026-11-04 |
 | M1 Skeleton on your phone | ✅ Checked on your iPhone 2026-11-06 (Safari tab + Home Screen app); waiting for your OK to start M2 |
-| M2 Detection, markers and catalog | ⏳ |
+| M2 Detection, markers and catalog | 🔧 Built and tested on the Mac; **waiting for your iPhone check** (`docs/M2-CHECKLIST.md`) |
 | M3 Shape reading and Border groups | ⏳ |
 | M4 Box placement | ⏳ |
 | M5 Live tracking and re-identification | ⏳ |
@@ -53,8 +53,8 @@ The reasons behind every choice are in [`RESEARCH.md`](RESEARCH.md); section num
 | Markers | **8 markers** on 2 A4 sheets the app prints. Cut them out and lay (or tape) them on the table around the sorting area: one at each corner and one at the middle of each side. Each sheet has a 100 mm check bar and a grey patch. Print at 100% ("actual size"). Markers stay on the table between sessions if you can leave them. | The phone always knows where it is, in millimetres, even held by hand. The bar catches printer rescaling; the grey patch sets colour and exposure (R§5). |
 | Pieces | Face up, small gaps between them, not touching. | Touching pieces get an orange dashed outline and "spread these apart". |
 | Light | **Light from the side** (a window or a lamp off to one side), **not a lamp straight above the table**. | On a glossy table a lamp above you reflects straight into the camera (glare), and your phone, hands and head throw a shadow on the pieces. Side light avoids both. The app finds glare spots and asks for a retake from a slightly different angle (§3.3). |
-| Phone | **Held by hand, flat, about 50–55 cm above the table** (standing at the table, arms comfortably bent). Overview photo at 1×; close-ups at **2× from the same height**: your phone passed the 2× test (true optical 2×, measured 1.83 and 2.40). The app shows a level-and-height gauge from the markers and takes the photo itself when the phone is level (≤ 5°), at the right height and still. If a photo comes out blurred it asks again. | Straight-down photos and a narrow view keep piece outlines accurate (R§4). One height for both photo types is easy to keep by hand. The app works out the best height from your measured piece size. |
-| Puzzle size | **Nothing to measure.** You type the piece count from the box (e.g. 1000) and take a photo of the box picture. The app suggests the grid (e.g. 27 × 37 = 999) from the count and the picture's shape. It measures the real piece size, and so the finished size, from your first overview photo. | Fewer questions; the measured size is more exact than the box label. |
+| Phone | **Held by hand, flat, about 60–70 cm above the table** (standing at the table, arms slightly bent). Overview photo at 1× with all 8 markers in view (~65–70 cm; ~4 px per mm, about 75 px across a piece: enough to find and colour it). Close-ups at **2× from about the same height** (~65 cm; ~8.5 px per mm, about 165 px across a piece): your phone passed the 2× test (true optical 2×, measured 1.83 and 2.40). About **6 close-ups** cover a 70 × 50 cm area; the app shows where to aim. The app shows a level-and-height gauge from the markers and takes the photo itself when the phone is level (≤ 5°), at the right height and still. If a photo comes out blurred it asks again. | Straight-down photos and a narrow view keep piece outlines accurate (R§4). One height for both photo types is easy to keep by hand. Each close-up is planned to include a ring marker; the middle one of a 3 × 3 plan can't, so it uses the phone's tilt sensor while aiming and is placed from the overview's pieces afterwards (decision 2026-11-06). |
+| Puzzle size | **Nothing to measure.** You type the piece count from the box (e.g. 1000) and take a photo of the box picture. The app suggests the grid (e.g. 28 across × 36 down = 1008 for a portrait Ravensburger 1000) from the count and the picture's shape. It measures the real piece size, and so the finished size, from your first overview photo. | Fewer questions; the measured size is more exact than the box label. |
 
 ---
 
@@ -432,6 +432,16 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
 - **Fifth report: solved.** With a full-size tracker copy, photos are full 12.2 MP and sharp (sharpness 3,810 vs 55 for the live picture) while tracking keeps running. The 2× test measured 1.83, a true optical 2×. Cost: tracker 17 fps (GPU shrink 47 ms per frame). The fix reads big frames directly and shrinks them ×4 in OpenCV (Mac 18.7 ms), and the tracker times both ways on the phone and keeps the faster. **Confirmed on the phone (sixth report):** tracker 27.8 fps, 22.9 ms per frame (direct 20 ms vs GPU 52 ms); Snap sharp 3024×4032. Full-size tracking is now the default everywhere.
 - Snap now falls back to the **full-size live picture** (12 MP in the 4:3 format), then to the iPhone camera screen. It is checked with exact pixel reading, but its saved JPEG goes through a canvas (it may carry Safari's tiny privacy noise, which only matters for reports).
 
+**M2 (2026-11-06), before your iPhone check:**
+1. **Piece finding is below its 98 % bar on computer-made test photos.** Frozen test sets (white glossy table, glare, side light, hand shadows, hand-held 1× overviews at 65–75 cm and 2× close-ups): pieces found **94.8 %** (48-piece set) and **94.3 %** (300-piece set), precision 93.9 % / 94.2 %; 2× close-ups 94.8–97.8 %. **Near-white pieces: 34 % (15 of 44).** Positions are well inside their bar (median 0.15 mm, 95th percentile 0.5 mm). The bars stay at 98 %; your real photos (Part D of the checklist) decide what to do next: a full-resolution cut-line cue, preferring close-up reads, the ML fallback (RESEARCH §6), or a one-tap "add missed piece".
+2. **A close-up with no marker in view** (the middle of a 3 × 3 plan) can't be placed yet: the app says so and adds nothing. Placing it from the overview's pieces is still to do.
+3. **Moved pieces** may be counted twice (matching is by position only); recognising moved pieces is M5.
+4. **Touching pieces** are flagged (orange dashes), not split.
+5. **Measured piece size** is a first estimate from piece areas (M3 measures cells from corners). The finished size shown is marked "rough".
+6. **Speed:** a 300-piece overview takes about 3 s on the Mac, so roughly 4–8 s on the phone, close to the 8 s budget. The phone measures it (scan log).
+7. **Full-size photos** of the latest 10 scans are kept (3–10 MB each) so they can travel in a backup for checking; older ones are dropped.
+8. Printing from the Home Screen app (`window.print()`) is untested on iOS; "Send to my Mac" is the fallback.
+
 **Seventh report (2026-11-06, Safari tab) — M1 checked on the phone:** Device check steps 1–5 all done in the Safari tab; Snap sharp 3024×4032 with full-size tracking (chosen by the Photo test, now also the default); tracker 22–28 fps; memory headroom 1,792 MB (the most the test tries). The marker test was right in all three positions (upright, sideways left and right).
 - **The 2× lens test now gives a verdict.** Your phone measured 1.83 and 2.40; ≥ 1.3 counts as a true 2× lens. A lower ratio only says "not confirmed" (digital zoom has not been measured on a phone, so it is never called that).
 - **Watch item:** after the Photo test (about 25 full-size photos in a row) the next visit noted that the page had ended while on screen. iOS may have reclaimed the page. Normal use takes far fewer photos in a row; M2's memory tests will include long photo series.
@@ -480,8 +490,14 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
 | 2026-11-06 | **No stand: the phone is always held by hand.** Level-and-height gauge from the markers and auto-capture when level and still | Your choice; the app is meant to be used handheld. The markers give tilt and height every frame, so the app can wait for a good moment instead of asking you to hold still |
 | 2026-11-06 | **No mat: pieces lie on your white glossy table.** Table model from an empty-table photo; edge and side-shadow cues for pale pieces; glare detection with fill-in from a second photo; side-light advice | Your choice. Replaces BRIEF §4's "require a matte mat"; glare and pale-piece risks are handled in software and measured on your photos in M2 |
 | 2026-11-06 | **Finished size is measured, not asked.** Wizard asks only the piece count; grid from count + box picture shape; size = grid × piece pitch measured from the first overview photo. The box photo moves from M4 to the M2 wizard | Your request; the box picture's shape is needed for the grid anyway |
-| 2026-11-06 | Close-ups at 2× from the same ~50–55 cm height as the overview | Your phone's 2× lens is a true optical 2× (measured 1.83 and 2.40); one height is easier to keep by hand |
+| 2026-11-06 | Close-ups at 2× from about the same ~65 cm height as the overview; ~6 planned close-ups that each include a ring marker where possible; the middle one uses the tilt sensor and is placed from the overview's pieces | Your phone's 2× lens is a true optical 2× (measured 1.83 and 2.40); one height is easier to keep by hand. Tests showed that at 2× a close-up of the table's middle sees no ring marker (M2 geometry tests) |
 | 2026-11-06 | Printed markers kept (you can print A4) | Handheld tracking needs them even more than a stand would |
+| 2026-11-06 | Markers 54 mm on 90 mm cards, 4 per A4 sheet; table frame = marker 0; marker map from ONE photo of the empty table by joint least squares (8 squares of known size) | No measuring by the owner; tests place all 8 within 2 mm from a hand-held photo |
+| 2026-11-06 | Table frame is "image-like" (x right, y towards you, z into the table) | Matches how markers are printed and seen; found by the generator (mirrored images otherwise) |
+| 2026-11-06 | Photo quality gate measures blur from the marker edges (10–90 % edge width) | Scale-free and exact: markers are known perfect steps |
+| 2026-11-06 | Synthetic generator renders linear light with iPhone-like auto-exposure; overviews at 650–750 mm with all 8 markers in view | First version clipped the white table and hid glare (found while tuning piece finding) |
+| 2026-11-06 | M2 ships below the 98 % segmentation bar, with the shortfall stated | Owner's real photos are the deciding data; the bar is not lowered (PLAN §7 ratchet) |
+| 2026-11-06 | Full photos of the latest 10 scans kept and included in backups | The owner can send real scans for measurement without extra steps |
 
 ---
 

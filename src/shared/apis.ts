@@ -11,6 +11,24 @@ import type {
   WorkerInitInfo,
   WorkerMemory,
 } from './types';
+import type { MarkerMap } from '../project/types';
+import type { RectifyBoxResult } from '../cv/rectify';
+import type { TableSetupResult } from '../cv/tableSetup';
+import type { ScanPhotoResult } from '../cv/scanPhoto';
+import type { TableModel } from '../project/types';
+import type { CaptureKind } from '../scan/autoCapture';
+
+export type TableSetupReply = TableSetupResult & { table: TableModel | null; width: number; height: number; ms: number };
+
+export interface ScanOptions {
+  map: MarkerMap;
+  table: TableModel | null;
+  zoom: number;
+  kind: CaptureKind;
+  pieceAreaMm2?: number;
+}
+
+export type ScanReply = ScanPhotoResult & { thumbs: Array<Blob | null>; preview: Blob; width: number; height: number; ms: number; decodeMs: number };
 
 export interface TrackerApi {
   init(): Promise<WorkerInitInfo>;
@@ -21,6 +39,8 @@ export interface TrackerApi {
   /** Stops reading the attached track; resolves once the loop has finished and stopped the track. */
   detach(): Promise<void>;
   setRate(fps: number): void;
+  /** The current puzzle's marker map (null = none) and camera zoom, so frames get a table position and tilt. */
+  setTableMap(map: MarkerMap | null, zoom: number): void;
   /** Longest gap between camera frames inside [startAbs, endAbs] (ms since epoch). */
   maxFrameGap(startAbs: number, endAbs: number): number;
   status(): TrackerStatus;
@@ -39,6 +59,18 @@ export interface ReaderApi {
   /** A small JPEG of the photo. Pass the photo's size when known, so it isn't decoded at full size just to measure it. */
   preview(blob: Blob, maxSide: number, size?: { width: number; height: number }): Promise<Blob>;
   memory(): WorkerMemory;
+  /** Wizard step 5: the empty-table photo → marker map. */
+  setupTable(photo: Blob, opts: { printScale: number; snapId: string }): Promise<TableSetupReply>;
+  /** One scan photo → quality, table position, pieces (with thumbnails) and a preview. */
+  scanPhoto(photo: Blob, opts: ScanOptions): Promise<ScanReply>;
+  /**
+   * Straightens the box picture: `corners` are the picture's top-left, top-right, bottom-right and
+   * bottom-left corners as fractions (0–1) of the photo's width and height (the right way up).
+   * Returns a JPEG at most `maxSide` px long (default 2048) with the picture's true shape.
+   */
+  rectifyBox(photo: Blob, corners: Array<[number, number]>, maxSide?: number): Promise<RectifyBoxResult>;
+  /** A first guess of the box picture's corners (fractions 0–1, TL, TR, BR, BL), or null. */
+  suggestBoxCorners(photo: Blob): Promise<Array<[number, number]> | null>;
 }
 
 export interface ReportFileInput {

@@ -6,6 +6,8 @@
  * is closed exactly once, whatever happens — including every intermediate frame or bitmap made
  * here (GPU-scaled copies, thumbnails).
  */
+import { locateOnTable } from '../geo/tableFix';
+import type { MarkerMap } from '../project/types';
 import { cvErrorMessage, wasmBytes, type Cv } from './loadCv';
 import { upscaleCoord, type FrameAnalyser, type FrameAnalysis } from './frameAnalyser';
 import { cvCounters } from './scope';
@@ -80,12 +82,20 @@ export class TrackerCore {
   private readonly bigTrial: { direct: number[]; gpu: number[] } = { direct: [], gpu: [] };
   /** Median ms per frame for each way once chosen (for the HUD, Device check and reports). */
   bigChoice: { path: 'direct' | 'gpu'; directMs: number | null; gpuMs: number | null } | null = null;
+  private tableMap: MarkerMap | null = null;
+  private zoom = 1;
 
   constructor(
     private readonly cv: Cv,
     private readonly analyser: FrameAnalyser,
     private readonly env: TrackerEnv,
   ) {}
+
+  /** The marker map of the current puzzle (null = none yet) and the camera zoom (1 or 2). */
+  setTableMap(map: MarkerMap | null, zoom = 1): void {
+    this.tableMap = map;
+    this.zoom = zoom > 0 ? zoom : 1;
+  }
 
   setRate(fps: number): void {
     this.minIntervalMs = fps > 0 ? 1000 / fps - 2 : 0;
@@ -300,6 +310,14 @@ export class TrackerCore {
   ): TrackerFrameResult {
     const { analysis, format, scale } = res;
     const markers = scale === 1 ? analysis.markers : analysis.markers.map((m) => ({ id: m.id, corners: m.corners.map((v) => upscaleCoord(v, scale)) }));
+    const width = Math.round(analysis.inputWidth * scale);
+    const height = Math.round(analysis.inputHeight * scale);
+    let table: TrackerFrameResult['table'] = null;
+    if (this.tableMap && markers.length) {
+      const tt = this.env.now();
+      table = locateOnTable(markers, this.tableMap, { width, height }, this.zoom);
+      analysis.timings.table = this.env.now() - tt;
+    }
     analysis.timings.total = this.env.now() - t0;
     // A good frame: the error streak is over (lastError stays, with its time, for the HUD to age out).
     this.consecutiveErrors = 0;
@@ -308,8 +326,8 @@ export class TrackerCore {
       frameIndex: this.frameIndex++,
       timestampUs: extra.timestampUs,
       // The pixel space the corners are in: the analysed buffer, scaled back up.
-      width: Math.round(analysis.inputWidth * scale),
-      height: Math.round(analysis.inputHeight * scale),
+      width,
+      height,
       analysisWidth: analysis.analysisWidth,
       markers,
       sharpness: analysis.sharpness,
@@ -319,6 +337,7 @@ export class TrackerCore {
       rotation: extra.rotation,
       flip: extra.flip,
       frameInfo: extra.frameInfo,
+      table,
     };
   }
 

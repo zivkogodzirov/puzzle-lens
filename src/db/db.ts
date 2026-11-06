@@ -7,6 +7,7 @@
  * so an app update can never silently wipe someone's catalog.
  */
 import Dexie, { type Table } from 'dexie';
+import type { PieceRow, Project, SnapRow } from '../project/types';
 
 export type LogLevel = 'info' | 'warn' | 'error';
 
@@ -53,13 +54,8 @@ export interface BlobRow {
   meta?: unknown;
 }
 
-/** Filled from M2 (puzzle projects). Declared now so the first schema already has the table. */
-export interface ProjectRow {
-  id: string;
-  name: string;
-  createdAt: number;
-  updatedAt: number;
-}
+/** A puzzle (M2). Version-1 rows only have id, name and the two times; readers must cope. */
+export type ProjectRow = Project;
 
 export interface JobRow {
   id?: number;
@@ -80,9 +76,20 @@ export const SCHEMA_HISTORY: Record<number, Record<string, string>> = {
     blobs: 'id, ts, kind',
     jobs: '++id, kind, status',
   },
+  2: {
+    projects: 'id, updatedAt',
+    settings: 'key',
+    logs: '++id, ts, level',
+    deviceChecks: '++id, ts, mode',
+    launches: '++id, ts',
+    blobs: 'id, ts, kind',
+    jobs: '++id, kind, status',
+    pieces: 'id, projectId, [projectId+status]',
+    snaps: 'id, projectId, [projectId+kind], ts',
+  },
 };
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export class PuzzleLensDB extends Dexie {
   projects!: Table<ProjectRow, string>;
@@ -92,10 +99,29 @@ export class PuzzleLensDB extends Dexie {
   launches!: Table<LaunchRow, number>;
   blobs!: Table<BlobRow, string>;
   jobs!: Table<JobRow, number>;
+  pieces!: Table<PieceRow, string>;
+  snaps!: Table<SnapRow, string>;
 
   constructor(name = 'puzzle-lens') {
     super(name);
     this.version(1).stores(SCHEMA_HISTORY[1]!);
+    // v2 (M2): pieces and snaps. Projects stored by v1 (none were created in M1) get the new fields.
+    this.version(2)
+      .stores(SCHEMA_HISTORY[2]!)
+      .upgrade((tx) =>
+        tx
+          .table('projects')
+          .toCollection()
+          .modify((p: Partial<Project>) => {
+            p.pieceCount ??= 0;
+            p.grid ??= null;
+            p.box ??= null;
+            p.markerMap ??= null;
+            p.tableModel ??= null;
+            p.piecePitch ??= null;
+            p.setupStep ??= 0;
+          }),
+      );
   }
 }
 

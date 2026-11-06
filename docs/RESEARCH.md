@@ -296,6 +296,8 @@ Our markers will be hundreds of pixels across and static, so detector speed and 
 - **Handheld:** the markers give tilt and height every frame, so Snap waits until the phone is level (≤ 5°), at height and still, then fires by itself. The quality gate checks motion blur on the marker edges after every photo.
 - **Markers on white:** the white quiet zone around each marker no longer contrasts with the table, but ArUco only needs the black border against the quiet zone, so detection is unaffected. The grey patch remains the colour reference; the white table can serve as a second one.
 
+**Measured in M2 (computer-made photos, frozen test sets, 2026-11-06):** pieces found 94.3–94.8 % (precision 93.9–94.2 %), near-white pieces 34 %, positions median 0.15 mm. What helped most on the validation sets: estimating the light direction from each photo so long "shadow-like" stretches can be told apart from grey/pale print (pale 24 % → 50 % on val300), and splitting blobs at narrow necks. Still limiting: near-white print on the coarse 1× overview (the cut line is ~1 px there), blank hollows with narrow necks, and glare next to pieces. Method details: comments at the top of `src/cv/pieceFinder.ts`. Two OpenCV.js pitfalls found: `Mat.clone()` in this build shares pixels (use `copyTo`), and `mat.data` views go stale when the WASM heap grows.
+
 **Where it runs:** OpenCV.js (WASM SIMD) in a worker. Per-frame live segmentation is only for spotting changes (piece moved, added or removed), at 2–5 fps on downscaled frames.
 
 ---

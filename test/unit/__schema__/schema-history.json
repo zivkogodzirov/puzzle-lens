@@ -9,6 +9,17 @@
       "launches": "++id, ts",
       "blobs": "id, ts, kind",
       "jobs": "++id, kind, status"
+    },
+    "2": {
+      "projects": "id, updatedAt",
+      "settings": "key",
+      "logs": "++id, ts, level",
+      "deviceChecks": "++id, ts, mode",
+      "launches": "++id, ts",
+      "blobs": "id, ts, kind",
+      "jobs": "++id, kind, status",
+      "pieces": "id, projectId, [projectId+status]",
+      "snaps": "id, projectId, [projectId+kind], ts"
     }
   }
 }

@@ -147,6 +147,49 @@ export async function takePhotoWith(
   }
 }
 
+/**
+ * Takes a full-size photo for the puzzle (set-up and scanning) and hands back the JPEG itself,
+ * without the M1 photo statistics. Same fallback chain as Snap: the camera photo the Photo test
+ * chose, then the full-size live picture. Throws with a plain-English message if both fail.
+ */
+export async function capturePhoto(video: HTMLVideoElement | null): Promise<{ blob: Blob; method: 'takePhoto' | 'grabFrame'; ms: number }> {
+  snapBusy.value = true;
+  const t0 = performance.now();
+  try {
+    const method = parseSnapMethod(settings.snapMethod.value);
+    const tried: string[] = [];
+    if (!method || method.kind === 'takePhoto') {
+      try {
+        const r = await takePhotoWith(method?.kind === 'takePhoto' ? method : null, video, method ? 20_000 : 8_000);
+        takePhotoFailures = 0;
+        return { blob: r.blob, method: 'takePhoto', ms: performance.now() - t0 };
+      } catch (err) {
+        tried.push(String((err as Error)?.message ?? err));
+        logWarn('snap', 'Camera photo failed; using the full-size live picture', err);
+      }
+    }
+    try {
+      const g = await grabFullFrame();
+      try {
+        const canvas = new OffscreenCanvas(g.bitmap.width, g.bitmap.height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('No 2D canvas');
+        ctx.drawImage(g.bitmap, 0, 0);
+        const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.92 });
+        return { blob, method: 'grabFrame', ms: performance.now() - t0 };
+      } finally {
+        g.bitmap.close();
+      }
+    } catch (err) {
+      tried.push(String((err as Error)?.message ?? err));
+      logError('snap', 'No photo could be taken', { tried });
+      throw new Error("The camera couldn't take a photo. Try again, or restart the camera.");
+    }
+  } finally {
+    snapBusy.value = false;
+  }
+}
+
 export async function snapWithCamera(video: HTMLVideoElement | null = null): Promise<SnapRecord> {
   snapBusy.value = true;
   try {
