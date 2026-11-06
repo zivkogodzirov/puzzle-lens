@@ -21,6 +21,12 @@ export type SnapMethod =
        * out at that small size (540×960) or fail; with tracking off they are full 12 MP.
        */
       fullSizeTracking?: boolean;
+      /**
+       * Switch the camera off and on before the photo (with tracking paused). Found on the owner's
+       * phone: once the tracker's shrunk copy has run, photos stay small even after it is closed,
+       * until the camera restarts. Costs about a second per Snap.
+       */
+      restartCamera?: boolean;
     }
   | { kind: 'grabFrame' }
   | { kind: 'file' };
@@ -41,7 +47,7 @@ export function describeSnapMethod(m: SnapMethod | null): string {
   if (m.kind === 'grabFrame') return 'Full-size live picture';
   if (m.kind === 'file') return "iPhone's camera screen";
   const size = { none: 'no size', 'as-delivered': 'size as the camera delivers it', landscape: 'sideways size', 'caps-max': 'largest size offered', 'camera-default': "camera's own setting" }[m.size];
-  return `Camera photo (${size}${m.pauseTracking ? ', tracking paused' : ''}${m.fullSizeTracking ? ', full-size tracking' : ''}${m.onClone ? ', from a copy of the camera' : ''})`;
+  return `Camera photo (${size}${m.pauseTracking ? ', tracking paused' : ''}${m.restartCamera ? ', camera restarted first' : ''}${m.fullSizeTracking ? ', full-size tracking' : ''}${m.onClone ? ', from a copy of the camera' : ''})`;
 }
 
 /** The photo size to ask for. `delivered` = the track's current width/height; caps/defaults from ImageCapture. */

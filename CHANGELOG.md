@@ -20,6 +20,9 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
   - The pause didn't wait for the tracker's copy of the camera to close. It does now.
   - Every Snap checks its size. A photo that comes out small is retried once, then replaced by the full-size live picture.
   - The photo panel has a "Send report" button.
+- Fourth report: Snap gave a full 3024×4032 picture through the live-picture backup, but that picture is soft. Once the tracker's shrunk copy has run, photos stay small until the camera restarts.
+  - The Photo test now starts every stage with a freshly started camera.
+  - It also tries "pause tracking and restart the camera" before the photo.
 
 ### Added: M1, skeleton on your phone (2026-11-04; not yet checked on an iPhone)
 - **App:**

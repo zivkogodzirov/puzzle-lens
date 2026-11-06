@@ -7,7 +7,7 @@
  * (grabFrame: 12 MP in the 4:3 format), then the iPhone camera screen is offered.
  */
 import { signal } from '@preact/signals';
-import { currentTrack, grabFullFrame, hasImageCapture, photoInfo, setExternalCapture, takePhoto, cameraState, type SnapResult } from './camera';
+import { cameraStream, currentTrack, grabFullFrame, hasImageCapture, photoInfo, setExternalCapture, startCamera, takePhoto, cameraState, type SnapResult } from './camera';
 import { trackerGap, refreshReaderMemory, startPump, stopPumpAndWait } from './framePump';
 import { JPEG_HEADER_BYTES, parseJpegHeader } from '../device/jpeg';
 import { parseSnapMethod, photoSizeFor, type SnapMethod } from './snapMethod';
@@ -111,10 +111,22 @@ export async function takePhotoWith(
     const info = method.size === 'caps-max' || method.size === 'camera-default' ? await photoInfo() : null;
     size = photoSizeFor(method.size, t ? trackSettings(t) : {}, info?.capabilities as PhotoCapabilitiesLike | null, info?.settings as PhotoSettingsLike | null);
   }
-  if (method.pauseTracking) {
+  const resume = method.pauseTracking || method.restartCamera === true;
+  if (resume) {
     // Wait until the tracker's copy of the camera is closed, then give the camera a moment to go back to full size.
     await stopPumpAndWait();
     await new Promise((r) => setTimeout(r, 400));
+  }
+  if (method.restartCamera) {
+    await startCamera();
+    const t0 = performance.now();
+    while (!(cameraState.value === 'live' && currentTrack()?.muted !== true) && performance.now() - t0 < 6000) await new Promise((r) => setTimeout(r, 50));
+    if (cameraState.value !== 'live') throw new Error('The camera did not come back after restarting it');
+    if (video && cameraStream.value && video.srcObject !== cameraStream.value) {
+      video.srcObject = cameraStream.value;
+      void video.play().catch(() => {});
+    }
+    await new Promise((r) => setTimeout(r, 500));
   }
   try {
     let r = await takePhoto(size, { onClone: method.onClone, timeoutMs });
@@ -122,7 +134,7 @@ export async function takePhotoWith(
       try {
         await assertFullSize(r);
       } catch (err) {
-        if (!(err instanceof SmallPhoto) || !method.pauseTracking) throw err;
+        if (!(err instanceof SmallPhoto) || !resume) throw err;
         // Once more after a longer wait: the camera may still have been switching back.
         await new Promise((res) => setTimeout(res, 800));
         r = await takePhoto(size, { onClone: method.onClone, timeoutMs });
@@ -131,7 +143,7 @@ export async function takePhotoWith(
     }
     return r;
   } finally {
-    if (method.pauseTracking && video) void startPump(video);
+    if (resume && video) void startPump(video);
   }
 }
 

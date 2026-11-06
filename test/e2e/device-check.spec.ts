@@ -193,7 +193,7 @@ test('device check: camera tests run on the simulated camera and record the live
 });
 
 test('device check: the photo test finds what works and sets up Snap (takePhoto broken like the owner\'s iPhone)', async ({ page }, testInfo) => {
-  test.setTimeout(120_000);
+  test.setTimeout(300_000); // restarts the camera several times; slow when other camera tests run alongside
   await gotoScreen(page, 'device');
   await page.evaluate(() => {
     const IC = (window as unknown as { ImageCapture: { prototype: { takePhoto: () => Promise<Blob> } } }).ImageCapture;
@@ -203,7 +203,7 @@ test('device check: the photo test finds what works and sets up Snap (takePhoto 
   });
   await page.getByTestId('photo-probe').click();
   const choice = page.getByTestId('check-photo-probe-choice');
-  await expect(choice).toContainText('Full-size live picture', { timeout: 90_000 });
+  await expect(choice).toContainText('Full-size live picture', { timeout: 240_000 });
   await expect(page.getByTestId('check-photo-probe-grab')).toHaveAttribute('data-status', /yes|partial/);
   await expect(page.getByTestId('check-photo-probe-off-none')).toHaveAttribute('data-status', 'error');
   await expect(page.getByTestId('device-part-photoProbe')).toHaveAttribute('data-done', 'true', { timeout: 30_000 });

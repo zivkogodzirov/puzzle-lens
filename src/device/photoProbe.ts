@@ -3,11 +3,12 @@
  * takePhoto() call failed, with "Internal error" when a size was given and "setMaxPhotoDimensions
  * failed" without one). It tries each likely cause ON ITS OWN and remembers what works, so Snap
  * can use it (settings.snapMethod):
- *   1. live tracking OFF (no camera clone in the worker): no size / the size as delivered (upright) /
- *      sideways size / the largest size offered / the camera's own setting / from a copy of the camera;
- *   2. live tracking ON: the ways that worked in 1 (or the two simplest if none did);
- *   3. the full-size live picture (grabFrame), which doesn't use the photo pipeline at all;
- * then the 2× lens test with whatever works.
+ *   1. fresh camera, no tracking: no size / upright size / sideways size / largest size / the camera's
+ *      own setting / from a copy of the camera;
+ *   2. fresh camera, tracking with a FULL-SIZE copy;   3. fresh camera, tracking with the usual shrunk copy;
+ *   4. the full-size live picture (grabFrame);   5. tracking paused;   6. tracking paused + camera restarted;
+ * then the 2× lens test with whatever works. Second round (2026-11-06): each stage starts from a
+ * freshly started camera, because once the shrunk copy has run, photos stay small until a restart.
  */
 import { cameraInfo, cameraState, currentTrack, grabFullFrame, photoInfo, setZoom, startCamera, stopCamera } from '../camera/camera';
 import { startPump, stopPumpAndWait } from '../camera/framePump';
@@ -70,22 +71,25 @@ async function tryPhoto(id: string, method: TakeMethod, h: CameraRunHooks): Prom
 const SIZE_SHARE = 0.9;
 
 /**
- * Best way to Snap: first only ways that give (nearly) the biggest picture; among those, tracking
- * can stay on with a full-size copy > tracking stays on > tracking paused for the photo > the
- * full-size live picture; nothing works: the iPhone camera screen.
+ * Best way to Snap: first only ways that give (nearly) the biggest picture; among those, in order:
+ * tracking stays on with a full-size copy > tracking stays on > tracking paused > tracking paused and
+ * the camera restarted (about a second) > the full-size live picture (softer); nothing: camera screen.
  */
-export function chooseSnapMethod(on: Attempt[], off: Attempt[], grab: { ok: boolean; pixels: number }, onFull: Attempt[] = []): SnapMethod {
-  const all = [...onFull, ...on, ...off].filter((a) => a.ok);
-  const maxPixels = Math.max(0, grab.ok ? grab.pixels : 0, ...all.map((a) => a.pixels));
+export function chooseSnapMethod(r: { onFull?: Attempt[]; on?: Attempt[]; paused?: Attempt[]; restart?: Attempt[]; grab: { ok: boolean; pixels: number } }): SnapMethod {
+  const groups: Array<[Attempt[], Partial<TakeMethod>]> = [
+    [r.onFull ?? [], { pauseTracking: false, fullSizeTracking: true, restartCamera: false }],
+    [r.on ?? [], { pauseTracking: false, fullSizeTracking: false, restartCamera: false }],
+    [r.paused ?? [], { pauseTracking: true, fullSizeTracking: false, restartCamera: false }],
+    [r.restart ?? [], { pauseTracking: true, fullSizeTracking: false, restartCamera: true }],
+  ];
+  const all = groups.flatMap(([xs]) => xs).filter((a) => a.ok);
+  const maxPixels = Math.max(0, r.grab.ok ? r.grab.pixels : 0, ...all.map((a) => a.pixels));
   if (maxPixels === 0) return { kind: 'file' };
-  const big = (a: { ok: boolean; pixels: number }) => a.ok && a.pixels >= SIZE_SHARE * maxPixels;
-  const first = (xs: Attempt[]) => xs.filter(big).sort((a, b) => b.pixels - a.pixels)[0];
-  const full = first(onFull);
-  if (full) return { ...full.method, pauseTracking: false, fullSizeTracking: true };
-  const tracking = first(on);
-  if (tracking) return { ...tracking.method, pauseTracking: false, fullSizeTracking: false };
-  const paused = first(off);
-  if (paused) return { ...paused.method, pauseTracking: true, fullSizeTracking: false };
+  const big = (a: Attempt) => a.ok && a.pixels >= SIZE_SHARE * maxPixels;
+  for (const [xs, how] of groups) {
+    const best = xs.filter(big).sort((a, b) => b.pixels - a.pixels)[0];
+    if (best) return { ...best.method, ...how } as TakeMethod;
+  }
   return { kind: 'grabFrame' };
 }
 
@@ -121,40 +125,52 @@ async function probeSequence(h: CameraRunHooks, firstStart: Promise<void>): Prom
     h.onProgress('Photo test: from a copy of the camera… keep still');
     off.push(await tryPhoto('photo-probe-off-clone', { kind: 'takePhoto', size: 'none', pauseTracking: false, onClone: true }, h));
 
-    // 2. Live tracking ON (a clone of the camera goes to the tracker worker).
-    if (h.isAborted()) return;
-    h.onProgress('Photo test: starting live tracking…');
-    await startPump(h.video);
-    await sleep(1500);
-    const worked = off.filter((a) => a.ok).map((a) => a.method);
-    const tryOn: TakeMethod[] = worked.length
+    const worked = off.filter((a) => a.ok && !a.method.onClone).map((a) => a.method);
+    const sizesToTry: TakeMethod[] = worked.length
       ? worked
       : [
           { kind: 'takePhoto', size: 'none', pauseTracking: false, onClone: false },
           { kind: 'takePhoto', size: 'as-delivered', pauseTracking: false, onClone: false },
         ];
-    const on: Attempt[] = [];
-    for (const m of tryOn) {
-      if (h.isAborted()) return;
-      h.onProgress(`Photo test: tracking on, ${m.onClone ? 'copy' : m.size}… keep still`);
-      on.push(await tryPhoto(`photo-probe-on-${m.onClone ? 'clone' : m.size}`, m, h));
-    }
-
-    // 2b. Live tracking ON with a FULL-SIZE copy of the camera (the worker shrinks it on the GPU).
-    const onFull: Attempt[] = [];
-    if (!h.isAborted() && worked.length) {
-      h.onProgress('Photo test: full-size tracking…');
+    const label = (m: TakeMethod) => (m.onClone ? 'clone' : m.size);
+    /** Each stage starts with a freshly started camera, so one stage can't affect the next. */
+    const freshCamera = async (msg: string) => {
+      h.onProgress(msg);
       await stopPumpAndWait();
-      await startPump(h.video, { fullSizeClone: true });
-      await sleep(1500);
-      for (const m of worked) {
-        if (h.isAborted()) return;
-        h.onProgress(`Photo test: full-size tracking, ${m.onClone ? 'copy' : m.size}… keep still`);
-        onFull.push(await tryPhoto(`photo-probe-onfull-${m.onClone ? 'clone' : m.size}`, { ...m, fullSizeTracking: true }, h));
-      }
+      await startCamera({ format: 'auto-4x3' });
+      const t2 = currentTrack();
+      if (t2) own.add(t2);
+      if (cameraState.value !== 'live') throw new Error('The camera did not restart');
+      await attachPreview(h.video);
+      await waitLive(4000);
+      await sleep(800);
+    };
+
+    // 2. Fresh camera, live tracking with a FULL-SIZE copy of the camera (the worker shrinks it on the GPU).
+    if (h.isAborted()) return;
+    await freshCamera('Photo test: restarting the camera for full-size tracking…');
+    await startPump(h.video, { fullSizeClone: true });
+    await sleep(1500);
+    const onFull: Attempt[] = [];
+    for (const m of sizesToTry) {
+      if (h.isAborted()) return;
+      h.onProgress(`Photo test: full-size tracking, ${label(m)}… keep still`);
+      onFull.push(await tryPhoto(`photo-probe-onfull-${label(m)}`, { ...m, fullSizeTracking: true }, h));
     }
 
-    // 3. The full-size live picture.
+    // 3. Fresh camera, live tracking with the usual SHRUNK copy.
+    if (h.isAborted()) return;
+    await freshCamera('Photo test: restarting the camera for normal tracking…');
+    await startPump(h.video, { fullSizeClone: false });
+    await sleep(1500);
+    const on: Attempt[] = [];
+    for (const m of sizesToTry) {
+      if (h.isAborted()) return;
+      h.onProgress(`Photo test: tracking on, ${label(m)}… keep still`);
+      on.push(await tryPhoto(`photo-probe-on-${label(m)}`, m, h));
+    }
+
+    // 4. The full-size live picture (tracking still on).
     if (h.isAborted()) return;
     h.onProgress('Photo test: full-size live picture…');
     let grab = { ok: false, pixels: 0 };
@@ -169,8 +185,21 @@ async function probeSequence(h: CameraRunHooks, firstStart: Promise<void>): Prom
       h.onCheck(makeEntry('photo-probe-grab', 'error', errorMessage(err)));
     }
 
+    // 5. Tracking paused (its copy closed), camera NOT restarted.
+    const base = sizesToTry[0]!;
+    if (h.isAborted()) return;
+    h.onProgress('Photo test: tracking paused… keep still');
+    const paused = [await tryPhoto(`photo-probe-paused-${label(base)}`, { ...base, pauseTracking: true }, h)];
+
+    // 6. Tracking paused AND the camera restarted just before the photo.
+    if (h.isAborted()) return;
+    await startPump(h.video, { fullSizeClone: false });
+    await sleep(1500);
+    h.onProgress('Photo test: tracking paused and camera restarted… keep still');
+    const restart = [await tryPhoto(`photo-probe-restart-${label(base)}`, { ...base, pauseTracking: true, restartCamera: true }, h)];
+
     // Choose and remember.
-    const choice = chooseSnapMethod(on, off, grab, onFull);
+    const choice = chooseSnapMethod({ onFull, on, paused, restart, grab });
     settings.snapMethod.value = JSON.stringify(choice);
     const status = choice.kind === 'file' ? 'no' : choice.kind === 'grabFrame' || choice.pauseTracking ? 'partial' : 'yes';
     h.onCheck(makeEntry('photo-probe-choice', status, `Snap will use: ${describeSnapMethod(choice)}`, { choice }));
@@ -178,10 +207,17 @@ async function probeSequence(h: CameraRunHooks, firstStart: Promise<void>): Prom
 
     // 4. The 2× lens test with what works (tracking set up the way Snap will have it).
     if (choice.kind !== 'file' && !h.isAborted()) {
-      await stopPumpAndWait();
-      if (choice.kind === 'grabFrame' || !choice.pauseTracking) await startPump(h.video);
+      // Both 2× photos are taken from one freshly started camera (a restart would reset the zoom).
+      await freshCamera('2× lens test: getting the camera ready…');
+      let how: Exclude<SnapMethod, { kind: 'file' }> = choice;
+      if (choice.kind === 'takePhoto') {
+        if (choice.pauseTracking || choice.restartCamera) how = { ...choice, pauseTracking: false, restartCamera: false };
+        else await startPump(h.video);
+      } else {
+        await startPump(h.video);
+      }
       await sleep(1000);
-      h.onCheck(await twoXWith(choice, h));
+      h.onCheck(await twoXWith(how, h));
     }
   } finally {
     safeStopPump();

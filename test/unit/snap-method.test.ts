@@ -41,35 +41,46 @@ describe('the saved choice', () => {
 describe('choosing how Snap works', () => {
   const ok = (id: string, method: ReturnType<typeof take>, pixels: number) => ({ id, method, ok: true, pixels });
   const bad = (id: string, method: ReturnType<typeof take>) => ({ id, method, ok: false, pixels: 0 });
+  const FULL = 3024 * 4032;
+  const SMALL = 540 * 960;
+  const grab = { ok: true, pixels: FULL };
 
-  it('prefers a photo that works with tracking on, the biggest one', () => {
-    const c = chooseSnapMethod([ok('a', take('none'), 12e6), ok('b', take('landscape'), 48e6)], [], { ok: true, pixels: 12e6 });
-    expect(c).toEqual({ ...take('landscape'), pauseTracking: false, fullSizeTracking: false });
+  it('prefers keeping tracking on (full-size copy first), but only with a full-size photo', () => {
+    expect(chooseSnapMethod({ onFull: [ok('f', take('none'), FULL)], on: [ok('o', take('none'), FULL)], grab })).toEqual({
+      ...take('none'),
+      pauseTracking: false,
+      fullSizeTracking: true,
+      restartCamera: false,
+    });
+    expect(chooseSnapMethod({ onFull: [bad('f', take('none'))], on: [ok('a', take('none'), 12e6), ok('b', take('landscape'), 48e6)], grab })).toEqual({
+      ...take('landscape'),
+      pauseTracking: false,
+      fullSizeTracking: false,
+      restartCamera: false,
+    });
   });
 
-  it('pauses tracking when photos only work with tracking off (and beat the live picture)', () => {
-    const c = chooseSnapMethod([bad('a', take('none'))], [ok('b', take('as-delivered'), 24e6)], { ok: true, pixels: 12e6 });
-    expect(c).toEqual({ ...take('as-delivered'), pauseTracking: true, fullSizeTracking: false });
+  it("the owner's iPhone, 2026-11-06: small with tracking on, small when only paused → restart the camera", () => {
+    const c = chooseSnapMethod({
+      onFull: [bad('f', take('none'))],
+      on: [ok('o', take('none'), SMALL)],
+      paused: [ok('p', take('none'), SMALL)],
+      restart: [ok('r', take('none'), FULL)],
+      grab,
+    });
+    expect(c).toEqual({ ...take('none'), pauseTracking: true, fullSizeTracking: false, restartCamera: true });
   });
 
-  it("never picks a small photo: the owner's iPhone, Home Screen app, 2026-11-06", () => {
-    // Tracking on (shrunk copy): 540×960 photos. Tracking off: 3024×4032. Live picture: 3024×4032.
-    const on = [ok('on-none', take('none'), 540 * 960), ok('on-as', take('as-delivered'), 540 * 960), bad('on-l', take('landscape'))];
-    const off = [ok('off-none', take('none'), 3024 * 4032), ok('off-as', take('as-delivered'), 3024 * 4032)];
-    const grab = { ok: true, pixels: 3024 * 4032 };
-    expect(chooseSnapMethod(on, off, grab)).toEqual({ ...take('none'), pauseTracking: true, fullSizeTracking: false });
-    // If full-size tracking keeps photos full size, tracking can stay on.
-    const onFull = [ok('full-as', take('as-delivered'), 3024 * 4032)];
-    expect(chooseSnapMethod(on, off, grab, onFull)).toEqual({ ...take('as-delivered'), pauseTracking: false, fullSizeTracking: true });
-    // Full-size tracking that still gives small photos doesn't count.
-    expect(chooseSnapMethod(on, off, grab, [ok('full-none', take('none'), 540 * 960)])).toEqual({ ...take('none'), pauseTracking: true, fullSizeTracking: false });
+  it('pausing alone is preferred to restarting when it gives a full-size photo', () => {
+    const c = chooseSnapMethod({ on: [ok('o', take('none'), SMALL)], paused: [ok('p', take('none'), FULL)], restart: [ok('r', take('none'), FULL)], grab });
+    expect(c).toEqual({ ...take('none'), pauseTracking: true, fullSizeTracking: false, restartCamera: false });
   });
 
-  it("uses the full-size live picture when no photo works (the owner's iPhone on 2026-11-06)", () => {
-    expect(chooseSnapMethod([bad('a', take('none'))], [bad('b', take('none'))], { ok: true, pixels: 12.2e6 })).toEqual({ kind: 'grabFrame' });
+  it('uses the full-size live picture when no full-size photo works', () => {
+    expect(chooseSnapMethod({ on: [ok('o', take('none'), SMALL)], paused: [bad('p', take('none'))], restart: [bad('r', take('none'))], grab })).toEqual({ kind: 'grabFrame' });
   });
 
   it("falls back to the iPhone's camera screen when nothing works", () => {
-    expect(chooseSnapMethod([], [bad('b', take('none'))], { ok: false, pixels: 0 })).toEqual({ kind: 'file' });
+    expect(chooseSnapMethod({ on: [], paused: [bad('b', take('none'))], grab: { ok: false, pixels: 0 } })).toEqual({ kind: 'file' });
   });
 });
