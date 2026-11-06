@@ -26,6 +26,8 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 - Fifth report: **Snap takes real, sharp 12 MP photos** while tracking keeps running, by giving the tracker a full-size copy of the camera. The 2× lens measured 1.83 (a true 2×). Tracking dropped to 17 fps, because shrinking the big frames on the GPU took about 47 ms.
   - New way to read big frames: copy the grey picture and shrink it by an exact factor of 4 in OpenCV (Mac: 18.7 ms per 12 MP frame, the shrink itself 4 ms).
   - The tracker times both ways on the phone and keeps the faster one. The HUD shows the choice under "big frames".
+- Sixth report: tracking is back to 27.8 fps (22.9 ms per frame; the direct copy took 20 ms, the GPU 52 ms), and Snap still gives sharp 3024×4032 photos.
+- Full-size tracking is now the starting setting everywhere, including the Safari tab before any Photo test.
 
 ### Added: M1, skeleton on your phone (2026-11-04; not yet checked on an iPhone)
 - **App:**

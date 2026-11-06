@@ -9,7 +9,7 @@ vi.mock('../../src/app/workers', () => ({ Comlink: {}, readerWorker: () => null 
 vi.mock('../../src/device/cameraChecks', () => ({}));
 vi.mock('../../src/log/logger', () => ({ logInfo: () => {} }));
 
-const { describeSnapMethod, parseSnapMethod, photoSizeFor } = await import('../../src/camera/snapMethod');
+const { describeSnapMethod, parseSnapMethod, photoSizeFor, wantsFullSizeTracking } = await import('../../src/camera/snapMethod');
 const { chooseSnapMethod } = await import('../../src/device/photoProbe');
 
 const take = (size: 'none' | 'as-delivered' | 'landscape', onClone = false) => ({ kind: 'takePhoto' as const, size, pauseTracking: false, onClone });
@@ -23,6 +23,16 @@ describe('photo sizes', () => {
     expect(photoSizeFor('caps-max', delivered, { imageWidth: { max: 8064 }, imageHeight: { max: 6048 } }, null)).toEqual({ imageWidth: 8064, imageHeight: 6048 });
     expect(photoSizeFor('camera-default', delivered, null, { imageWidth: 4032, imageHeight: 3024 })).toEqual({ imageWidth: 4032, imageHeight: 3024 });
     expect(photoSizeFor('caps-max', delivered, null, null)).toBeNull();
+  });
+});
+
+describe('full-size tracking', () => {
+  it('is the default, and only a Photo test result that chose a shrunk copy turns it off', () => {
+    expect(wantsFullSizeTracking('')).toBe(true);
+    expect(wantsFullSizeTracking('junk')).toBe(true);
+    expect(wantsFullSizeTracking(JSON.stringify({ kind: 'grabFrame' }))).toBe(true);
+    expect(wantsFullSizeTracking(JSON.stringify({ ...take('none'), fullSizeTracking: true }))).toBe(true);
+    expect(wantsFullSizeTracking(JSON.stringify({ ...take('none'), fullSizeTracking: false }))).toBe(false);
   });
 });
 

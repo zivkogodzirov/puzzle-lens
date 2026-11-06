@@ -73,8 +73,15 @@ export function photoSizeFor(
   }
 }
 
-/** Whether the live tracker should get a full-size copy of the camera (see SnapMethod.fullSizeTracking). */
+/**
+ * Whether the live tracker should get a full-size copy of the camera (see SnapMethod.fullSizeTracking).
+ * Default (no Photo test result yet): YES. Measured on the owner's iPhone (2026-11-06): with the
+ * full-size copy, Snap gives sharp 12 MP photos while tracking runs at ~28 fps (big frames read
+ * directly, 20 ms); with a shrunk copy, photos come out 540×960 or fail. Only a Photo test result
+ * that says otherwise turns it off.
+ */
 export function wantsFullSizeTracking(raw: string): boolean {
   const m = parseSnapMethod(raw);
-  return m?.kind === 'takePhoto' && m.fullSizeTracking === true;
+  if (!m) return true;
+  return m.kind === 'takePhoto' ? m.fullSizeTracking === true : true;
 }
