@@ -49,6 +49,9 @@ export function normalizeProject(row: Partial<Project> & { id: string }): Projec
     tableModel: row.tableModel ?? null,
     piecePitch: row.piecePitch ?? null,
     setupStep: typeof row.setupStep === 'number' ? row.setupStep : 0,
+    // Puzzles saved before marker-free mode existed and already using markers (a marker map, or past
+    // the printing step) stay marker puzzles.
+    tracking: row.tracking === 'markers' || row.tracking === 'pieces' ? row.tracking : row.markerMap || (row.setupStep ?? 0) >= 5 ? 'markers' : 'pieces',
   };
 }
 

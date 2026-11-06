@@ -15,6 +15,7 @@ import type { MarkerMap } from '../project/types';
 import type { RectifyBoxResult } from '../cv/rectify';
 import type { TableSetupResult } from '../cv/tableSetup';
 import type { ScanPhotoResult } from '../cv/scanPhoto';
+import type { PieceRowLike, ScanMarkerlessResult } from '../cv/scanMarkerless';
 import type { TableModel } from '../project/types';
 import type { CaptureKind } from '../scan/autoCapture';
 
@@ -27,6 +28,29 @@ export interface ScanOptions {
   kind: CaptureKind;
   pieceAreaMm2?: number;
 }
+
+export interface FreeScanOptions {
+  catalog: PieceRowLike[];
+  pitchMm: number;
+  zoom: number;
+  kind: CaptureKind;
+  table: TableModel | null;
+}
+
+export type FreeScanReply = ScanMarkerlessResult & {
+  reasons: string[];
+  sharpness: number;
+  clippedShare: number;
+  thumbs: Array<Blob | null>;
+  preview: Blob;
+  previewSize: { width: number; height: number };
+  /** Each piece's outline in preview pixels (every other point). */
+  outlinesPreview: number[][];
+  width: number;
+  height: number;
+  ms: number;
+  decodeMs: number;
+};
 
 export type ScanReply = ScanPhotoResult & { thumbs: Array<Blob | null>; preview: Blob; width: number; height: number; ms: number; decodeMs: number };
 
@@ -41,6 +65,8 @@ export interface TrackerApi {
   setRate(fps: number): void;
   /** The current puzzle's marker map (null = none) and camera zoom, so frames get a table position and tilt. */
   setTableMap(map: MarkerMap | null, zoom: number): void;
+  /** Measure the pieces in every frame (for the marker-free gauge). */
+  setPieceStats(on: boolean): void;
   /** Longest gap between camera frames inside [startAbs, endAbs] (ms since epoch). */
   maxFrameGap(startAbs: number, endAbs: number): number;
   status(): TrackerStatus;
@@ -63,6 +89,8 @@ export interface ReaderApi {
   setupTable(photo: Blob, opts: { printScale: number; snapId: string }): Promise<TableSetupReply>;
   /** One scan photo → quality, table position, pieces (with thumbnails) and a preview. */
   scanPhoto(photo: Blob, opts: ScanOptions): Promise<ScanReply>;
+  /** Marker-free scan photo → pieces placed by matching them to the catalog, thumbnails, preview with outlines. */
+  scanFree(photo: Blob, opts: FreeScanOptions): Promise<FreeScanReply>;
   /**
    * Straightens the box picture: `corners` are the picture's top-left, top-right, bottom-right and
    * bottom-left corners as fractions (0–1) of the photo's width and height (the right way up).

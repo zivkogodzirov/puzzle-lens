@@ -141,6 +141,8 @@ export class Coverage {
     }
     if (fallback) return fallback;
     // Every planned photo is done but small gaps remain (shaky aim): centre on the largest gap.
+    // (Quadratic in cells: skipped for very large areas, which only a misplaced piece would make.)
+    if (this.best.length > 8000) return null;
     let gap: Vec2 | null = null;
     let most = 0;
     for (let i = 0; i < this.best.length; i++) {

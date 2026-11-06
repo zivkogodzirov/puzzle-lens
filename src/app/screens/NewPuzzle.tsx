@@ -188,7 +188,13 @@ export function NewPuzzleScreen() {
       )}
       {step === 2 && project && <StepBox project={project} save={save} onNext={() => advance(3)} />}
       {step === 3 && project && <StepGrid project={project} save={save} onNext={() => advance(4)} />}
-      {step === 4 && project && <StepMarkers project={project} onNext={() => advance(PLACEHOLDER_STEP)} />}
+      {step === 4 && project && project.tracking !== 'markers' && (
+        <StepTracking
+          onPieces={() => void save({ tracking: 'pieces', setupStep: 6 }).then((p) => go('puzzle', p.id))}
+          onMarkers={() => void save({ tracking: 'markers' })}
+        />
+      )}
+      {step === 4 && project && project.tracking === 'markers' && <StepMarkers project={project} onNext={() => advance(PLACEHOLDER_STEP)} />}
       {step === PLACEHOLDER_STEP && project && <StepTable project={project} save={save} />}
     </main>
   );
@@ -764,6 +770,35 @@ function StepGrid({ project, save, onNext }: { project: Project; save: (patch: P
 
 // ---------------------------------------------------------------------------------------------
 // Step 4: print markers + ruler check
+// ---------------------------------------------------------------------------------------------
+// Step 4: printed markers or not (decision 2026-11-07: no printing is the default)
+// ---------------------------------------------------------------------------------------------
+
+function StepTracking({ onPieces, onMarkers }: { onPieces: () => void; onMarkers: () => void }) {
+  return (
+    <section data-testid="step-tracking">
+      <h2>Ready to scan</h2>
+      <p>
+        No printing needed: the app uses <strong>the pieces themselves</strong> to know where each photo was taken. Spread your pieces face up on any table and
+        scan them.
+      </p>
+      <button class="btn btn-primary btn-block" data-testid="finish-no-markers" onClick={onPieces}>
+        Finish set-up
+      </button>
+      <details class="small" style={{ marginTop: '16px' }}>
+        <summary>I have a printer and want extra precision</summary>
+        <p class="muted">
+          With 8 printed marker cards around the pieces, positions are a little more exact and the outlines can follow the pieces live. You can switch any time by
+          starting a new puzzle.
+        </p>
+        <button class="btn btn-block" data-testid="use-markers" onClick={onMarkers}>
+          Use printed markers instead
+        </button>
+      </details>
+    </section>
+  );
+}
+
 // ---------------------------------------------------------------------------------------------
 
 function StepMarkers({ project, onNext }: { project: Project; onNext: () => Promise<void> }) {

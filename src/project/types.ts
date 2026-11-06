@@ -80,6 +80,11 @@ export interface Project {
   piecePitch: { wMm: number; hMm: number; n: number } | null;
   /** Wizard progress: the next step to show (0–6; 6 = done). */
   setupStep: number;
+  /**
+   * How photos are placed on the table: 'pieces' (no printing: the pieces themselves are the
+   * reference; default) or 'markers' (printed marker cards). Missing = 'pieces'.
+   */
+  tracking?: 'pieces' | 'markers';
 }
 
 export type PieceStatus = 'table' | 'tray' | 'placed' | 'missing' | 'pending';

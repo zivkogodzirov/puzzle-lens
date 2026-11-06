@@ -4,15 +4,30 @@ import { readerWorker, restartReader } from '../workers';
 import { TableCamera, type CaptureMeta } from '../components/TableCamera';
 import { deleteBlob, getProject, newId, projectBlobId, updateProject } from '../../project/store';
 import { measurePitch, planMerge } from '../../project/catalog';
-import { Coverage, sortingArea } from '../../scan/coverage';
-import { markerCentres, type CaptureKind } from '../../scan/autoCapture';
+import { Coverage, sortingArea, type Area } from '../../scan/coverage';
+import { FREE_RULES, markerCentres, type CaptureKind } from '../../scan/autoCapture';
 import { applyH, invertH } from '../../geo/homography';
 import { db } from '../../db/db';
-import type { PieceRow, Project, SnapRow, Vec2 } from '../../project/types';
+import type { PhotoQuality, PieceRow, Project, SnapRow, Vec2 } from '../../project/types';
+import type { FoundPiece } from '../../cv/pieceFinder';
+import { DEFAULT_PITCH_MM } from '../../cv/pieceFinder';
+import { CoverageMap, PhotoResult } from '../components/ScanMaps';
 import { logError, logInfo } from '../../log/logger';
 import { errorWords } from './Puzzle';
 
 const SCAN_TIMEOUT_MS = 120_000;
+
+/** One scan photo's result, whichever way it was placed (markers or pieces). */
+interface Unified {
+  pieces: FoundPiece[];
+  thumbs: Array<Blob | null>;
+  imgToTable: number[] | null;
+  pxPerMm: number | null;
+  reasons: string[];
+  width: number;
+  height: number;
+  quality: PhotoQuality;
+}
 /** How many scan photos keep their full-size picture. */
 const KEEP_FULL_PHOTOS = 10;
 
@@ -39,10 +54,28 @@ function pxPerMmOf(imgToTable: number[], width: number, height: number): number 
   return 100 / Math.hypot(b[0] - a[0], b[1] - a[1]);
 }
 
+/** The area to cover with close-ups: inside the markers, or (marker-free) around the pieces found. */
+function scanArea(project: Project, pieces: PieceRow[]): Area | null {
+  if (project.tracking === 'markers') return project.markerMap ? sortingArea(project.markerMap) : null;
+  const on = pieces.filter((p) => p.status === 'table');
+  if (!on.length) return null;
+  // 2nd–98th percentile, so one misplaced piece can't stretch the area; at most 1.5 m a side.
+  const q = (v: number[], f: number) => v.slice().sort((a, b) => a - b)[Math.min(v.length - 1, Math.max(0, Math.round(f * (v.length - 1))))]!;
+  const xs = on.map((p) => p.table.x);
+  const ys = on.map((p) => p.table.y);
+  const m = 20;
+  const cx = q(xs, 0.5);
+  const cy = q(ys, 0.5);
+  const clamp = (v: number, c: number) => Math.max(c - 750, Math.min(c + 750, v));
+  return { x0: clamp(q(xs, 0.02) - m, cx), y0: clamp(q(ys, 0.02) - m, cy), x1: clamp(q(xs, 0.98) + m, cx), y1: clamp(q(ys, 0.98) + m, cy) };
+}
+
 /** Rebuilds the close-up coverage from the puzzle's earlier close-ups. */
-function coverageFrom(project: Project, snaps: SnapRow[]): Coverage | null {
-  if (!project.markerMap) return null;
-  const cov = new Coverage(sortingArea(project.markerMap));
+function coverageFrom(project: Project, snaps: SnapRow[], pieces: PieceRow[]): Coverage | null {
+  const area = scanArea(project, pieces);
+  if (!area) return null;
+  // Marker-free close-ups are judged by the live size estimate (≥ 7.5 px/mm), so count them from there.
+  const cov = new Coverage(area, project.tracking === 'markers' ? 8.5 : 7.5);
   for (const s of snaps) {
     if (s.kind !== 'detail' || !s.imgToTable) continue;
     const H = invertH(s.imgToTable);
@@ -64,8 +97,30 @@ export function ScanScreen() {
   const [kind, setKind] = useState<CaptureKind>('overview');
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<ScanNote | null>(null);
-  const [frameSize, setFrameSize] = useState<{ width: number; height: number; pxPerMm: number } | null>(null);
+  const [frameSize, setFrameSize] = useState<{
+    width: number;
+    height: number;
+    pxPerMm: number;
+  } | null>(null);
   const kindChosen = useRef(false);
+  const [lastPhoto, setLastPhoto] = useState<{
+    url: string;
+    size: { width: number; height: number };
+    outlines: Array<{ points: number[]; flag: 'ok' | 'clump' | 'weak' }>;
+  } | null>(null);
+  const [showPhoto, setShowPhoto] = useState(false);
+  // After a photo that couldn't be used, wait for a tap instead of firing again and again.
+  const [autoPaused, setAutoPaused] = useState(false);
+  /** Sharpness of the good photos so far, per kind: a photo far below them is blurred. */
+  const sharpSeen = useRef<Record<string, number[]>>({});
+  const lastUrl = useRef<string | null>(null);
+  lastUrl.current = lastPhoto?.url ?? null;
+  useEffect(
+    () => () => {
+      if (lastUrl.current) URL.revokeObjectURL(lastUrl.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!id) return;
@@ -78,19 +133,25 @@ export function ScanScreen() {
       setSnaps(ss);
       // The close-up view size comes from the newest close-up, if any.
       const lastDetail = ss.filter((s) => s.kind === 'detail' && s.imgToTable).sort((a, b) => b.ts - a.ts)[0];
-      if (lastDetail) setFrameSize({ width: lastDetail.width, height: lastDetail.height, pxPerMm: pxPerMmOf(lastDetail.imgToTable!, lastDetail.width, lastDetail.height) });
+      if (lastDetail)
+        setFrameSize({
+          width: lastDetail.width,
+          height: lastDetail.height,
+          pxPerMm: pxPerMmOf(lastDetail.imgToTable!, lastDetail.width, lastDetail.height),
+        });
       if (!kindChosen.current) setKind(ps.some((q) => q.status === 'table') ? 'detail' : 'overview');
     })();
   }, [id]);
 
-  const coverage = useMemo(() => (project ? coverageFrom(project, snaps) : null), [project, snaps]);
+  const coverage = useMemo(() => (project ? coverageFrom(project, snaps, pieces) : null), [project, snaps, pieces]);
   const target = useMemo(() => {
-    if (kind !== 'detail' || !coverage || !project?.markerMap) return null;
+    if (kind !== 'detail' || !coverage || !project) return null;
     // The close-up's view on the table: from the last close-up, or the 2× nominal at ~62 cm with the
     // phone upright (portrait photo: ~335 mm across, ~447 mm away from you).
     const view: Vec2 = frameSize ? [frameSize.width / frameSize.pxPerMm, frameSize.height / frameSize.pxPerMm] : [335, 447];
-    return coverage.nextTarget(view, markerCentres(project.markerMap));
+    return coverage.nextTarget(view, project.markerMap ? markerCentres(project.markerMap) : undefined);
   }, [kind, coverage, frameSize, project]);
+  const viewMm: Vec2 | null = frameSize ? [frameSize.width / frameSize.pxPerMm, frameSize.height / frameSize.pxPerMm] : [335, 447];
 
   if (!id || project === null) {
     return (
@@ -103,7 +164,8 @@ export function ScanScreen() {
     );
   }
   if (project === undefined) return <main class="screen">Loading…</main>;
-  if (!project.markerMap) {
+  const free = project.tracking !== 'markers';
+  if (!free && !project.markerMap) {
     return (
       <main class="screen" data-testid="scan-needs-setup">
         <h1>Scan pieces</h1>
@@ -115,6 +177,7 @@ export function ScanScreen() {
     );
   }
   const map = project.markerMap;
+  const pitchMm = project.piecePitch ? Math.sqrt(project.piecePitch.wMm * project.piecePitch.hMm) : DEFAULT_PITCH_MM;
 
   const onPhoto = async (blob: Blob, meta: CaptureMeta) => {
     setBusy(kind === 'overview' ? 'Finding pieces…' : 'Reading the close-up…');
@@ -126,19 +189,136 @@ export function ScanScreen() {
       const info = await reader.ready;
       if (!info?.ok) throw new Error(info?.error ?? 'The photo helper could not start');
       const pitch = project.piecePitch;
-      const r = await Promise.race([
-        reader.api.scanPhoto(blob, { map, table: project.tableModel, zoom, kind, pieceAreaMm2: pitch ? pitch.wMm * pitch.hMm * 1.05 : undefined }),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Reading the photo took too long; please try again')), SCAN_TIMEOUT_MS)),
-      ]);
-      logInfo('scan', `${kind} photo: ${r.pieces.length} pieces in ${Math.round(r.ms)} ms`, { quality: r.quality, timings: r.timings, decodeMs: r.decodeMs });
+      const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Reading the photo took too long; please try again')), SCAN_TIMEOUT_MS));
+      let r: Unified;
+      if (free) {
+        const existing0 = await db().pieces.where('projectId').equals(project.id).toArray();
+        const catalog = existing0
+          .filter((p) => p.status === 'table' || p.status === 'pending')
+          .map((p) => ({
+            id: p.id,
+            table: p.table,
+            areaMm2: p.areaMm2,
+            sizeMm: p.sizeMm,
+            colour: p.colour,
+            status: p.status,
+          }));
+        const f = await Promise.race([
+          reader.api.scanFree(blob, {
+            catalog,
+            pitchMm,
+            zoom,
+            kind,
+            table: null,
+          }),
+          timeout,
+        ]);
+        logInfo(
+          'scan',
+          `${kind} photo (no markers): ${f.pieces.length} pieces, ${f.registered ? `placed by ${f.inliers} pieces (±${f.rmsMm.toFixed(1)} mm)` : f.isNewFrame ? 'first photo' : 'not placed'} in ${Math.round(f.ms)} ms`,
+          { timings: f.timings, confidence: f.confidence },
+        );
+        setLastPhoto((old) => {
+          if (old) URL.revokeObjectURL(old.url);
+          return {
+            url: URL.createObjectURL(f.preview),
+            size: f.previewSize,
+            outlines: f.outlinesPreview.map((pts, i) => ({
+              points: pts,
+              flag: f.pieces[i]!.flags.clump ? 'clump' : f.pieces[i]!.flags.weak ? 'weak' : 'ok',
+            })),
+          };
+        });
+        if (f.isNewFrame && f.pieces.filter((p) => !p.flags.cut).length < 5) {
+          setAutoPaused(true);
+          setNote({ ok: false, lines: ['Hardly any pieces in this photo, so it wasn’t used.', 'Hold the phone over the spread-out pieces and tap the button.'] });
+          return;
+        }
+        // Without markers, blur is judged against the earlier good photos of the same kind, and
+        // tilt from the phone's sensor at the moment of the photo.
+        const seen = sharpSeen.current[kind] ?? [];
+        const med = seen.length ? seen.slice().sort((a, b) => a - b)[Math.floor(seen.length / 2)]! : null;
+        const extra: string[] = [];
+        if (med !== null && f.sharpness < 0.35 * med) extra.push('Blurred: hold the phone still');
+        const maxTilt = kind === 'detail' ? FREE_RULES.detail.maxTiltDeg : FREE_RULES.overview.maxTiltDeg;
+        if (meta.sensorTiltDeg !== null && meta.sensorTiltDeg > maxTilt + 2) extra.push('Tilted: hold the phone flat');
+        if (extra.length) f.reasons = [...extra, ...f.reasons];
+        else sharpSeen.current[kind] = [...seen, f.sharpness].slice(-10);
+        if (!f.registered && !f.isNewFrame) {
+          setAutoPaused(true);
+          setNote({
+            ok: false,
+            lines: [
+              'This photo could not be matched to the pieces found so far.',
+              'Include more of the same pieces (keep about half the picture on pieces already scanned) and try again.',
+            ],
+          });
+          return;
+        }
+        r = {
+          pieces: f.pieces,
+          thumbs: f.thumbs,
+          imgToTable: f.imgToCatalog,
+          pxPerMm: f.pxPerMm,
+          reasons: f.reasons,
+          width: f.width,
+          height: f.height,
+          quality: {
+            ok: f.reasons.length === 0,
+            reasons: f.reasons,
+            sharpness: f.sharpness,
+            clippedShare: f.clippedShare,
+            glareShare: 0,
+            tiltDeg: null,
+            heightMm: null,
+            markersSeen: 0,
+          },
+        };
+      } else {
+        const m = await Promise.race([
+          reader.api.scanPhoto(blob, {
+            map: map!,
+            table: project.tableModel,
+            zoom,
+            kind,
+            pieceAreaMm2: pitch ? pitch.wMm * pitch.hMm * 1.05 : undefined,
+          }),
+          timeout,
+        ]);
+        logInfo('scan', `${kind} photo: ${m.pieces.length} pieces in ${Math.round(m.ms)} ms`, { quality: m.quality, timings: m.timings, decodeMs: m.decodeMs });
+        if (!m.imgToTable || !m.pxPerMm) {
+          setNote({
+            ok: false,
+            lines: ['No marker in this photo, so it can’t be placed on the table yet.', 'Aim so at least one marker card is in the picture.'],
+          });
+          return;
+        }
+        r = {
+          pieces: m.pieces,
+          thumbs: m.thumbs,
+          imgToTable: m.imgToTable,
+          pxPerMm: m.pxPerMm,
+          reasons: m.quality.reasons,
+          width: m.width,
+          height: m.height,
+          quality: m.quality,
+        };
+      }
       if (!r.imgToTable || !r.pxPerMm) {
-        setNote({ ok: false, lines: ['No marker in this photo, so it can’t be placed on the table yet.', 'Aim so at least one marker card is in the picture.'] });
+        setNote({
+          ok: false,
+          lines: ['No pieces could be measured in this photo. Point at the pieces and try again.'],
+        });
         return;
       }
       // Blurred or tilted close-ups would give wrong shapes: don't use them.
-      const blocking = r.quality.reasons.filter((q) => /Blurred|Tilted/.test(q));
+      const blocking = r.reasons.filter((q) => /Blurred|Tilted/.test(q));
       if (blocking.length) {
-        setNote({ ok: false, lines: [...blocking, 'Nothing was added from this photo.'] });
+        setAutoPaused(true);
+        setNote({
+          ok: false,
+          lines: [...blocking, 'Nothing was added from this photo.'],
+        });
         return;
       }
       if (kind === 'detail') setFrameSize({ width: r.width, height: r.height, pxPerMm: r.pxPerMm });
@@ -147,7 +327,14 @@ export function ScanScreen() {
       const plan = planMerge(
         existing,
         r.pieces.map((p, i) => ({ ...p, thumb: r.thumbs[i] ?? null })),
-        { projectId: project.id, snapId, pxPerMm: r.pxPerMm, now, newId, thumbId: (pid) => projectBlobId(project.id, `thumb-${pid}`) },
+        {
+          projectId: project.id,
+          snapId,
+          pxPerMm: r.pxPerMm,
+          now,
+          newId,
+          thumbId: (pid) => projectBlobId(project.id, `thumb-${pid}`),
+        },
       );
       const snap: SnapRow = {
         id: snapId,
@@ -168,8 +355,21 @@ export function ScanScreen() {
       snap.blobId = fullId;
       // One transaction: if iOS closes the app half-way, nothing of this photo is half-saved.
       await db().transaction('rw', db().blobs, db().pieces, db().snaps, async () => {
-        await db().blobs.bulkPut(plan.thumbs.map((t) => ({ id: t.id, ts: now, kind: 'thumb', blob: t.blob })));
-        await db().blobs.put({ id: fullId, ts: now, kind: 'snap', blob, meta: { kind } });
+        await db().blobs.bulkPut(
+          plan.thumbs.map((t) => ({
+            id: t.id,
+            ts: now,
+            kind: 'thumb',
+            blob: t.blob,
+          })),
+        );
+        await db().blobs.put({
+          id: fullId,
+          ts: now,
+          kind: 'snap',
+          blob,
+          meta: { kind },
+        });
         await db().pieces.bulkPut([...plan.updates, ...plan.added]);
         await db().snaps.put(snap);
       });
@@ -187,10 +387,14 @@ export function ScanScreen() {
           ? `Found ${r.pieces.filter((p) => !p.flags.cut).length} pieces (${plan.added.length} new).`
           : `Close-up read: ${plan.updates.length + plan.added.length} pieces (${plan.added.length} new).`,
       ];
-      if (clumps) lines.push(`${clumps === 1 ? 'One spot where pieces touch' : `${clumps} spots where pieces touch`} (orange dashes): spread them apart and take the photo again.`);
+      if (clumps)
+        lines.push(
+          `${clumps === 1 ? 'One spot where pieces touch' : `${clumps} spots where pieces touch`} (orange dashes): spread them apart and take the photo again.`,
+        );
       if (weak) lines.push(`${weak} pale piece${weak > 1 ? 's' : ''} with a faint outline (yellow): check ${weak > 1 ? 'they are' : 'it is'} outlined right.`);
-      for (const q of r.quality.reasons) if (!/Blurred|Tilted/.test(q)) lines.push(q);
+      for (const q of r.reasons) if (!/Blurred|Tilted/.test(q)) lines.push(q);
       setNote({ ok: true, lines });
+      setAutoPaused(false);
       if (kind === 'overview') {
         kindChosen.current = true;
         setKind('detail');
@@ -208,54 +412,67 @@ export function ScanScreen() {
   const covered = coverage ? Math.round(coverage.share() * 100) : 0;
 
   return (
-    <TableCamera
-      mode={kind}
-      map={map}
-      target={target}
-      busy={busy}
-      autoCapture={kind === 'overview' || target !== null}
-      pieces={onTable}
-      onPhoto={(b, m) => void onPhoto(b, m)}
-      onClose={() => go('puzzle', project.id)}
-    >
-      <div class="scan-panel" data-testid="scan-panel">
-        <div class="scan-counts">
-          <span data-testid="scan-count">{onTable.length} pieces found</span>
-          <span data-testid="scan-coverage">close-ups {covered}%</span>
-        </div>
-        <div class="row scan-modes">
-          <button
-            class="chip"
-            aria-pressed={kind === 'overview'}
-            data-testid="mode-overview"
-            onClick={() => {
-              kindChosen.current = true;
-              setKind('overview');
-            }}
-          >
-            Overview 1×
-          </button>
-          <button
-            class="chip"
-            aria-pressed={kind === 'detail'}
-            data-testid="mode-detail"
-            onClick={() => {
-              kindChosen.current = true;
-              setKind('detail');
-            }}
-          >
-            Close-ups 2×
-          </button>
-        </div>
-        {note && (
-          <div class={note.ok ? 'notice notice-good scan-note' : 'notice notice-bad scan-note'} data-testid="scan-note" role="status">
-            {note.lines.map((l) => (
-              <p key={l}>{l}</p>
-            ))}
+    <>
+      <TableCamera
+        mode={kind}
+        map={map}
+        target={target}
+        busy={busy}
+        autoCapture={!autoPaused && (kind === 'overview' || target !== null)}
+        pieces={free ? undefined : onTable}
+        free={free ? { pitchMm } : null}
+        onPhoto={(b, m) => void onPhoto(b, m)}
+        onClose={() => go('puzzle', project.id)}
+      >
+        <div class="scan-panel" data-testid="scan-panel">
+          <div class="scan-counts">
+            <span data-testid="scan-count">{onTable.length} pieces found</span>
+            <span data-testid="scan-coverage">close-ups {covered}%</span>
           </div>
-        )}
-        {kind === 'detail' && !target && covered >= 98 && <p class="chip ok">All close-ups done ✓</p>}
-      </div>
-    </TableCamera>
+          <div class="row scan-modes">
+            <button
+              class="chip"
+              aria-pressed={kind === 'overview'}
+              data-testid="mode-overview"
+              onClick={() => {
+                kindChosen.current = true;
+              setAutoPaused(false);
+                setKind('overview');
+              }}
+            >
+              Overview 1×
+            </button>
+            <button
+              class="chip"
+              aria-pressed={kind === 'detail'}
+              data-testid="mode-detail"
+              onClick={() => {
+                kindChosen.current = true;
+              setAutoPaused(false);
+                setKind('detail');
+              }}
+            >
+              Close-ups 2×
+            </button>
+          </div>
+          {note && (
+            <div class={note.ok ? 'notice notice-good scan-note' : 'notice notice-bad scan-note'} data-testid="scan-note" role="status">
+              {note.lines.map((l) => (
+                <p key={l}>{l}</p>
+              ))}
+            </div>
+          )}
+          {free && kind === 'detail' && target && <p class="chip">Aim at the dashed box on the map</p>}
+          {free && <CoverageMap pieces={onTable} coverage={coverage} target={kind === 'detail' ? target : null} view={viewMm} />}
+          {lastPhoto && (
+            <button class="chip" data-testid="show-photo" onClick={() => setShowPhoto(true)}>
+              See the last photo
+            </button>
+          )}
+          {kind === 'detail' && !target && covered >= 98 && <p class="chip ok">All close-ups done ✓</p>}
+        </div>
+      </TableCamera>
+      {showPhoto && lastPhoto && <PhotoResult url={lastPhoto.url} size={lastPhoto.size} outlines={lastPhoto.outlines} onClose={() => setShowPhoto(false)} />}
+    </>
   );
 }

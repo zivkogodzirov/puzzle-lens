@@ -169,3 +169,13 @@ describe('delete', () => {
     expect(await getCurrentProjectId()).toBe(b.id);
   });
 });
+
+describe('tracking mode', () => {
+  it('new puzzles default to no markers; puzzles that already use markers stay marker puzzles', async () => {
+    const { normalizeProject } = await import('../../src/project/store');
+    expect(normalizeProject({ id: 'a', setupStep: 1 }).tracking).toBe('pieces');
+    expect(normalizeProject({ id: 'b', setupStep: 5 }).tracking).toBe('markers');
+    expect(normalizeProject({ id: 'c', setupStep: 6, markerMap: { markers: [] } as never }).tracking).toBe('markers');
+    expect(normalizeProject({ id: 'd', setupStep: 6, tracking: 'pieces' }).tracking).toBe('pieces');
+  });
+});

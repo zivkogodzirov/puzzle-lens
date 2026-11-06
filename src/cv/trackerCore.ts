@@ -97,6 +97,11 @@ export class TrackerCore {
     this.zoom = zoom > 0 ? zoom : 1;
   }
 
+  /** Measure the pieces in every frame (marker-free puzzles). */
+  setPieceStats(on: boolean): void {
+    this.analyser.pieceStats = on;
+  }
+
   setRate(fps: number): void {
     this.minIntervalMs = fps > 0 ? 1000 / fps - 2 : 0;
   }
@@ -338,6 +343,13 @@ export class TrackerCore {
       flip: extra.flip,
       frameInfo: extra.frameInfo,
       table,
+      pieces: analysis.pieces
+        ? {
+            ...analysis.pieces,
+            medianAreaPx: analysis.pieces.medianAreaPx === null ? null : analysis.pieces.medianAreaPx * scale * scale,
+            bbox: analysis.pieces.bbox ? (analysis.pieces.bbox.map((v) => v * scale) as [number, number, number, number]) : null,
+          }
+        : null,
     };
   }
 

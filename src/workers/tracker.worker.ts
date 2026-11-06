@@ -22,6 +22,7 @@ let core: TrackerCore | null = null;
 let initError: WorkerError | null = null;
 let source: FrameSource | null = null;
 let pendingRate = 0;
+let pendingPieceStats = false;
 let pendingMap: { map: MarkerMap | null; zoom: number } = { map: null, zoom: 1 };
 /** Bumped by every attach/detach; a loop keeps running only while it still holds the current number. */
 let loopGen = 0;
@@ -79,6 +80,7 @@ const api: TrackerApi = {
       core = new TrackerCore(cv, new FrameAnalyser(cv, { analysisWidth: ANALYSIS_WIDTH }), browserTrackerEnv(readVideoFrame));
       core.setRate(pendingRate);
       core.setTableMap(pendingMap.map, pendingMap.zoom);
+      core.setPieceStats(pendingPieceStats);
       return { ok: true, cvLoadMs: cvLoadMs(), capabilities };
     } catch (err) {
       initError = { message: String(err), at: Date.now() };
@@ -133,6 +135,11 @@ const api: TrackerApi = {
   setRate(fps: number): void {
     pendingRate = fps;
     core?.setRate(fps);
+  },
+
+  setPieceStats(on: boolean): void {
+    pendingPieceStats = on;
+    core?.setPieceStats(on);
   },
 
   setTableMap(map: MarkerMap | null, zoom: number): void {

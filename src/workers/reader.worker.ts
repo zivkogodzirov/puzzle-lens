@@ -17,7 +17,8 @@ import type { ReaderApi } from '../shared/apis';
 import { PhotoChecker } from '../cv/photoCheck';
 import { setupFromPhoto, toGray } from '../cv/tableSetup';
 import { ensureRgba, scanPixels, tableFromPixels } from '../cv/scanPhoto';
-import type { ScanOptions, ScanReply, TableSetupReply } from '../shared/apis';
+import { scanMarkerless } from '../cv/scanMarkerless';
+import type { FreeScanOptions, FreeScanReply, ScanOptions, ScanReply, TableSetupReply } from '../shared/apis';
 import type { TableModel } from '../project/types';
 import { decodeAtMost, findBoxQuad, RECTIFIED_MAX_SIDE, rectifyQuad, type Point, type RectifyBoxResult } from '../cv/rectify';
 
@@ -183,6 +184,45 @@ async function checkTiles(
   };
 }
 
+
+/** Small JPEG thumbnails of the given boxes and a ≤ 1024 px preview, from RGBA-ordered pixels. */
+async function thumbsAndPreview(rgba: { data: Uint8Array | Uint8ClampedArray; width: number; height: number; stride: number }, boxes: Array<[number, number, number, number]>): Promise<{ thumbs: Array<Blob | null>; preview: Blob; previewScale: number }> {
+  const rowBytes = rgba.width * 4;
+  let packed: Uint8ClampedArray<ArrayBuffer>;
+  if (rgba.stride === rowBytes) packed = new Uint8ClampedArray(rgba.data.buffer as ArrayBuffer, rgba.data.byteOffset, rowBytes * rgba.height);
+  else {
+    packed = new Uint8ClampedArray(rowBytes * rgba.height);
+    for (let y = 0; y < rgba.height; y++) packed.set(rgba.data.subarray(y * rgba.stride, y * rgba.stride + rowBytes), y * rowBytes);
+  }
+  const bmp = await createImageBitmap(new ImageData(packed, rgba.width, rgba.height));
+  try {
+    const thumbs: Array<Blob | null> = [];
+    for (const [x, y, w, h] of boxes) {
+      const pad = Math.round(Math.max(w, h) * 0.12);
+      const sx = Math.max(0, x - pad);
+      const sy = Math.max(0, y - pad);
+      const sw = Math.min(rgba.width - sx, w + 2 * pad);
+      const sh = Math.min(rgba.height - sy, h + 2 * pad);
+      const s = Math.min(1, THUMB_PX / Math.max(sw, sh));
+      const canvas = new OffscreenCanvas(Math.max(1, Math.round(sw * s)), Math.max(1, Math.round(sh * s)));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        thumbs.push(null);
+        continue;
+      }
+      ctx.drawImage(bmp, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      thumbs.push(await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 }));
+    }
+    const previewScale = Math.min(1, 1024 / Math.max(rgba.width, rgba.height));
+    const pc = new OffscreenCanvas(Math.round(rgba.width * previewScale), Math.round(rgba.height * previewScale));
+    pc.getContext('2d')?.drawImage(bmp, 0, 0, pc.width, pc.height);
+    const preview = await pc.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
+    return { thumbs, preview, previewScale };
+  } finally {
+    bmp.close();
+  }
+}
+
 const api: ReaderApi = {
   async init(): Promise<WorkerInitInfo> {
     const capabilities = await probeWorkerCapabilities();
@@ -235,42 +275,47 @@ const api: ReaderApi = {
       const rgba = ensureRgba(await reader.read({ x: 0, y: 0, width: reader.width, height: reader.height }));
       checker ??= new PhotoChecker(c);
       const r = scanPixels(c, checker, rgba, opts);
-      const thumbs: Array<Blob | null> = [];
-      // Thumbnails come from the (RGBA-ordered) pixels already read, so colours are right whatever the read path.
-      const rowBytes = rgba.width * 4;
-      let packed: Uint8ClampedArray<ArrayBuffer>;
-      if (rgba.stride === rowBytes) packed = new Uint8ClampedArray(rgba.data.buffer as ArrayBuffer, rgba.data.byteOffset, rowBytes * rgba.height);
-      else {
-        packed = new Uint8ClampedArray(rowBytes * rgba.height);
-        for (let y = 0; y < rgba.height; y++) packed.set(rgba.data.subarray(y * rgba.stride, y * rgba.stride + rowBytes), y * rowBytes);
-      }
-      const bmp = await createImageBitmap(new ImageData(packed, rgba.width, rgba.height));
-      try {
-        for (const p of r.pieces) {
-          const [x, y, w, h] = p.bboxImg;
-          const pad = Math.round(Math.max(w, h) * 0.12);
-          const sx = Math.max(0, x - pad);
-          const sy = Math.max(0, y - pad);
-          const sw = Math.min(rgba.width - sx, w + 2 * pad);
-          const sh = Math.min(rgba.height - sy, h + 2 * pad);
-          const s = Math.min(1, THUMB_PX / Math.max(sw, sh));
-          const canvas = new OffscreenCanvas(Math.max(1, Math.round(sw * s)), Math.max(1, Math.round(sh * s)));
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            thumbs.push(null);
-            continue;
-          }
-          ctx.drawImage(bmp, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-          thumbs.push(await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 }));
-        }
-        const ps = Math.min(1, 1024 / Math.max(rgba.width, rgba.height));
-        const pc = new OffscreenCanvas(Math.round(rgba.width * ps), Math.round(rgba.height * ps));
-        pc.getContext('2d')?.drawImage(bmp, 0, 0, pc.width, pc.height);
-        const preview = await pc.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
+      const { thumbs, preview } = await thumbsAndPreview(rgba, r.pieces.map((p) => p.bboxImg));
+      {
         return { ...r, thumbs, preview, width: rgba.width, height: rgba.height, ms: performance.now() - t0, decodeMs };
-      } finally {
-        bmp.close();
       }
+    } finally {
+      reader.close();
+    }
+  },
+
+  /**
+   * Marker-free scan photo: pieces found, then the photo placed by matching them to the catalog
+   * (src/cv/scanMarkerless.ts). Also returns each piece's outline in preview pixels, for showing
+   * the result over the photo.
+   */
+  async scanFree(photo: Blob, opts: FreeScanOptions): Promise<FreeScanReply> {
+    const c = await ready();
+    const t0 = performance.now();
+    const { reader, ms: decodeMs } = await decode(photo);
+    try {
+      const rgba = ensureRgba(await reader.read({ x: 0, y: 0, width: reader.width, height: reader.height }));
+      checker ??= new PhotoChecker(c);
+      const gray = toGray(c, rgba, 'RGBA');
+      const check = checker.check(gray, { map: null, zoom: opts.zoom, kind: opts.kind });
+      const r = scanMarkerless(c, rgba, { catalog: opts.catalog, pitchMm: opts.pitchMm, zoom: opts.zoom, kind: opts.kind, table: opts.table });
+      const { thumbs, preview, previewScale } = await thumbsAndPreview(rgba, r.pieces.map((p) => p.bboxImg));
+      const outlinesPreview = r.pieces.map((p) => p.outlineImg.filter((_, i) => i % 4 < 2).map((v) => v * previewScale));
+      return {
+        ...r,
+        // Without markers, blur is judged from the photo's own sharpness only where markers would be: report tilt/glare reasons from the checker except "no markers".
+        reasons: check.quality.reasons.filter((q) => !/marker/i.test(q)),
+        sharpness: check.quality.sharpness,
+        clippedShare: check.quality.clippedShare,
+        thumbs,
+        preview,
+        previewSize: { width: Math.round(rgba.width * previewScale), height: Math.round(rgba.height * previewScale) },
+        outlinesPreview,
+        width: rgba.width,
+        height: rgba.height,
+        ms: performance.now() - t0,
+        decodeMs,
+      };
     } finally {
       reader.close();
     }

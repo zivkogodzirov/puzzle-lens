@@ -1,12 +1,12 @@
 # Puzzle Lens: plan and status
 
-_Last updated: 2026-11-06. M1 is checked on your iPhone. M2 (set-up wizard, markers, piece finding, catalog) is built and tested on the Mac and waits for your iPhone check (`docs/M2-CHECKLIST.md`). Setup: phone held by hand, no mat, a large white glossy table, printed markers._
+_Last updated: 2026-11-06. M1 is checked on your iPhone. M2 (set-up wizard, markers, piece finding, catalog) is built and tested on the Mac and waits for your iPhone check (`docs/M2-CHECKLIST.md`). Setup: phone held by hand, no mat, a large white glossy table, and **no printed markers** (the pieces themselves are the reference; markers optional)._
 
 | Milestone | Status |
 |---|---|
 | M0 Research and plan | ✅ Approved 2026-11-04 |
 | M1 Skeleton on your phone | ✅ Checked on your iPhone 2026-11-06 (Safari tab + Home Screen app); waiting for your OK to start M2 |
-| M2 Detection, markers and catalog | 🔧 Built and tested on the Mac; **waiting for your iPhone check** (`docs/M2-CHECKLIST.md`) |
+| M2 Detection and catalog (no markers needed) | 🔧 Built and tested on the Mac; **waiting for your iPhone check** (`docs/M2-CHECKLIST.md`) |
 | M3 Shape reading and Border groups | ⏳ |
 | M4 Box placement | ⏳ |
 | M5 Live tracking and re-identification | ⏳ |
@@ -432,6 +432,12 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
 - **Fifth report: solved.** With a full-size tracker copy, photos are full 12.2 MP and sharp (sharpness 3,810 vs 55 for the live picture) while tracking keeps running. The 2× test measured 1.83, a true optical 2×. Cost: tracker 17 fps (GPU shrink 47 ms per frame). The fix reads big frames directly and shrinks them ×4 in OpenCV (Mac 18.7 ms), and the tracker times both ways on the phone and keeps the faster. **Confirmed on the phone (sixth report):** tracker 27.8 fps, 22.9 ms per frame (direct 20 ms vs GPU 52 ms); Snap sharp 3024×4032. Full-size tracking is now the default everywhere.
 - Snap now falls back to the **full-size live picture** (12 MP in the 4:3 format), then to the iPhone camera screen. It is checked with exact pixel reading, but its saved JPEG goes through a canvas (it may carry Safari's tiny privacy noise, which only matters for reports).
 
+**Marker-free mode (2026-11-07), before your iPhone check:**
+- Every later photo is placed by matching its pieces to the catalog: 82 of 82 test photos placed (phone turned 90°/180°, middle close-ups, 10 % of pieces moved); every photo of a different puzzle refused. Position vs truth: median 0.6 mm / 95th percentile 1.7 mm (300-piece tests), 1.2 / 3.9 mm (48-piece tests: too few pieces in the first overview to level its small tilt). About 1 % of pieces counted twice (pale, cut or touching pieces whose outline differs between photos).
+- Sizes are estimates from a typical piece (18.6 mm); everything is shown with "≈".
+- Outlines are shown on each photo, not live (live marker-free tracking: M5).
+- A 300-piece overview takes 3.5–4.4 s on the Mac, so roughly 5–10 s on the phone: over the 8 s budget at the slow end.
+
 **M2 (2026-11-06), before your iPhone check:**
 1. **Piece finding is below its 98 % bar on computer-made test photos.** Frozen test sets (white glossy table, glare, side light, hand shadows, hand-held 1× overviews at 65–75 cm and 2× close-ups): pieces found **94.8 %** (48-piece set) and **94.3 %** (300-piece set), precision 93.9 % / 94.2 %; 2× close-ups 94.8–97.8 %. **Near-white pieces: 34 % (15 of 44).** Positions are well inside their bar (median 0.15 mm, 95th percentile 0.5 mm). The bars stay at 98 %; your real photos (Part D of the checklist) decide what to do next: a full-resolution cut-line cue, preferring close-up reads, the ML fallback (RESEARCH §6), or a one-tap "add missed piece".
 2. **A close-up with no marker in view** (the middle of a 3 × 3 plan) can't be placed yet: the app says so and adds nothing. Placing it from the overview's pieces is still to do.
@@ -498,6 +504,7 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
 | 2026-11-06 | Synthetic generator renders linear light with iPhone-like auto-exposure; overviews at 650–750 mm with all 8 markers in view | First version clipped the white table and hid glare (found while tuning piece finding) |
 | 2026-11-06 | M2 ships below the 98 % segmentation bar, with the shortfall stated | Owner's real photos are the deciding data; the bar is not lowered (PLAN §7 ratchet) |
 | 2026-11-06 | Full photos of the latest 10 scans kept and included in backups | The owner can send real scans for measurement without extra steps |
+| 2026-11-07 | **No printed markers by default.** The first overview defines the table; every other photo is placed by matching its pieces (colour, size and the pattern they form) to the catalog; tilt from the phone's sensor; height from the pieces' apparent size; markers stay as an option | The owner puzzles away from home without a printer. Matching pieces also places the middle close-up, which markers couldn't |
 
 ---
 

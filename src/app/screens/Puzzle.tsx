@@ -251,7 +251,7 @@ export function PuzzleScreen() {
                 {p.grid ? ` → finished puzzle ≈ ${Math.round((p.grid.cols * p.piecePitch.wMm) / 10)} × ${Math.round((p.grid.rows * p.piecePitch.hMm) / 10)} cm (rough)` : ''}
               </div>
             )}
-            {!p.markerMap && <div class="muted small">Reading pieces starts after the set-up.</div>}
+            {!canScan(p) && <div class="muted small">Reading pieces starts after the set-up.</div>}
           </dd>
         </dl>
       </div>
@@ -277,7 +277,7 @@ export function PuzzleScreen() {
         </button>
       )}
 
-      {p.markerMap && (
+      {canScan(p) && (
         <>
           <h2>Pieces</h2>
           <button class="btn btn-primary btn-block" data-testid="scan-pieces" onClick={() => go('scan', p.id)}>
@@ -374,4 +374,9 @@ function PieceThumb({ piece }: { piece: PieceRow }) {
   const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
   const cls = piece.flags.clump ? 'flag-clump' : piece.flags.weak ? 'flag-weak' : '';
   return url ? <img src={url} class={cls} alt="" loading="lazy" /> : <div class="catalog-empty" />;
+}
+
+/** Pieces can be scanned once set-up is finished (marker-free) or the markers are measured. */
+function canScan(p: Project): boolean {
+  return p.tracking === 'markers' ? Boolean(p.markerMap) : p.setupStep >= LAST_SETUP_STEP;
 }

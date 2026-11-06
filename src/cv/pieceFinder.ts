@@ -106,7 +106,8 @@ export interface FindResult {
 export interface FindOptions {
   imgToTable: Mat3;
   tableToImg: Mat3;
-  map: MarkerMap;
+  /** Marker map, or null without printed markers (no card masking; the whole visible table is the sorting area). */
+  map: MarkerMap | null;
   table: TableModel | null;
   /** Photo px per table mm near the image centre. */
   pxPerMm: number;
@@ -137,6 +138,8 @@ const PALE = 5;
 
 /** Thresholds (tuned on val48/val300 only). */
 export const SEG = {
+  /** Width of the pre-pass copy for estimatePxPerMm (px). */
+  scaleWidth: 1000,
   /** Detection resolution (small image px per mm). */
   detectPxPerMm: DETECT_PX_PER_MM,
   /** α below this: a piece whatever its colour (darker than any side shadow). */
@@ -281,9 +284,9 @@ function run(cv: Cv, sc: CvScope, rgba: PixelBuffer, opts: FindOptions): FindRes
 
   // Marker cards: ignored for the field (small margin) and a wider zone for the `cut` flag.
   const cardIgnore = new Uint8Array(w * h);
-  fillPolygons(cardIgnore, w, h, cardPolygonsMm(opts.map, 2).map((p) => tableToSmall(p, geo.tableToImg, factor)));
+  if (opts.map) fillPolygons(cardIgnore, w, h, cardPolygonsMm(opts.map, 2).map((p) => tableToSmall(p, geo.tableToImg, factor)));
   const cardZone = new Uint8Array(w * h);
-  fillPolygons(cardZone, w, h, cardPolygonsMm(opts.map, 4).map((p) => tableToSmall(p, geo.tableToImg, factor)));
+  if (opts.map) fillPolygons(cardZone, w, h, cardPolygonsMm(opts.map, 4).map((p) => tableToSmall(p, geo.tableToImg, factor)));
 
   // 2. Lighting field.
   const field = estimateField(img, { pxPerMm: sppm, ignore: cardIgnore, chromaPrior: opts.table ? tableChroma(opts.table) : null });
@@ -305,7 +308,7 @@ function run(cv: Cv, sc: CvScope, rgba: PixelBuffer, opts: FindOptions): FindRes
   // Glare mask (cleaned) and share.
   const glare = withScope((s2) => glareMask(cv, s2, cls, pieceMask, w, h, sppm));
   const area = new Uint8Array(w * h);
-  fillPolygons(area, w, h, [tableToSmall(sortingAreaMm(opts.map), geo.tableToImg, factor)]);
+  if (opts.map) fillPolygons(area, w, h, [tableToSmall(sortingAreaMm(opts.map), geo.tableToImg, factor)]);
   let areaN = 0;
   let glareN = 0;
   for (let p = 0; p < w * h; p++) {
@@ -1590,4 +1593,70 @@ export function mergeGlare(a: PhotoPieces, b: PhotoPieces, opts: { matchMm?: num
     });
   }
   return out;
+}
+
+// ---- Scale without markers -------------------------------------------------------------------------
+
+/** Ravensburger 1000 cell pitch: √(17.8 × 19.4) mm (a piece's area ≈ its cell's). */
+export const DEFAULT_PITCH_MM = 18.6;
+/** Measured blob area ÷ true top-face area at the pre-pass scale (walls, halo, mask rounding; tuned on val sets). */
+export const SCALE_AREA_BIAS = 1.045;
+
+/**
+ * Photo px per mm WITHOUT markers, from the pieces themselves: a cheap pre-pass on a ~1400 px
+ * copy finds the blobs and takes the median single-piece area; a piece's area ≈ one cell
+ * (pitchMm²). Iterates twice (the blob gates depend on the scale). The phone is held flat, so one
+ * number for the whole photo is enough (tilt ≤ 5–8° → ≤ 1–2 % across the view).
+ * Returns null when fewer than 5 piece-like blobs are seen.
+ */
+export function estimatePxPerMm(cv: Cv, rgba: PixelBuffer, opts: { pitchMm?: number; zoom?: number; table?: TableModel | null } = {}): { pxPerMm: number; nPieces: number } | null {
+  return cvGuard(cv, () => {
+    const pitch = opts.pitchMm ?? DEFAULT_PITCH_MM;
+    const W = rgba.width;
+    const H = rgba.height;
+    const factor = Math.max(1, Math.max(W, H) / SEG.scaleWidth);
+    const img = shrinkRgb(rgba, factor);
+    const { width: w, height: h } = img;
+    const none = new Uint8Array(w * h);
+    // First guess: a hand-held overview at 1× (~4 px/mm at 12 MP), close-ups at 2×.
+    let ppm = ((opts.zoom ?? 1) >= 2 ? 9 : 4) * (Math.max(W, H) / 4032);
+    let result: { pxPerMm: number; nPieces: number } | null = null;
+    for (let iter = 0; iter < 3; iter++) {
+      const sppm = ppm / factor;
+      const field = estimateField(img, { pxPerMm: sppm, ignore: none, chromaPrior: opts.table ? tableChroma(opts.table) : null });
+      const cls = classify(img, field, none, sppm);
+      const shadow = SEG.shadowRuns ? explainShadows(cls, w, h, sppm, none) : null;
+      const expPx = pitch * pitch * sppm * sppm;
+      const mask = buildMask(cv, cls, none, w, h, expPx, sppm, shadow?.explained ?? null);
+      const areas = withScope((sc) => {
+        const m = toMat(cv, sc, mask, w, h);
+        const l = sc.keep(new cv.Mat());
+        const st = sc.keep(new cv.Mat());
+        const ce = sc.keep(new cv.Mat());
+        const n: number = cv.connectedComponentsWithStats(m, l, st, ce, 8, cv.CV_32S);
+        const s: Int32Array = st.data32S.slice();
+        const out: number[] = [];
+        for (let i = 1; i < n; i++) {
+          const x = s[i * 5]!;
+          const y = s[i * 5 + 1]!;
+          if (x <= 0 || y <= 0 || x + s[i * 5 + 2]! >= w || y + s[i * 5 + 3]! >= h) continue; // cut by the edge
+          out.push(s[i * 5 + 4]!);
+        }
+        return out;
+      });
+      // Robust median: first among everything bigger than specks, then among blobs near it.
+      let cand = areas.filter((a) => a > 0.15 * expPx && a < 6 * expPx).sort((a, b) => a - b);
+      if (cand.length < 5) return result;
+      let med = cand[cand.length >> 1]!;
+      cand = cand.filter((a) => a > 0.6 * med && a < 1.6 * med);
+      if (cand.length < 5) return result;
+      med = cand[cand.length >> 1]!;
+      const next = (Math.sqrt(med / SCALE_AREA_BIAS) / pitch) * factor;
+      result = { pxPerMm: next, nPieces: cand.length };
+      const change = Math.abs(next / ppm - 1);
+      ppm = next;
+      if (change < 0.03) break;
+    }
+    return result;
+  });
 }

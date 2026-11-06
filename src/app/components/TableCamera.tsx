@@ -8,7 +8,7 @@ import { trackerWorker } from '../workers';
 import { MarkerOverlay } from './MarkerOverlay';
 import { PieceOverlay } from './PieceOverlay';
 import { LevelGauge } from './LevelGauge';
-import { AutoCapture, RULES, type CaptureKind, type GaugeState } from '../../scan/autoCapture';
+import { AutoCapture, FREE_RULES, FreeCapture, RULES, type CaptureKind, type GaugeState } from '../../scan/autoCapture';
 import { level, levelPermission, requestLevelSensor } from '../../scan/levelSensor';
 import { MARKER_COUNT } from '../../markers/layout';
 import type { TableFix } from '../../geo/tableFix';
@@ -21,6 +21,8 @@ export interface CaptureMeta {
   zoom: number;
   fix: TableFix | null;
   auto: boolean;
+  /** Tilt from the phone's sensor when the photo was taken (deg), or null. */
+  sensorTiltDeg: number | null;
 }
 
 /** Turns an image-space direction from the tracker's frame into screen space. */
@@ -88,14 +90,17 @@ export function TableCamera(props: {
   onPhoto: (blob: Blob, meta: CaptureMeta) => void;
   onClose: () => void;
   children?: ComponentChildren;
+  /** Marker-free puzzle: the gauge uses the tilt sensor and the pieces' apparent size (nominal piece pitch in mm). */
+  free?: { pitchMm: number } | null;
 }) {
-  const { mode, map, target = null, busy, autoCapture = true, pieces, onPhoto, onClose, children } = props;
+  const { mode, map, target = null, busy, autoCapture = true, pieces, onPhoto, onClose, children, free = null } = props;
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const [gauge, setGauge] = useState<GaugeState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const ac = useRef(new AutoCapture());
   const sc = useRef(new SetupCapture());
+  const fc = useRef(new FreeCapture());
   const taking = useRef(false);
   const lastFix = useRef<TableFix | null>(null);
   const wantZoom = mode === 'detail' ? 2 : 1;
@@ -104,8 +109,8 @@ export function TableCamera(props: {
   const zoom = cameraInfo.value?.settings.zoom ?? 1;
   const live = state === 'live';
   // Props used inside the long-lived frame subscription.
-  const cur = useRef({ mode, map, target, busy, autoCapture, onPhoto, zoom });
-  cur.current = { mode, map, target, busy, autoCapture, onPhoto, zoom };
+  const cur = useRef({ mode, map, target, busy, autoCapture, onPhoto, zoom, free });
+  cur.current = { mode, map, target, busy, autoCapture, onPhoto, zoom, free };
 
   useEffect(() => {
     if (cameraState.value === 'idle' || cameraState.value === 'error') void startCamera();
@@ -144,12 +149,19 @@ export function TableCamera(props: {
   }, [live, wantZoom]);
   useEffect(() => {
     void trackerWorker().api.setTableMap(map, zoom);
+    void trackerWorker().api.setPieceStats(Boolean(free));
   }, [map, zoom]);
+
+  // Switching between overview and close-ups starts afresh.
+  useEffect(() => {
+    fc.current.resetFired();
+  }, [mode]);
 
   // A steady streak that built up while the last photo was processed must not fire straight away.
   useEffect(() => {
     if (!busy) {
       ac.current.reset();
+      fc.current.reset();
       sc.current.reset();
     }
   }, [busy]);
@@ -159,8 +171,9 @@ export function TableCamera(props: {
     taking.current = true;
     const t = performance.now();
     ac.current.noteFired(t);
+    fc.current.noteFired(t);
     sc.current.noteFired(t);
-    const meta: CaptureMeta = { zoom: cur.current.zoom, fix: lastFix.current, auto };
+    const meta: CaptureMeta = { zoom: cur.current.zoom, fix: lastFix.current, auto, sensorTiltDeg: levelPermission.value === 'granted' ? (level.value?.tiltDeg ?? null) : null };
     try {
       const { blob } = await capturePhoto(videoRef.current);
       setError(null);
@@ -183,7 +196,15 @@ export function TableCamera(props: {
         lastFix.current = f.table;
         let g: GaugeState;
         if (c.mode === 'setup') g = sc.current.update(t, f.markers, f.width);
-        else {
+        else if (c.free) {
+          const lv = level.value;
+          const sensor = levelPermission.value === 'granted' && lv !== null;
+          g = fc.current.update(t, { tiltDeg: sensor ? lv.tiltDeg : null, pieces: f.pieces, frame: { width: f.width, height: f.height } }, { kind: c.mode, pitchMm: c.free.pitchMm, sensor });
+          // Until the tilt sensor answers (not yet allowed, or no reading yet), never fire by itself:
+          // a tilted first photo would become the table for the whole puzzle.
+          const pending = levelPermission.value === 'unknown' || (levelPermission.value === 'granted' && lv === null);
+          if (pending && g.status === 'ready') g = { ...g, status: 'hold-still', message: 'Allow the tilt sensor first (or tap the button)', steady: 0 };
+        } else {
           g = ac.current.update(t, f.table, { kind: c.mode, map: c.map, frame: { width: f.width, height: f.height }, targetMm: c.target, targetTolMm: 60 });
           // No marker in view (middle close-up): fall back to the tilt sensor for "hold it flat".
           if (!f.table && c.mode === 'detail' && level.value) {
@@ -195,14 +216,14 @@ export function TableCamera(props: {
         const rot = v && v.videoWidth ? frameRotation({ width: f.width, height: f.height }, { width: v.videoWidth, height: v.videoHeight }, f.rotation) : 0;
         g = { ...g, leanImg: toScreen(g.leanImg, rot), targetDirImg: g.targetDirImg ? toScreen(g.targetDirImg, rot) : null };
         // The tilt sensor's lean is already in screen coordinates.
-        if (!f.table && c.mode === 'detail' && level.value) g = { ...g, leanImg: level.value.lean };
+        if ((c.free || (!f.table && c.mode === 'detail')) && level.value) g = { ...g, leanImg: level.value.lean };
         setGauge(g);
         if (g.status === 'ready' && c.autoCapture && !c.busy) void take(true);
       }),
     [],
   );
 
-  const maxTilt = mode === 'detail' ? RULES.detail.maxTiltDeg : RULES.overview.maxTiltDeg;
+  const maxTilt = free ? FREE_RULES[mode === 'detail' ? 'detail' : 'overview'].maxTiltDeg : mode === 'detail' ? RULES.detail.maxTiltDeg : RULES.overview.maxTiltDeg;
   const tilt = gauge?.tiltDeg ?? (mode === 'detail' && level.value ? level.value.tiltDeg : null);
   const lean: Vec2 = gauge && gauge.tiltDeg !== null ? gauge.leanImg : level.value?.lean ?? [0, 0];
 
@@ -219,16 +240,17 @@ export function TableCamera(props: {
         <span class="chip" aria-label="Zoom">{zoom >= 1.5 ? '2×' : '1×'}</span>
       </div>
 
-      {live && gauge && (
+      {live && gauge && !(free && levelPermission.value === 'unknown') && (
         <div class="gauge-wrap">
           <LevelGauge state={gauge} lean={lean} tiltDeg={tilt} maxTiltDeg={maxTilt} arrow={gauge.targetDirImg} />
         </div>
       )}
-      {live && mode === 'detail' && levelPermission.value === 'unknown' && (
-        <button class="btn btn-small level-ask" onClick={() => void requestLevelSensor()}>
-          Use the tilt sensor too
+      {live && (free || mode === 'detail') && levelPermission.value === 'unknown' && (
+        <button class={free ? 'btn btn-primary level-ask level-ask-big' : 'btn btn-small level-ask'} data-testid="allow-tilt" onClick={() => void requestLevelSensor()}>
+          {free ? 'Allow the tilt sensor (needed to hold the phone flat)' : 'Use the tilt sensor too'}
         </button>
       )}
+      {live && free && levelPermission.value === 'denied' && <p class="chip level-ask">Tilt sensor off: hold the phone as flat as you can</p>}
       {children && <div class="table-camera-extra">{children}</div>}
 
       {(live && pumpError.value) || error || cameraError.value ? (

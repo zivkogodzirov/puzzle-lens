@@ -38,7 +38,7 @@ test.describe('scan pieces', () => {
       const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
       await new Promise<void>((res) => {
         const tx = dbh.transaction('projects', 'readwrite');
-        tx.objectStore('projects').put({ id: pid, name: 'Scan test', createdAt: 1, updatedAt: 2, pieceCount: 48, grid: { cols: 8, rows: 6, source: 'suggested' }, box: null, markerMap: null, tableModel: null, piecePitch: null, setupStep: 5 });
+        tx.objectStore('projects').put({ id: pid, name: 'Scan test', createdAt: 1, updatedAt: 2, pieceCount: 48, grid: { cols: 8, rows: 6, source: 'suggested' }, box: null, markerMap: null, tableModel: null, piecePitch: null, setupStep: 5, tracking: 'markers' });
         tx.oncomplete = () => res();
       });
       dbh.close();

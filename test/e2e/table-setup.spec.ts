@@ -52,7 +52,7 @@ test.describe('wizard step 5: marker photo', () => {
           markerMap: null,
           tableModel: null,
           piecePitch: null,
-          setupStep: 5,
+          setupStep: 5, tracking: 'markers',
         });
         tx.oncomplete = () => res();
         tx.onerror = () => rej(tx.error);

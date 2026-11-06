@@ -4,6 +4,12 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### No printer needed (2026-11-07; not yet checked on your iPhone)
+- New puzzles need **no printed markers**: the pieces themselves tell the app where each photo was taken. Printed markers remain an option for extra precision.
+- The gauge uses the phone's tilt sensor (one tap to allow) and how big the pieces look ("Move the phone lower", "no piece cut off").
+- Close-ups are matched to the overview's pieces; a small map shows what is covered and where to aim next. "See the last photo" shows the pieces found, outlined.
+- On computer-made photos: every test photo was placed correctly; position error about 0.6 mm (300-piece tests) to 1.2 mm (48-piece tests); about 1 % of pieces counted twice.
+
 ### M2: set-up, markers, finding pieces, catalog (2026-11-06; not yet checked on your iPhone)
 - **Your puzzles** on Home: new puzzle, open, export a backup, import a backup, delete.
 - **New puzzle wizard:** name and piece count → box photo (drag the corners with a magnifier; the picture is straightened) → grid suggestion (28 across × 36 down for a portrait Ravensburger 1000) → print 2 marker sheets with a 100 mm ruler check → lay out the 8 cards and take one photo of the empty table, which measures where every card lies and learns your table.

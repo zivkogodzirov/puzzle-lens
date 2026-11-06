@@ -150,3 +150,107 @@ export class AutoCapture {
     return { ...base, targetDirImg, status: 'hold-still', message: 'Hold still', steady };
   }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Marker-free capture (decision 2026-11-07): no printed markers. "Flat" comes from the phone's tilt
+// sensor, "high/low" from how big the pieces look in the live picture, "everything in view" from
+// pieces cut off at the picture's edge, and "still" from the pieces not moving in the picture.
+// ---------------------------------------------------------------------------------------------
+
+export interface FreeInput {
+  /** Tilt from the phone's sensor (deg), or null when the sensor isn't available. */
+  tiltDeg: number | null;
+  pieces: { count: number; medianAreaPx: number | null; atEdge: number; bbox: [number, number, number, number] | null } | null;
+  frame: { width: number; height: number };
+}
+
+export interface FreeRules {
+  maxTiltDeg: number;
+  /** Fewest estimated px per mm (from the pieces' apparent size and the nominal piece pitch). */
+  minPxPerMm: number;
+  steadyMs: number;
+  /** Largest movement of the pieces' bounding-box centre while steady (share of the frame width). */
+  steadyMove: number;
+  steadyTiltDeg: number;
+}
+
+export const FREE_RULES: Record<CaptureKind, FreeRules> = {
+  // Estimates (pale pieces read small, so allow a little slack against the marker rules).
+  overview: { maxTiltDeg: 6, minPxPerMm: 3.2, steadyMs: 450, steadyMove: 0.006, steadyTiltDeg: 1 },
+  detail: { maxTiltDeg: 5, minPxPerMm: 7.5, steadyMs: 450, steadyMove: 0.005, steadyTiltDeg: 0.8 },
+};
+
+/** After a photo, the picture must move this far (share of the frame width) before the next one fires by itself. */
+export const FREE_MOVE_AFTER_PHOTO = 0.15;
+
+/** Estimated px per mm from the median piece area (piece area ≈ one cell of `pitchMm`). */
+export function pxPerMmFromPieces(medianAreaPx: number | null, pitchMm: number): number | null {
+  return medianAreaPx && medianAreaPx > 0 ? Math.sqrt(medianAreaPx) / pitchMm : null;
+}
+
+export class FreeCapture {
+  private anchor: { t: number; c: Vec2; tilt: number } | null = null;
+  private firedAt = Number.NEGATIVE_INFINITY;
+  /** Where the pieces were in the picture when the last photo was taken (no markers = no table position). */
+  private firedC: Vec2 | null = null;
+  private lastC: Vec2 | null = null;
+
+  reset(): void {
+    this.anchor = null;
+  }
+
+  /** Forget the last photo's position (e.g. switching between overview and close-ups). */
+  resetFired(): void {
+    this.firedC = null;
+  }
+
+  noteFired(t: number): void {
+    this.firedAt = t;
+    this.anchor = null;
+    this.firedC = this.lastC;
+  }
+
+  update(t: number, input: FreeInput, ctx: { kind: CaptureKind; pitchMm: number; sensor: boolean }): GaugeState {
+    const rules = FREE_RULES[ctx.kind];
+    const ppm = pxPerMmFromPieces(input.pieces?.medianAreaPx ?? null, ctx.pitchMm);
+    // Height from apparent size: H ≈ f / ppm, with f ≈ 1.25 × long side × 24 / 43.3 (24 mm-equivalent lens).
+    const f = (Math.max(input.frame.width, input.frame.height) * 1.25 * 24 * (ctx.kind === 'detail' ? 2 : 1)) / Math.hypot(36, 24);
+    const heightMm = ppm ? f / ppm : null;
+    const base = { tiltDeg: input.tiltDeg, heightMm, leanImg: [0, 0] as Vec2, steady: 0, targetMm: null, targetDirImg: null };
+    if (ctx.sensor && input.tiltDeg !== null && input.tiltDeg > rules.maxTiltDeg) {
+      this.anchor = null;
+      return { ...base, status: 'tilted', message: 'Hold the phone flat' };
+    }
+    const p = input.pieces;
+    if (!p || p.count < 3 || !p.bbox) {
+      this.anchor = null;
+      return { ...base, status: 'no-markers', message: 'Point the camera at the pieces' };
+    }
+    if (ppm !== null && ppm < rules.minPxPerMm) {
+      this.anchor = null;
+      return { ...base, status: 'too-high', message: 'Move the phone lower' };
+    }
+    if (ctx.kind === 'overview' && p.atEdge >= 2) {
+      this.anchor = null;
+      return { ...base, status: 'area-out', message: 'Raise the phone until no piece is cut off at the edge' };
+    }
+    const c: Vec2 = [(p.bbox[0] + p.bbox[2]) / 2, (p.bbox[1] + p.bbox[3]) / 2];
+    this.lastC = c;
+    // Not the same spot again: after a photo, wait until the picture has moved on.
+    if (this.firedC && Math.hypot(c[0] - this.firedC[0], c[1] - this.firedC[1]) < FREE_MOVE_AFTER_PHOTO * input.frame.width) {
+      this.anchor = null;
+      return { ...base, status: 'move', message: ctx.kind === 'detail' ? 'Done here: move to the next part (or tap the button)' : 'Photo taken' };
+    }
+    if (this.firedC) this.firedC = null;
+    const tilt = input.tiltDeg ?? 0;
+    const moved = (a: { c: Vec2; tilt: number }) => Math.hypot(c[0] - a.c[0], c[1] - a.c[1]) > rules.steadyMove * input.frame.width || Math.abs(tilt - a.tilt) > rules.steadyTiltDeg;
+    if (!this.anchor || moved(this.anchor)) {
+      const restarted = Boolean(this.anchor);
+      this.anchor = { t, c, tilt };
+      if (restarted) return { ...base, status: 'hold-still', message: 'Hold still', steady: 0 };
+    }
+    const steady = Math.min(1, (t - this.anchor.t) / rules.steadyMs);
+    if (steady >= 1 && t - this.firedAt >= AutoCapture.COOLDOWN_MS) return { ...base, status: 'ready', message: 'Taking the photo…', steady: 1 };
+    return { ...base, status: 'hold-still', message: 'Hold still', steady };
+  }
+}

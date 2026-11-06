@@ -15,8 +15,27 @@ export interface PixelBuffer {
   stride: number;
 }
 
+/**
+ * A quick look at the pieces in a live frame (no printed markers needed): dark-enough blobs on the
+ * bright table. Pale pieces are missed here; this only feeds the gauge ("move lower", "fit all
+ * pieces in"), never the catalog.
+ */
+export interface LivePieceStats {
+  /** Blobs of piece size. */
+  count: number;
+  /** Median blob area in FRAME pixels² (null with fewer than 3 blobs). */
+  medianAreaPx: number | null;
+  /** Blobs touching the frame edge (pieces cut off). */
+  atEdge: number;
+  /** Bounding box of all blobs in frame px [x0, y0, x1, y1], or null. */
+  bbox: [number, number, number, number] | null;
+  /** Table brightness (0–255) the blobs were measured against. */
+  tableGray: number;
+}
+
 export interface FrameAnalysis {
   markers: MarkerDetection[];
+  pieces?: LivePieceStats;
   sharpness: number;
   analysisWidth: number;
   /** Size of the image that was passed in (the pixel space the marker corners are in). */
@@ -54,6 +73,13 @@ export class FrameAnalyser {
   private dictionary: Mat | null = null;
   private params: Mat | null = null;
   private refine: Mat | null = null;
+  private mask: Mat | null = null;
+  private labels: Mat | null = null;
+  private stats: Mat | null = null;
+  private centroids: Mat | null = null;
+  private kernel: Mat | null = null;
+  /** Also measure the pieces in each frame (marker-free mode). */
+  pieceStats = false;
 
   constructor(cv: Cv, opts: Partial<FrameAnalyserOptions> = {}) {
     this.cv = cv;
@@ -151,11 +177,77 @@ export class FrameAnalyser {
     });
     timings.sharpness = performance.now() - t;
 
-    return { markers, sharpness, analysisWidth: aw, inputWidth: width, inputHeight: height, timings };
+    let pieces: LivePieceStats | undefined;
+    if (this.pieceStats) {
+      t = performance.now();
+      pieces = this.measurePieces(src, scale);
+      timings.pieces = performance.now() - t;
+    }
+    return { markers, pieces, sharpness, analysisWidth: aw, inputWidth: width, inputHeight: height, timings };
+  }
+
+  private measurePieces(src: Mat, scale: number): LivePieceStats {
+    const cv = this.cv;
+    const w = src.cols;
+    const h = src.rows;
+    // The table is the brightest common grey: the histogram's peak in the upper half.
+    const hist = new Uint32Array(256);
+    const d = src.data;
+    for (let i = 0; i < d.length; i += 3) hist[d[i]!]!++;
+    let tableGray = 128;
+    for (let v = 255, best = -1; v >= 64; v--) {
+      if (hist[v]! > best) {
+        best = hist[v]!;
+        tableGray = v;
+      }
+    }
+    const thr = Math.max(0, tableGray - Math.max(18, 0.12 * tableGray));
+    this.mask ??= persistent(new cv.Mat());
+    this.labels ??= persistent(new cv.Mat());
+    this.stats ??= persistent(new cv.Mat());
+    this.centroids ??= persistent(new cv.Mat());
+    this.kernel ??= persistent(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3)));
+    cv.threshold(src, this.mask, thr, 255, cv.THRESH_BINARY_INV);
+    cv.morphologyEx(this.mask, this.mask, cv.MORPH_OPEN, this.kernel);
+    const n = cv.connectedComponentsWithStats(this.mask, this.labels, this.stats, this.centroids, 8, cv.CV_32S) as number;
+    const s = Int32Array.from((this.stats as unknown as { data32S: Int32Array }).data32S);
+    const areas: number[] = [];
+    const edgeAreas: number[] = [];
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    const maxArea = 0.05 * w * h;
+    for (let i = 1; i < n; i++) {
+      const left = s[i * 5]!;
+      const top = s[i * 5 + 1]!;
+      const bw = s[i * 5 + 2]!;
+      const bh = s[i * 5 + 3]!;
+      const area = s[i * 5 + 4]!;
+      if (area < 12 || area > maxArea) continue;
+      areas.push(area);
+      if (left <= 0 || top <= 0 || left + bw >= w || top + bh >= h) edgeAreas.push(area);
+      x0 = Math.min(x0, left);
+      y0 = Math.min(y0, top);
+      x1 = Math.max(x1, left + bw);
+      y1 = Math.max(y1, top + bh);
+    }
+    areas.sort((a, b) => a - b);
+    // Only piece-sized blobs at the edge count as "pieces cut off" (not a strip of floor, a mug or an arm).
+    const med = areas.length ? areas[Math.floor(areas.length / 2)]! : 0;
+    const atEdge = edgeAreas.filter((a) => a >= 0.3 * med && a <= 3 * med).length;
+    return {
+      count: areas.length,
+      medianAreaPx: areas.length >= 3 ? areas[Math.floor(areas.length / 2)]! * scale * scale : null,
+      atEdge,
+      bbox: areas.length ? [x0 * scale, y0 * scale, x1 * scale, y1 * scale] : null,
+      tableGray,
+    };
   }
 
   dispose(): void {
-    for (const m of [this.detector, this.refine, this.params, this.dictionary, this.small, this.lap]) freePersistent(m);
+    for (const m of [this.detector, this.refine, this.params, this.dictionary, this.small, this.lap, this.mask, this.labels, this.stats, this.centroids, this.kernel]) if (m) freePersistent(m);
+    this.mask = this.labels = this.stats = this.centroids = this.kernel = null;
     if (this.gray) freePersistent(this.gray);
     if (this.rgba) freePersistent(this.rgba);
     this.detector = this.refine = this.params = this.dictionary = this.small = this.lap = this.gray = this.rgba = null;

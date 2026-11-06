@@ -156,8 +156,11 @@ test('new puzzle: steps 0–4, resume after reload, puzzle screen, backup export
   await expect(page.getByTestId('grid-chosen')).toContainText('28 across × 36 down');
   await page.getByTestId('wizard-next').click();
 
-  // Step 4: marker sheets and the ruler check.
+  // Step 4: no printing is offered first; this test takes the printed-markers route.
   await expectStep(page, 4);
+  await expect(page.getByTestId('step-tracking')).toContainText('No printing needed');
+  await page.getByText('I have a printer and want extra precision').click();
+  await page.getByTestId('use-markers').click();
   await expect(page.getByTestId('wizard-next')).toBeDisabled();
   await page.screenshot({ path: testInfo.outputPath('step4-markers.png'), fullPage: true });
   await page.getByTestId('open-marker-sheets').click();

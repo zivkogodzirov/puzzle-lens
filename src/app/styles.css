@@ -861,3 +861,22 @@ pre.logbox {
 .table-camera .scan-note { color: var(--text); background: var(--panel); text-align: left; }
 .table-camera .table-camera-extra { bottom: calc(var(--safe-bottom) + 120px); }
 .table-camera .gauge-wrap { top: calc(var(--safe-top) + 64px); }
+.coverage-map { width: min(70vw, 260px); max-height: 22vh; background: rgba(0, 0, 0, 0.55); border-radius: 10px; }
+.cov-bg { fill: rgba(255, 255, 255, 0.08); }
+.cov-cell { fill: rgba(60, 207, 122, 0.45); }
+.cov-piece { fill: rgba(255, 255, 255, 0.85); }
+.cov-piece.weak { fill: #ffd84a; }
+.cov-target { fill: none; stroke: var(--accent); stroke-width: 6; stroke-dasharray: 14 8; }
+.photo-result { position: fixed; inset: 0; z-index: 20; background: rgba(0, 0, 0, 0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px; }
+.photo-result svg { width: 100%; max-height: 85vh; }
+.res-outline { fill: none; stroke-width: 2.5; }
+.res-ok { stroke: #e6ebf0; }
+.res-clump { stroke: #ff9f2e; stroke-dasharray: 6 4; }
+.res-weak { stroke: #ffd84a; }
+.photo-result { pointer-events: auto; }
+.level-ask-big { left: 12px; right: 12px; top: calc(var(--safe-top) + 64px); }
+.table-camera .table-camera-extra { max-height: 50vh; overflow: hidden; align-items: flex-end; }
+.table-camera .scan-panel { gap: 6px; }
+.table-camera .scan-note { font-size: 14px; padding: 8px 10px; max-height: 18vh; }
+.coverage-map { max-height: 16vh; }
+.photo-result { z-index: 50; }
