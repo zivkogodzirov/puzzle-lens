@@ -66,4 +66,5 @@ Tell me:
 - **Outlines don't follow the pieces live yet**: you see them on each photo. Live outlines without markers come in M5.
 - **Moved pieces:** if you move pieces between photos, a moved piece may be counted twice. Recognising moved pieces comes in M5.
 - Touching pieces are flagged, not split.
+- **Box lids and trays** work too (grey tray: good; brown pieces in a brown lid: about half found). A plain surface that contrasts with the pieces works best; spread the pieces so they don't touch.
 - Printed markers are still available for extra precision: during set-up, open "I have a printer and want extra precision".

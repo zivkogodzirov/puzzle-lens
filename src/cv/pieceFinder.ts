@@ -54,6 +54,7 @@ import {
   sortingAreaMm,
   tableChroma,
   tableToSmall,
+  fieldNoise,
   type LightField,
   type SmallRgb,
 } from './tableModel';
@@ -161,6 +162,8 @@ export const SEG = {
   assembledMinIqr: 20,
   /** Table region: the biggest connected table-like area (and what lies on it); off below this share of the image. */
   tableMinShare: 0.15,
+  /** Re-classify with the table region's own noise when it is below this × the whole photo's. */
+  renoise: 0.8,
   tableMinAlpha: 0.85,
   /** Closing across pieces when finding the table (mm). */
   tableCloseMm: 30,
@@ -199,6 +202,11 @@ export const SEG = {
   /** Colour distortion (relative to brightness) for strong / weak piece pixels. */
   chromaStrong: 0.09,
   chromaWeak: 0.04,
+  /** Colour noise from the surface's median colour distortion (chromaSigma): × this, at least the minimum. */
+  chromaSigmaK: 3,
+  /** Brightness noise above which the surface counts as grainy (owner's white table ≤ 0.010, box lid and tray 0.028–0.043). */
+  grainyNoise: 0.015,
+  chromaSigmaMin: 0.006,
   /** Darkening (1 − α) that counts as shadow-like ring material, at least. */
   shadowMin: 0.035,
   /** Thin dark line (darkest photo pixel under a small pixel) that counts as ring material, at least. */
@@ -226,6 +234,8 @@ export const SEG = {
   gapShadowFactor: 1.0,
   /** Grey print: shadow-like pixels farther than this from the table (mm)… */
   greyCoreMm: 3.5,
+  /** …on a grainy box lid or tray (no light-direction exception there: brown-on-brown pieces are whole dark patches). */
+  greyCoreGrainyMm: 2.5,
   /** …and from coloured print (mm) are print, not shadow. 0 disables. */
   greyFgMm: 1.5,
   /** Grey-print patches bigger than this (× expected area) are a soft shadow, not print. */
@@ -244,7 +254,7 @@ export const SEG = {
   clumpSolidArea: 1.25,
   clumpSolidity: 0.78,
   /** Longer than this × √(expected area) is not one piece (a piece with knobs is ≤ ~1.5×). */
-  clumpLength: 1.7,
+  clumpLength: 1.9,
   /** Closing (px, small image) applied to the piece ∪ shadow ring before looking for pale interiors. */
   ringClose: 5,
   /** Largest pale interior accepted, relative to the expected piece area. */
@@ -343,10 +353,9 @@ function run(cv: Cv, sc: CvScope, rgba: PixelBuffer, opts: FindOptions): FindRes
 
   // 3. Classify.
   const alpha = new Float32Array(w * h);
-  const cls = classify(img, field, cardIgnore, sppm, alpha);
   // Only look for pieces on the table: everything off the largest table-like area (floor, the
   // table's dark edge, things beyond it) counts like a marker card (ignored; touching = cut).
-  const onTable = tableRegion(cv, cls, alpha, w, h, sppm);
+  const { cls, onTable } = classifyOnTable(cv, img, field, cardIgnore, sppm, alpha);
   if (onTable) {
     for (let p = 0; p < w * h; p++) if (!onTable[p]) cardZone[p] = 1;
     // Near the table's edge the lighting field is least reliable (it mixes in the floor), so the
@@ -364,7 +373,7 @@ function run(cv: Cv, sc: CvScope, rgba: PixelBuffer, opts: FindOptions): FindRes
 
   // 4–6. Masks.
   const prior = opts.pieceAreaMm2 ?? DEFAULT_PIECE_AREA_MM2;
-  const pieceMask = buildMask(cv, cls, cardZone, w, h, prior * sppm * sppm, sppm, shadow?.explained ?? null);
+  const pieceMask = buildMask(cv, cls, cardZone, w, h, prior * sppm * sppm, sppm, shadow?.explained ?? null, field.noise > SEG.grainyNoise);
   lap('masks');
   if (opts.debug) opts.debug.pieceMask = pieceMask;
 
@@ -405,6 +414,68 @@ function run(cv: Cv, sc: CvScope, rgba: PixelBuffer, opts: FindOptions): FindRes
 
 // ---- Classification ------------------------------------------------------------------------------
 
+/**
+ * Classify, find the table (or tray / box lid) region, and — when the surface's own noise is
+ * clearly lower than the whole photo's (clutter around a tray: clothes, papers, the floor) —
+ * classify again with the surface's noise, so the thresholds fit the surface the pieces lie on.
+ */
+function classifyOnTable(cv: Cv, img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: number, alpha: Float32Array): { cls: Uint8Array; onTable: Uint8Array | null } {
+  const { width: w, height: h } = img;
+  let cls = classify(img, field, ignore, sppm, alpha);
+  let onTable = tableRegion(cv, cls, alpha, w, h, sppm);
+  if (onTable) {
+    const off = new Uint8Array(w * h);
+    for (let p = 0; p < w * h; p++) off[p] = ignore[p] || !onTable[p] ? 1 : 0;
+    const noise = fieldNoise(img, field, off);
+    if (noise < SEG.renoise * field.noise) {
+      field.noise = noise;
+      cls = classify(img, field, ignore, sppm, alpha);
+      onTable = tableRegion(cv, cls, alpha, w, h, sppm) ?? onTable;
+    }
+  }
+  return { cls, onTable };
+}
+
+/**
+ * The brightness noise that sets the colour thresholds. On a smooth white table colour noise
+ * follows brightness noise, but a grainy surface (a cardboard box lid, a tray) has a lot of
+ * brightness texture and little colour texture: there the colour noise is measured (median colour
+ * distortion of surface-bright pixels × `chromaSigmaK`) and used when lower.
+ */
+function chromaSigma(img: SmallRgb, field: LightField, ignore: Uint8Array, row: Float32Array): number {
+  const { width: w, height: h, rgb } = img;
+  const sig = field.noise;
+  // A smooth table (white or coloured): unchanged.
+  if (sig <= SEG.grainyNoise) return sig;
+  const hist = new Uint32Array(1000);
+  let n = 0;
+  for (let y = 0; y < h; y += 3) {
+    fieldRow(field, y, w, row);
+    for (let x = 0; x < w; x += 3) {
+      const p = y * w + x;
+      if (ignore[p]) continue;
+      const k = p * 3;
+      const eR = row[x * 3]!;
+      const eG = row[x * 3 + 1]!;
+      const eB = row[x * 3 + 2]!;
+      const ee = eR * eR + eG * eG + eB * eB;
+      const a = (rgb[k]! * eR + rgb[k + 1]! * eG + rgb[k + 2]! * eB) / ee;
+      if (Math.abs(a - 1) > 2.5 * sig) continue;
+      const dr = rgb[k]! - a * eR;
+      const dg = rgb[k + 1]! - a * eG;
+      const db = rgb[k + 2]! - a * eB;
+      hist[Math.min(999, Math.floor((Math.sqrt((dr * dr + dg * dg + db * db) / ee) / a) * 10000))]!++;
+      n++;
+    }
+  }
+  if (n < 500) return sig;
+  for (let i = 0, acc = 0; i < 1000; i++) {
+    acc += hist[i]!;
+    if (acc >= 0.5 * n) return Math.min(sig, Math.max(SEG.chromaSigmaMin, (SEG.chromaSigmaK * (i + 0.5)) / 10000));
+  }
+  return sig;
+}
+
 function classify(img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: number, alphaOut?: Float32Array): Uint8Array {
   const { width: w, height: h, rgb, minY, factor } = img;
   const n = w * h;
@@ -418,6 +489,7 @@ function classify(img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: nu
   // The darkest of ~factor² photo pixels: its noise is ~factor × the small image's, and biased low.
   const sigPix = sig * Math.max(1, factor);
   const edgeLevel = 1 - Math.max(SEG.edgeMin, (2 + 1.2 * Math.log2(1 + factor * factor)) * sigPix);
+  const sigC = chromaSigma(img, field, ignore, row);
   for (let y = 0; y < h; y++) {
     fieldRow(field, y, w, row);
     for (let x = 0; x < w; x++) {
@@ -447,7 +519,7 @@ function classify(img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: nu
         cls[p] = GLARE;
         continue;
       }
-      const cNoise = (1.5 * sig) / Math.sqrt(Math.max(a, 0.15));
+      const cNoise = (1.5 * sigC) / Math.sqrt(Math.max(a, 0.15));
       const cWeak = Math.max(SEG.chromaWeak, 4 * cNoise);
       if (a < SEG.darkStrong || c > Math.max(SEG.chromaStrong, 8 * cNoise) || (a < SEG.darkColoured && c > cWeak)) cls[p] = STRONG;
       else if (a < SEG.darkWeak || c > cWeak) cls[p] = WEAK;
@@ -784,7 +856,7 @@ function fillHolesMax(cv: Cv, sc: CvScope, src: Mat, maxArea: number): Mat {
  * Piece mask on the small image. Each step runs in its own scope so the big label / distance
  * images are freed before the next step allocates (keeps the WebAssembly heap small).
  */
-function buildMask(cv: Cv, cls: Uint8Array, cardZone: Uint8Array, w: number, h: number, priorPx: number, sppm: number, explained: Uint8Array | null): Uint8Array {
+function buildMask(cv: Cv, cls: Uint8Array, cardZone: Uint8Array, w: number, h: number, priorPx: number, sppm: number, explained: Uint8Array | null, grainy = false): Uint8Array {
   const n = w * h;
   // Pale print never covers more than a piece: bigger "pale" areas are the field being off
   // (over-exposure, a reflection), not pieces.
@@ -837,14 +909,14 @@ function buildMask(cv: Cv, cls: Uint8Array, cardZone: Uint8Array, w: number, h: 
     cv.distanceTransform(nfMat, dF, cv.DIST_L2, 3);
     const dt: Float32Array = dT.data32F.slice();
     const df: Float32Array = dF.data32F.slice();
-    const tCore = SEG.greyCoreMm * sppm;
+    const tCore = (grainy ? SEG.greyCoreGrainyMm : SEG.greyCoreMm) * sppm;
     const fCore = SEG.greyFgMm * sppm;
     const grow = new Uint8Array(n);
     let any = false;
     for (let p = 0; p < n; p++) {
       if (cls[p] !== SHADOW && cls[p] !== PALE) continue;
       grow[p] = 255; // where the core may grow
-      if (cls[p] === SHADOW && dt[p]! > tCore && df[p]! > fCore && !(explained && explained[p])) {
+      if (cls[p] === SHADOW && dt[p]! > tCore && df[p]! > fCore && (grainy || !(explained && explained[p]))) {
         notTable[p] = 254; // core marker (reuses the buffer)
         any = true;
       }
@@ -870,7 +942,14 @@ function buildMask(cv: Cv, cls: Uint8Array, cardZone: Uint8Array, w: number, h: 
       const glab: Int32Array = gl.data32S.slice();
       const ok = new Uint8Array(ng);
       for (let i = 1; i < ng; i++) ok[i] = gst[i * 5 + 4]! <= SEG.greyMaxArea * priorPx ? 1 : 0;
-      for (let p = 0; p < n; p++) if (ok[glab[p]!]) fg[p] = 255;
+      for (let p = 0; p < n; p++) {
+        if (!ok[glab[p]!]) continue;
+        fg[p] = 255;
+        // On a grainy box lid or tray, pieces printed in the surface's own colour are only darker
+        // (brown on brown): a piece-sized darker patch is clear evidence there, so it counts as
+        // strong print (the white table keeps the cautious reading).
+        if (grainy && cls[p] === SHADOW) cls[p] = STRONG;
+      }
     }
   });
 
@@ -2047,17 +2126,16 @@ export function estimatePxPerMm(cv: Cv, rgba: PixelBuffer, opts: { pitchMm?: num
     // First guess: a hand-held overview at 1× (~4 px/mm at 12 MP), close-ups at 2×.
     let ppm = ((opts.zoom ?? 1) >= 2 ? 9 : 4) * (Math.max(W, H) / 4032);
     let result: { pxPerMm: number; nPieces: number } | null = null;
-    for (let iter = 0; iter < 3; iter++) {
+    for (let iter = 0; iter < 4; iter++) {
       const sppm = ppm / factor;
       const field = estimateField(img, { pxPerMm: sppm, ignore: none, chromaPrior: opts.table ? tableChroma(opts.table) : null });
       const alpha = new Float32Array(w * h);
-      const cls = classify(img, field, none, sppm, alpha);
+      const { cls, onTable } = classifyOnTable(cv, img, field, none, sppm, alpha);
       const shadow = SEG.shadowRuns ? explainShadows(cls, w, h, sppm, none) : null;
       const expPx = pitch * pitch * sppm * sppm;
-      const onTable = tableRegion(cv, cls, alpha, w, h, sppm);
       const off = new Uint8Array(w * h);
       if (onTable) for (let p = 0; p < w * h; p++) off[p] = onTable[p] ? 0 : 1;
-      const mask = buildMask(cv, cls, off, w, h, expPx, sppm, shadow?.explained ?? null);
+      const mask = buildMask(cv, cls, off, w, h, expPx, sppm, shadow?.explained ?? null, field.noise > SEG.grainyNoise);
       // Single-piece-like blobs only: not cut by the edge, piece-like solidity and squareness (not
       // clumps, assembled areas or objects), then the MODE of their log-area.
       const areas = withScope((sc) => {
@@ -2089,7 +2167,9 @@ export function estimatePxPerMm(cv: Cv, rgba: PixelBuffer, opts: { pitchMm?: num
       const lo = Math.min(...logs);
       const nb = Math.ceil((Math.max(...logs) - lo) / 0.04) + 1;
       const hist = new Float64Array(nb);
-      for (const v of logs) hist[Math.floor((v - lo) / 0.04)]!++;
+      // Weighted by area: on a grainy box lid, fragments and specks are many but small; the pieces
+      // cover far more of the photo.
+      for (const v of logs) hist[Math.floor((v - lo) / 0.04)]! += Math.exp(v - lo);
       let peak = 0;
       let peakN = -1;
       for (let i = 0; i < nb; i++) {
@@ -2102,11 +2182,18 @@ export function estimatePxPerMm(cv: Cv, rgba: PixelBuffer, opts: { pitchMm?: num
       }
       const mode = lo + (peak + 0.5) * 0.04;
       const cand = areas.filter((a) => Math.abs(Math.log(a) - mode) < 0.2).sort((x, y) => x - y);
-      if (cand.length < 5) return result;
+      if (cand.length < 3) return result;
       const med = cand[cand.length >> 1]!;
       const next = (Math.sqrt(med / SCALE_AREA_BIAS) / pitch) * factor;
-      result = { pxPerMm: next, nPieces: cand.length };
       const change = Math.abs(next / ppm - 1);
+      if (cand.length < 5) {
+        // Too few to trust, but far from this guess (the phone much closer or farther than usual,
+        // so most pieces were cut up or merged at this scale): look again there.
+        if (change < 0.3) return result;
+        ppm = next;
+        continue;
+      }
+      result = { pxPerMm: next, nPieces: cand.length };
       ppm = next;
       if (change < 0.03) break;
     }

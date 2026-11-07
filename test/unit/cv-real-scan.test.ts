@@ -12,6 +12,13 @@
  * remote and a coaster, with the floor and the photographer's shadow at the bottom.
  * Expected scale: the frame (498 mm wide) spans 1533 px at its top edge and 1773 px at mid height,
  * the frame's area gives 3.47 px/mm on average; 3.7 px/mm is the owner's figure at the lower part.
+ *
+ * IMG_9246 (pieces in the puzzle box's grey, grainy tray, phone held close): ~45 golden pieces
+ * spread out and ~75 brown ones in a dense pile, many touching. Expected scale ~7 px/mm: the tray's
+ * inside (1743 × 2320 px) is then 243 × 324 mm, the owner's "a little bigger than A4" box.
+ * IMG_9245 (~25 brown pieces in a brown cardboard box lid, phone held close): brown on brown, the
+ * hardest case; pieces differ from the cardboard only by being darker. Expected scale ~6–7 px/mm
+ * (the pieces look the same size as in IMG_9246).
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,6 +32,7 @@ import { decodeRgba, listRealPhotos, REAL_DIR } from '../helpers/realFixtures';
 
 const photos = listRealPhotos();
 const has9224 = photos.some((p) => p.name.startsWith('IMG_9224'));
+const has = (n: string) => photos.some((p) => p.name.startsWith(n));
 
 async function load(cv: Cv, path: string): Promise<PixelBuffer> {
   let img = await decodeRgba(path);
@@ -114,5 +122,32 @@ describe.skipIf(photos.length === 0)('real photos, marker-free scan', () => {
     expect(Math.max(...r.pieces.map((p) => centre(p)[1]))).toBeLessThan(3620);
     // Scale at the image centre within 10 % of 3.7 px/mm.
     expect(Math.abs(r.pxPerMm! / 3.7 - 1)).toBeLessThan(0.1);
+  }, 120_000);
+
+  // Image boxes of the tray / lid insides (photo px at 2268 × 4032).
+  const inTray = (b: number[]) => (p: { bboxImg: number[] }) => inBox(p, b);
+  const single = (p: { flags: { clump?: boolean; weak?: boolean; cut?: boolean } }) => !p.flags.clump && !p.flags.weak && !p.flags.cut;
+
+  it.skipIf(!has('IMG_9246'))('IMG_9246: pieces in a grey grainy tray, phone close: right scale, most spread pieces found', async () => {
+    const cv = await getCv();
+    const img = await load(cv, photos.find((p) => p.name.startsWith('IMG_9246'))!.path);
+    const r = scanMarkerless(cv, img, { catalog: [], zoom: 1, kind: 'overview', table: null });
+    expect(Math.abs(r.pxPerMm! / 7 - 1), `${r.pxPerMm}`).toBeLessThan(0.15);
+    const tray = r.pieces.filter(inTray([274, 1037, 2017, 3357]));
+    expect(tray.length).toBeGreaterThanOrEqual(35);
+    expect(tray.filter(single).length).toBeGreaterThanOrEqual(18);
+    // Hardly anything reported as pieces off the tray (clothes, bedding).
+    expect(r.pieces.length - tray.length).toBeLessThanOrEqual(8);
+  }, 120_000);
+
+  it.skipIf(!has('IMG_9245'))('IMG_9245: brown pieces in a brown cardboard lid, phone close: scale near right, some pieces found', async () => {
+    const cv = await getCv();
+    const img = await load(cv, photos.find((p) => p.name.startsWith('IMG_9245'))!.path);
+    const r = scanMarkerless(cv, img, { catalog: [], zoom: 1, kind: 'overview', table: null });
+    expect(r.pxPerMm!).toBeGreaterThan(5.2);
+    expect(r.pxPerMm!).toBeLessThan(8);
+    const lid = r.pieces.filter(inTray([346, 1268, 2017, 3458]));
+    expect(lid.length).toBeGreaterThanOrEqual(10);
+    expect(lid.filter(single).length).toBeGreaterThanOrEqual(6);
   }, 120_000);
 });

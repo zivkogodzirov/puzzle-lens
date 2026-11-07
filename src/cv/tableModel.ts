@@ -483,7 +483,7 @@ export function fieldAt(lf: LightField, x: number, y: number): [number, number, 
 }
 
 /** Robust σ of Y/field − 1 over pixels that look like table (MAD × 1.48). */
-function fieldNoise(img: SmallRgb, lf: LightField, ignore: Uint8Array | null): number {
+export function fieldNoise(img: SmallRgb, lf: LightField, ignore: Uint8Array | null): number {
   const { width: w, height: h, rgb } = img;
   const row = new Float32Array(w * 3);
   const hist = new Uint32Array(400);

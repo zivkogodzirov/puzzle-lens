@@ -4,6 +4,12 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### Box lids and trays (2026-11-07; checked on 3 of your photos, not yet on your iPhone)
+- Pieces in the puzzle box's grey tray or a cardboard box lid are now found, not only on the white table. The app measures how grainy the surface is and judges pieces by colour and darkness against that surface.
+- Holding the phone closer than usual (over a tray) no longer confuses the piece size: when most pieces look "too big", the app tries the size they suggest and keeps it if more single pieces come out.
+- Single pieces with long knobs are no longer marked "touching" by mistake (also on the white table).
+- On your photos: grey tray with ~120 pieces → 43 found in the tray, 22 of them as clean single pieces; most misses are in the dense pile (touching pieces). Brown pieces in the brown box lid → about 13 of ~25 found (the hardest case). White-table photos unchanged.
+
 ### Real table photos (2026-11-07)
 - Checked on your own photo of the table: the half-built puzzle and objects like headphones are now recognised and ignored (shown in green and red on "See the last photo"), and loose pieces inside the puzzle's frame are found. Faster: about 2.3 s on the Mac per photo.
 - A close-up is placed even when the camera reports the wrong zoom.

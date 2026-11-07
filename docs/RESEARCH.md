@@ -302,6 +302,8 @@ Our markers will be hundreds of pixels across and static, so detector speed and 
 
 ---
 
+**Update 2026-11-07: box lids and trays.** The owner also keeps pieces in the box's grey tray and in cardboard lids, often photographed from closer (~6–7 px/mm instead of ~4). Measured on IMG_9245/9246: the surfaces' brightness texture (cardboard grain, the tray's speckled board) is 3–4× the white table's (robust σ 0.028–0.043 vs ≤ 0.010), but their colour texture only ~2× (median colour distortion 0.004–0.005 vs 0.0013–0.0024). Deriving colour thresholds from brightness noise (right for a smooth table) made them 4× too strict, so coloured pieces fell to "shadow". Fix: above 0.015 brightness noise the colour noise is measured (4 × median distortion, capped at the brightness noise, at least 0.006) — chosen so no white-table photo changes. Brown-on-brown pieces differ only in brightness (α ≈ 0.6–0.75); on grainy surfaces the grey-print core (shadow-like pixels > 2.5 mm from the surface) counts as strong print, without the light-direction exception. Scale: at the nominal 4 px/mm, close-held pieces come out as "clumps" and only fragments look single, so the scale measured from singles is too small; when piece-shaped clumps are at least as many as the singles, detection is repeated at the median and upper-quartile clump size and kept only if single pieces grow 1.5×. Also: the single-piece length gate was 1.7 × √(expected area), which with the real 0.79 face share flagged pieces with two long knobs as clumps; now 1.9 (pairs are caught by area anyway). Limits: dense piles in a tray are still reported as one area; brown on brown ~50 % found.
+
 ## 7. Corners and side types
 
 **Plain English:**

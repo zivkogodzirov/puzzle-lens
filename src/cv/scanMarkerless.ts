@@ -62,6 +62,10 @@ export interface ScanMarkerlessResult {
 
 /** Re-run detection when the registered scale differs from the estimate by more than this. */
 export const RESCALE_LIMIT = 0.3;
+/** Closer-than-usual check: at least this many piece-shaped clumps (each below CLOSE_MAX_AREA × a piece); the new scale is kept when it gives CLOSE_CLUMP_RATIO × the single pieces. */
+export const CLOSE_MIN_CLUMPS = 6;
+export const CLOSE_CLUMP_RATIO = 1.5;
+export const CLOSE_MAX_AREA = 6;
 /** Found top-face area ÷ cell area on real photos (IMG_9224: 12 single pieces, 0.79 ± 0.05 against the assembled frame's scale). */
 export const REAL_PIECE_AREA_SHARE = 0.79;
 
@@ -145,6 +149,31 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
     if (pre && Math.abs(pre.pxPerMm / ppm - 1) > 0.1) {
       ppm = pre.pxPerMm;
       ({ frame, res } = find(ppm));
+      measured = measureScale(res.pieces, ppm, pitch, share);
+    }
+  }
+  // Phone much closer than usual (over a tray or box lid): whole pieces come out as "clumps" and
+  // only fragments look like single pieces, so the measured scale is too small. When piece-shaped
+  // clumps are at least as many as the singles, detect again at the scales those clumps imply (their
+  // median and upper-quartile size: on a grainy lid some pieces are only partly found), and keep the
+  // one that gives clearly more single pieces.
+  const singles = (r: FindResult) => r.pieces.filter((p) => !p.flags.cut && !p.flags.clump && !p.flags.weak).length;
+  const big = res.pieces.filter((p) => !p.flags.cut && p.flags.clump && p.areaMm2 < CLOSE_MAX_AREA * pieceAreaMm2 && Math.max(p.sizeMm[0], p.sizeMm[1]) <= 1.6 * Math.min(p.sizeMm[0], p.sizeMm[1]));
+  if (big.length >= Math.max(CLOSE_MIN_CLUMPS, singles(res))) {
+    const areas = big.map((p) => p.areaMm2).sort((a, b) => a - b);
+    const ks: number[] = [];
+    for (const q of [0.5, 0.75]) {
+      const k = Math.sqrt(areas[Math.min(areas.length - 1, Math.floor(q * areas.length))]! / pieceAreaMm2);
+      if (k > 1 + RESCALE_LIMIT && ks.every((x) => Math.abs(k / x - 1) > 0.1)) ks.push(k);
+    }
+    let best: { k: number; frame: typeof frame; res: FindResult } | null = null;
+    for (const k of ks) {
+      const alt = find(ppm * k);
+      if (singles(alt.res) > CLOSE_CLUMP_RATIO * singles(res) && (!best || singles(alt.res) > singles(best.res))) best = { k, ...alt };
+    }
+    if (best) {
+      ppm *= best.k;
+      ({ frame, res } = best);
       measured = measureScale(res.pieces, ppm, pitch, share);
     }
   }

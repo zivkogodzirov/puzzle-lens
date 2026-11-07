@@ -440,6 +440,12 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
 - Outlines are shown on each photo, not live (live marker-free tracking: M5).
 - A 300-piece overview takes 3.5–4.4 s on the Mac, so roughly 5–10 s on the phone: over the 8 s budget at the slow end.
 
+**Box lids and trays (2026-11-07), measured on 3 photos you sent (IMG_9244–9246):**
+- **White table, nearly finished puzzle (IMG_9244):** all ~18 loose pieces on the table found (about 5 labelled "object" by mistake); light pieces lying *on top of* the built picture mostly missed; pieces inside a box lid in that photo not found.
+- **Grey grainy tray, ~120 pieces, phone close (IMG_9246):** scale found by itself (7.1 px/mm; the tray then measures 243 × 324 mm, matching your box); 43 found in the tray, 22 as clean single pieces; the dense brown pile is mostly reported as one area (touching pieces). Before the change: almost none.
+- **Brown pieces in a brown cardboard lid (IMG_9245):** ~13 of ~25 found; scale 6.1 px/mm, probably ~12 % low because pieces are only partly outlined. Brown on brown is the hardest case: a contrasting surface (white table, grey tray) works much better.
+- Your earlier white-table photos give the same results as before.
+
 **M2 (2026-11-06), before your iPhone check:**
 1. **Piece finding is below its 98 % bar on computer-made test photos.** Frozen test sets (white glossy table, glare, side light, hand shadows, hand-held 1× overviews at 65–75 cm and 2× close-ups): pieces found **94.8 %** (48-piece set) and **94.3 %** (300-piece set), precision 93.9 % / 94.2 %; 2× close-ups 94.8–97.8 %. **Near-white pieces: 34 % (15 of 44).** Positions are well inside their bar (median 0.15 mm, 95th percentile 0.5 mm). The bars stay at 98 %; your real photos (Part D of the checklist) decide what to do next: a full-resolution cut-line cue, preferring close-up reads, the ML fallback (RESEARCH §6), or a one-tap "add missed piece".
 2. **A close-up with no marker in view** (the middle of a 3 × 3 plan) can't be placed yet: the app says so and adds nothing. Placing it from the overview's pieces is still to do.
@@ -507,6 +513,7 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
 | 2026-11-06 | M2 ships below the 98 % segmentation bar, with the shortfall stated | Owner's real photos are the deciding data; the bar is not lowered (PLAN §7 ratchet) |
 | 2026-11-06 | Full photos of the latest 10 scans kept and included in backups | The owner can send real scans for measurement without extra steps |
 | 2026-11-07 | **No printed markers by default.** The first overview defines the table; every other photo is placed by matching its pieces (colour, size and the pattern they form) to the catalog; tilt from the phone's sensor; height from the pieces' apparent size; markers stay as an option | The owner puzzles away from home without a printer. Matching pieces also places the middle close-up, which markers couldn't |
+| 2026-11-07 | **Grainy surfaces (box lids, trays):** when the surface's brightness noise is above 0.015 (white table ≤ 0.010; lid and tray 0.028–0.043), colour thresholds use the surface's measured colour noise, and piece-sized darker patches count as print; a "phone closer than usual" check re-detects at the scale piece-shaped clumps imply. White-table behaviour unchanged | The owner sorts pieces in the box tray and lids, not only on the table (photos 2026-11-07) |
 | 2026-11-07 | Optional coin for true size (Macedonian denari): found as a round coin-sized blob, measured along 72 rays at the steepest edge (the lower 30 % of radii, so a contact shadow can't enlarge it); rescales the catalog from the typical-piece estimate to real mm | The owner has no printer; a coin is always at hand. Tests: within 0.6–0.7 % |
 
 ---
