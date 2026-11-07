@@ -2,7 +2,12 @@
 import { createCanvas } from '@napi-rs/canvas';
 import type { PixelBuffer } from '../../src/cv/frameAnalyser';
 
-export function withCoin(img: PixelBuffer, at: [number, number], diameterPx: number, metal: 'brass' | 'silver'): PixelBuffer {
+/**
+ * `shiny-brass`: a polished brass coin under a lamp, about as bright as a white/cream table (the
+ * owner's 2-denar photo), found by its colour; `stain` adds a grey patch touching it (a damp mark,
+ * a shadow) that merges with it in a brightness mask.
+ */
+export function withCoin(img: PixelBuffer, at: [number, number], diameterPx: number, metal: 'brass' | 'silver' | 'shiny-brass', opts: { stain?: boolean } = {}): PixelBuffer {
   const c = createCanvas(img.width, img.height);
   const ctx = c.getContext('2d');
   const id = ctx.createImageData(img.width, img.height);
@@ -10,7 +15,17 @@ export function withCoin(img: PixelBuffer, at: [number, number], diameterPx: num
   ctx.putImageData(id, 0, 0);
   const r = diameterPx / 2;
   const g = ctx.createRadialGradient(at[0] - r * 0.3, at[1] - r * 0.3, r * 0.1, at[0], at[1], r);
-  if (metal === 'brass') {
+  if (opts.stain) {
+    ctx.fillStyle = 'rgba(90,90,90,0.22)';
+    ctx.beginPath();
+    ctx.ellipse(at[0] + diameterPx * 1.1, at[1] + diameterPx * 0.2, diameterPx * 1.0, diameterPx * 0.6, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (metal === 'shiny-brass') {
+    g.addColorStop(0, '#fff2b8');
+    g.addColorStop(0.7, '#ecd27e');
+    g.addColorStop(1, '#c9a54a');
+  } else if (metal === 'brass') {
     g.addColorStop(0, '#e8d48a');
     g.addColorStop(0.7, '#b8973e');
     g.addColorStop(1, '#8a6d25');
