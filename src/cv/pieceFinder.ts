@@ -169,9 +169,9 @@ export const SEG = {
   tableCloseMm: 30,
   /** No pale cue within this distance (mm) of the table's edge. */
   tableEdgeMm: 30,
-  /** Shape gate for a single piece: solidity above this, or a box this elongated, is an object. */
+  /** Shape gate for a single piece: solidity above this, or a box this elongated, is an object (a piece with long knobs at both ends reaches ~2.1 on real photos). */
   objectSolidity: 0.94,
-  objectAspect: 1.9,
+  objectAspect: 2.3,
   /** Median membership gradient across the outline (1/mm) below which a blob has no real edge. */
   minEdgeSharp: 0.3,
   /** Weak blobs scoring below this and within this ΔE of the table's white are dropped. */
@@ -207,6 +207,11 @@ export const SEG = {
   /** Brightness noise above which the surface counts as grainy (owner's white table ≤ 0.010, box lid and tray 0.028–0.043). */
   grainyNoise: 0.015,
   chromaSigmaMin: 0.006,
+  /** Shadow-like pixels joined to print grow into the piece when off the table's colour by this (or × the table's own colour noise). */
+  litSideChroma: 0.03,
+  litSideTimes: 3,
+  litSideCos: 0.9,
+  litSideMm: 3,
   /** Darkening (1 − α) that counts as shadow-like ring material, at least. */
   shadowMin: 0.035,
   /** Thin dark line (darkest photo pixel under a small pixel) that counts as ring material, at least. */
@@ -343,9 +348,21 @@ function run(cv: Cv, sc: CvScope, rgba: PixelBuffer, opts: FindOptions): FindRes
 
   // Marker cards: ignored for the field (small margin) and a wider zone for the `cut` flag.
   const cardIgnore = new Uint8Array(w * h);
-  if (opts.map) fillPolygons(cardIgnore, w, h, cardPolygonsMm(opts.map, 2).map((p) => tableToSmall(p, geo.tableToImg, factor)));
+  if (opts.map)
+    fillPolygons(
+      cardIgnore,
+      w,
+      h,
+      cardPolygonsMm(opts.map, 2).map((p) => tableToSmall(p, geo.tableToImg, factor)),
+    );
   const cardZone = new Uint8Array(w * h);
-  if (opts.map) fillPolygons(cardZone, w, h, cardPolygonsMm(opts.map, 4).map((p) => tableToSmall(p, geo.tableToImg, factor)));
+  if (opts.map)
+    fillPolygons(
+      cardZone,
+      w,
+      h,
+      cardPolygonsMm(opts.map, 4).map((p) => tableToSmall(p, geo.tableToImg, factor)),
+    );
 
   // 2. Lighting field.
   const field = estimateField(img, { pxPerMm: sppm, ignore: cardIgnore, chromaPrior: opts.table ? tableChroma(opts.table) : null });
@@ -402,7 +419,9 @@ function run(cv: Cv, sc: CvScope, rgba: PixelBuffer, opts: FindOptions): FindRes
 
   // 7–9. Blobs → pieces.
   const prof = { outline: 0, colour: 0, flags: 0 };
-  const { pieces, regions } = withScope((s2) => blobsToPieces(cv, s2, { prof, rgba, img, field, cls, pieceMask, cardZone, glare, geo, factor, sppm, prior, W, H }));
+  const { pieces, regions } = withScope((s2) =>
+    blobsToPieces(cv, s2, { prof, rgba, img, field, cls, pieceMask, cardZone, glare, geo, factor, sppm, prior, W, H }),
+  );
   lap('pieces');
   for (const [k, v] of Object.entries(prof)) timings[`pieces.${k}`] = v;
   timings.total = performance.now() - T0;
@@ -419,7 +438,14 @@ function run(cv: Cv, sc: CvScope, rgba: PixelBuffer, opts: FindOptions): FindRes
  * clearly lower than the whole photo's (clutter around a tray: clothes, papers, the floor) —
  * classify again with the surface's noise, so the thresholds fit the surface the pieces lie on.
  */
-function classifyOnTable(cv: Cv, img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: number, alpha: Float32Array): { cls: Uint8Array; onTable: Uint8Array | null } {
+function classifyOnTable(
+  cv: Cv,
+  img: SmallRgb,
+  field: LightField,
+  ignore: Uint8Array,
+  sppm: number,
+  alpha: Float32Array,
+): { cls: Uint8Array; onTable: Uint8Array | null } {
   const { width: w, height: h } = img;
   let cls = classify(img, field, ignore, sppm, alpha);
   let onTable = tableRegion(cv, cls, alpha, w, h, sppm);
@@ -482,6 +508,8 @@ function classify(img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: nu
   const cls = new Uint8Array(n);
   const alpha = new Float32Array(n);
   const chroma = new Float32Array(n);
+  /** Direction of each pixel's colour away from the table's (unit RGB vector). */
+  const hue = new Float32Array(n * 3);
   const eYs = new Float32Array(n);
   const row = new Float32Array(w * 3);
   const sig = field.noise;
@@ -511,6 +539,10 @@ function classify(img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: nu
       const db = B - a * eB;
       const c = Math.sqrt((dr * dr + dg * dg + db * db) / ee) / Math.max(a, 0.15);
       chroma[p] = c;
+      const dl = Math.hypot(dr, dg, db) || 1;
+      hue[p * 3] = dr / dl;
+      hue[p * 3 + 1] = dg / dl;
+      hue[p * 3 + 2] = db / dl;
       const Y = (R + 2 * G + B) * 0.25;
       const eY = (eR + 2 * eG + eB) * 0.25;
       eYs[p] = eY;
@@ -570,6 +602,34 @@ function classify(img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: nu
       if ((s / 9 > paleLevel && eYs[p]! < SEG.paleMaxTableY && !nearGlare[p]) || nc >= SEG.paleChromaVotes) pale[p] = 1;
     }
   for (let p = 0; p < n; p++) if (pale[p]) cls[p] = PALE;
+  // A lit, shiny side of a piece is lighter than its body, so it reads "shadow-like", but it keeps
+  // the piece's colour while a cast shadow keeps the table's: shadow-like pixels joined to piece
+  // print and clearly off the table's colour are grown into the piece (owner's glossy pieces
+  // under a lamp, 2026-11-07).
+  const lowC = sig > SEG.grainyNoise ? Infinity : Math.max(SEG.litSideChroma, SEG.litSideTimes * cTable);
+  // Breadth-first, at most `litSideMm` from the print (a lit side is a few mm wide; further
+  // growth would leak along shadows between touching pieces).
+  const maxSteps = Math.max(1, Math.round(SEG.litSideMm * sppm));
+  const depth = new Uint16Array(n);
+  let queue: number[] = [];
+  for (let p = 0; p < n; p++) if (cls[p] === STRONG || cls[p] === WEAK) queue.push(p);
+  for (let step = 1; step <= maxSteps && queue.length; step++) {
+    const next: number[] = [];
+    for (const p of queue) {
+      const x = p % w;
+      for (const q of [p - 1, p + 1, p - w, p + w]) {
+        if (q < 0 || q >= n || (q === p - 1 && x === 0) || (q === p + 1 && x === w - 1)) continue;
+        if (cls[q] !== SHADOW || ignore[q] || chroma[q]! <= lowC || alpha[q]! < SEG.darkWeak) continue;
+        // …and off it in the same direction as the print next to it (a cast shadow's tint differs).
+        if (hue[p * 3]! * hue[q * 3]! + hue[p * 3 + 1]! * hue[q * 3 + 1]! + hue[p * 3 + 2]! * hue[q * 3 + 2]! < SEG.litSideCos) continue;
+        // Piece-coloured and joined to print: as good evidence as print itself.
+        cls[q] = STRONG;
+        depth[q] = step;
+        next.push(q);
+      }
+    }
+    queue = next;
+  }
   return cls;
 }
 
@@ -586,7 +646,13 @@ function classify(img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: nu
  *    shadowed from three sides.)
  *    The part of a run beyond that — on the print side — is print and becomes PALE.
  */
-function explainShadows(cls: Uint8Array, w: number, h: number, sppm: number, ignore: Uint8Array): { dir: Vec2; lengthMm: number; haloMm: number; explained: Uint8Array } | null {
+function explainShadows(
+  cls: Uint8Array,
+  w: number,
+  h: number,
+  sppm: number,
+  ignore: Uint8Array,
+): { dir: Vec2; lengthMm: number; haloMm: number; explained: Uint8Array } | null {
   const isFg = (k: number) => k === STRONG || k === WEAK;
   // 1. Direction and length.
   const samples: number[] = [];
@@ -856,7 +922,17 @@ function fillHolesMax(cv: Cv, sc: CvScope, src: Mat, maxArea: number): Mat {
  * Piece mask on the small image. Each step runs in its own scope so the big label / distance
  * images are freed before the next step allocates (keeps the WebAssembly heap small).
  */
-function buildMask(cv: Cv, cls: Uint8Array, cardZone: Uint8Array, w: number, h: number, priorPx: number, sppm: number, explained: Uint8Array | null, grainy = false): Uint8Array {
+function buildMask(
+  cv: Cv,
+  cls: Uint8Array,
+  cardZone: Uint8Array,
+  w: number,
+  h: number,
+  priorPx: number,
+  sppm: number,
+  explained: Uint8Array | null,
+  grainy = false,
+): Uint8Array {
   const n = w * h;
   // Pale print never covers more than a piece: bigger "pale" areas are the field being off
   // (over-exposure, a reflection), not pieces.
@@ -896,62 +972,63 @@ function buildMask(cv: Cv, cls: Uint8Array, cardZone: Uint8Array, w: number, h: 
   // cast shadows are thin bands (≤ ~3.5 mm) next to pieces; shadow-like pixels far from both the
   // table and any coloured print are print. Their region is grown back over shadow-like pixels
   // by the same distance (the refinement later puts the edge between print and shadow).
-  if (SEG.greyCoreMm > 0) withScope((sc) => {
-    const notTable = new Uint8Array(n);
-    for (let p = 0; p < n; p++) notTable[p] = cls[p] === TABLE || cls[p] === GLARE ? 0 : 255;
-    const ntMat = toMat(cv, sc, notTable, w, h);
-    const dT = sc.keep(new cv.Mat());
-    cv.distanceTransform(ntMat, dT, cv.DIST_L2, 3);
-    const notFg = new Uint8Array(n);
-    for (let p = 0; p < n; p++) notFg[p] = fg[p] ? 0 : 255;
-    const nfMat = toMat(cv, sc, notFg, w, h);
-    const dF = sc.keep(new cv.Mat());
-    cv.distanceTransform(nfMat, dF, cv.DIST_L2, 3);
-    const dt: Float32Array = dT.data32F.slice();
-    const df: Float32Array = dF.data32F.slice();
-    const tCore = (grainy ? SEG.greyCoreGrainyMm : SEG.greyCoreMm) * sppm;
-    const fCore = SEG.greyFgMm * sppm;
-    const grow = new Uint8Array(n);
-    let any = false;
-    for (let p = 0; p < n; p++) {
-      if (cls[p] !== SHADOW && cls[p] !== PALE) continue;
-      grow[p] = 255; // where the core may grow
-      if (cls[p] === SHADOW && dt[p]! > tCore && df[p]! > fCore && (grainy || !(explained && explained[p]))) {
-        notTable[p] = 254; // core marker (reuses the buffer)
-        any = true;
-      }
-    }
-    if (any) {
-      const core = new Uint8Array(n);
-      for (let p = 0; p < n; p++) core[p] = notTable[p] === 254 ? 255 : 0;
-      const coreMat = toMat(cv, sc, core, w, h);
-      const growMat = toMat(cv, sc, grow, w, h);
-      const k3 = sc.keep(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3)));
-      const steps = Math.ceil(tCore);
-      for (let i = 0; i < steps; i++) {
-        cv.dilate(coreMat, coreMat, k3);
-        cv.bitwise_and(coreMat, growMat, coreMat);
-      }
-      // Grey print of loose pieces comes in piece-sized patches; a large patch is the soft shadow
-      // of a person or the phone, not print.
-      const gl = sc.keep(new cv.Mat());
-      const gs = sc.keep(new cv.Mat());
-      const gc = sc.keep(new cv.Mat());
-      const ng: number = cv.connectedComponentsWithStats(coreMat, gl, gs, gc, 8, cv.CV_32S);
-      const gst: Int32Array = gs.data32S.slice();
-      const glab: Int32Array = gl.data32S.slice();
-      const ok = new Uint8Array(ng);
-      for (let i = 1; i < ng; i++) ok[i] = gst[i * 5 + 4]! <= SEG.greyMaxArea * priorPx ? 1 : 0;
+  if (SEG.greyCoreMm > 0)
+    withScope((sc) => {
+      const notTable = new Uint8Array(n);
+      for (let p = 0; p < n; p++) notTable[p] = cls[p] === TABLE || cls[p] === GLARE ? 0 : 255;
+      const ntMat = toMat(cv, sc, notTable, w, h);
+      const dT = sc.keep(new cv.Mat());
+      cv.distanceTransform(ntMat, dT, cv.DIST_L2, 3);
+      const notFg = new Uint8Array(n);
+      for (let p = 0; p < n; p++) notFg[p] = fg[p] ? 0 : 255;
+      const nfMat = toMat(cv, sc, notFg, w, h);
+      const dF = sc.keep(new cv.Mat());
+      cv.distanceTransform(nfMat, dF, cv.DIST_L2, 3);
+      const dt: Float32Array = dT.data32F.slice();
+      const df: Float32Array = dF.data32F.slice();
+      const tCore = (grainy ? SEG.greyCoreGrainyMm : SEG.greyCoreMm) * sppm;
+      const fCore = SEG.greyFgMm * sppm;
+      const grow = new Uint8Array(n);
+      let any = false;
       for (let p = 0; p < n; p++) {
-        if (!ok[glab[p]!]) continue;
-        fg[p] = 255;
-        // On a grainy box lid or tray, pieces printed in the surface's own colour are only darker
-        // (brown on brown): a piece-sized darker patch is clear evidence there, so it counts as
-        // strong print (the white table keeps the cautious reading).
-        if (grainy && cls[p] === SHADOW) cls[p] = STRONG;
+        if (cls[p] !== SHADOW && cls[p] !== PALE) continue;
+        grow[p] = 255; // where the core may grow
+        if (cls[p] === SHADOW && dt[p]! > tCore && df[p]! > fCore && (grainy || !(explained && explained[p]))) {
+          notTable[p] = 254; // core marker (reuses the buffer)
+          any = true;
+        }
       }
-    }
-  });
+      if (any) {
+        const core = new Uint8Array(n);
+        for (let p = 0; p < n; p++) core[p] = notTable[p] === 254 ? 255 : 0;
+        const coreMat = toMat(cv, sc, core, w, h);
+        const growMat = toMat(cv, sc, grow, w, h);
+        const k3 = sc.keep(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3)));
+        const steps = Math.ceil(tCore);
+        for (let i = 0; i < steps; i++) {
+          cv.dilate(coreMat, coreMat, k3);
+          cv.bitwise_and(coreMat, growMat, coreMat);
+        }
+        // Grey print of loose pieces comes in piece-sized patches; a large patch is the soft shadow
+        // of a person or the phone, not print.
+        const gl = sc.keep(new cv.Mat());
+        const gs = sc.keep(new cv.Mat());
+        const gc = sc.keep(new cv.Mat());
+        const ng: number = cv.connectedComponentsWithStats(coreMat, gl, gs, gc, 8, cv.CV_32S);
+        const gst: Int32Array = gs.data32S.slice();
+        const glab: Int32Array = gl.data32S.slice();
+        const ok = new Uint8Array(ng);
+        for (let i = 1; i < ng; i++) ok[i] = gst[i * 5 + 4]! <= SEG.greyMaxArea * priorPx ? 1 : 0;
+        for (let p = 0; p < n; p++) {
+          if (!ok[glab[p]!]) continue;
+          fg[p] = 255;
+          // On a grainy box lid or tray, pieces printed in the surface's own colour are only darker
+          // (brown on brown): a piece-sized darker patch is clear evidence there, so it counts as
+          // strong print (the white table keeps the cautious reading).
+          if (grainy && cls[p] === SHADOW) cls[p] = STRONG;
+        }
+      }
+    });
 
   // Pale pieces: holes of (piece ∪ shadow-like ring).
   const cand = withScope((sc) => {
@@ -1005,6 +1082,7 @@ function buildMask(cv: Cv, cls: Uint8Array, cardZone: Uint8Array, w: number, h: 
     const keep = new Uint8Array(ni);
     for (let i = 1; i < ni; i++) {
       const a = st[i * 5 + 4]!;
+
       if (a > SEG.maxInterior * priorPx) continue;
       const paleShare = paleN[i]! / a;
       // Small holes are filled later anyway when a piece surrounds them.
@@ -1013,7 +1091,12 @@ function buildMask(cv: Cv, cls: Uint8Array, cardZone: Uint8Array, w: number, h: 
       // bit only would also take in the shadowed hollow of a blank.)
       let union = a;
       for (const l of touch[i]!) union += fgArea[l * 5 + 4]!;
-      if (paleShare >= SEG.interiorPale || (touch[i]!.size <= 1 && a >= SEG.interiorMin * priorPx) || (touch[i]!.size >= 2 && union <= SEG.fragmentUnion * priorPx)) keep[i] = 1;
+      if (
+        paleShare >= SEG.interiorPale ||
+        (touch[i]!.size <= 1 && a >= SEG.interiorMin * priorPx) ||
+        (touch[i]!.size >= 2 && union <= SEG.fragmentUnion * priorPx)
+      )
+        keep[i] = 1;
     }
     const cand = new Uint8Array(n);
     for (let p = 0; p < n; p++) cand[p] = (fg[p] || keep[ild[p]!]) && !cardZone[p] ? 255 : 0;
@@ -1085,7 +1168,13 @@ interface BlobCtx {
  * other pixel of the blob goes to its nearest part (breadth-first), so the assembled area keeps
  * its outline.
  */
-function peelRegions(cv: Cv, cc: { nl: number; st: Int32Array; lab: Int32Array }, w: number, h: number, expAt: (x: number, y: number) => number): { nl: number; st: Int32Array; lab: Int32Array } {
+function peelRegions(
+  cv: Cv,
+  cc: { nl: number; st: Int32Array; lab: Int32Array },
+  w: number,
+  h: number,
+  expAt: (x: number, y: number) => number,
+): { nl: number; st: Int32Array; lab: Int32Array } {
   const lab = cc.lab;
   const st: number[] = Array.from(cc.st);
   let nl = cc.nl;
@@ -1186,7 +1275,14 @@ function peelRegions(cv: Cv, cc: { nl: number; st: Int32Array; lab: Int32Array }
  * parts, every pixel of the blob goes to the nearest part (breadth-first through the blob).
  * Truly touching pieces usually survive the opening as one part and stay a flagged clump.
  */
-function splitNecks(cv: Cv, cc: { nl: number; st: Int32Array; lab: Int32Array }, w: number, h: number, expAt: (x: number, y: number) => number, sppm: number): { nl: number; st: Int32Array; lab: Int32Array } {
+function splitNecks(
+  cv: Cv,
+  cc: { nl: number; st: Int32Array; lab: Int32Array },
+  w: number,
+  h: number,
+  expAt: (x: number, y: number) => number,
+  sppm: number,
+): { nl: number; st: Int32Array; lab: Int32Array } {
   const lab = cc.lab;
   const st: number[] = Array.from(cc.st);
   let nl = cc.nl;
@@ -1333,7 +1429,12 @@ function blobsToPieces(cv: Cv, sc: CvScope, c: BlobCtx): { pieces: FoundPiece[];
     };
     // Interquartile range: robust to the object's rim and shadow.
     const printed = pct(0.75) - pct(0.25) > SEG.assembledMinIqr;
-    regions.push({ kind: printed && st[i * 5 + 4]! >= SEG.assembledArea * expOf(i) ? 'assembled' : 'object', outlineImg, outlineMm, areaMm2: polyAreaCentroid(outlineMm).area });
+    regions.push({
+      kind: printed && st[i * 5 + 4]! >= SEG.assembledArea * expOf(i) ? 'assembled' : 'object',
+      outlineImg,
+      outlineMm,
+      areaMm2: polyAreaCentroid(outlineMm).area,
+    });
   }
 
   // Fragments: a piece whose print has a near-white band can fall apart into pieces of a piece.
@@ -1425,8 +1526,7 @@ function blobsToPieces(cv: Cv, sc: CvScope, c: BlobCtx): { pieces: FoundPiece[];
       const rh = ry1 - ry0;
       const set = new Set(members);
       const roi = new Uint8Array(rw * rh);
-      for (let y = ry0; y < ry1; y++)
-        for (let x = rx0; x < rx1; x++) if (set.has(lab[y * w + x]!)) roi[(y - ry0) * rw + (x - rx0)] = 255;
+      for (let y = ry0; y < ry1; y++) for (let x = rx0; x < rx1; x++) if (set.has(lab[y * w + x]!)) roi[(y - ry0) * rw + (x - rx0)] = 255;
       // Per-piece closing (fills narrow near-white inlets and joins fragments; can't bridge to
       // another piece because only this group's pixels are in the ROI), then hole filling.
       const rm = toMat(cv, s2, roi, rw, rh);
@@ -1569,7 +1669,15 @@ function regionOutline(cv: Cv, sc: CvScope, lab: Int32Array, id: number, st: Int
   return out;
 }
 
-function onePiece(cv: Cv, sc: CvScope, c: BlobCtx, roi: Uint8Array, box: [number, number, number, number], area: number, expPx: number): FoundPiece | FoundRegion | null {
+function onePiece(
+  cv: Cv,
+  sc: CvScope,
+  c: BlobCtx,
+  roi: Uint8Array,
+  box: [number, number, number, number],
+  area: number,
+  expPx: number,
+): FoundPiece | FoundRegion | null {
   const { img, cls, cardZone, glare, geo, factor, W, H } = c;
   const { width: w, height: h } = img;
   const [rx0, ry0, rw, rh] = box;
@@ -1665,7 +1773,11 @@ function onePiece(cv: Cv, sc: CvScope, c: BlobCtx, roi: Uint8Array, box: [number
   // knobs and blanks (solidity ≈ 0.75–0.92) and are near-square (aspect ≤ ~1.5 with knobs).
   const aspect = Math.max(rect.size[0], rect.size[1]) / Math.max(1e-6, Math.min(rect.size[0], rect.size[1]));
   const relA = area / expPx;
-  if (!flags.cut && ((relA <= SEG.clumpArea && (solidity > SEG.objectSolidity || aspect > SEG.objectAspect)) || (relA > SEG.clumpArea && (solidity > SEG.objectSolidity || aspect > 3)))) {
+  if (
+    !flags.cut &&
+    ((relA <= SEG.clumpArea && (solidity > SEG.objectSolidity || aspect > SEG.objectAspect)) ||
+      (relA > SEG.clumpArea && (solidity > SEG.objectSolidity || aspect > 3)))
+  ) {
     return { kind: 'object', outlineImg, outlineMm, areaMm2 };
   }
   if (glareIn > 0.01 * area || glareRing > 0.08 * Math.max(1, ringN)) flags.glare = true;
@@ -1673,7 +1785,8 @@ function onePiece(cv: Cv, sc: CvScope, c: BlobCtx, roi: Uint8Array, box: [number
   // Too big, big and not solid, or longer than any piece: probably more than one piece (or a
   // piece with something attached): "spread these apart".
   const expSideMm = Math.sqrt(expPx) / c.sppm;
-  if (rel > SEG.clumpArea || (rel > SEG.clumpSolidArea && solidity < SEG.clumpSolidity) || Math.max(rect.size[0], rect.size[1]) > SEG.clumpLength * expSideMm) flags.clump = true;
+  if (rel > SEG.clumpArea || (rel > SEG.clumpSolidArea && solidity < SEG.clumpSolidity) || Math.max(rect.size[0], rect.size[1]) > SEG.clumpLength * expSideMm)
+    flags.clump = true;
   if (strongShare < 0.25) flags.weak = true;
   // Bigger than a piece with hardly any clear print: a grey/plain object (a display, a lid), or
   // pale pieces we can't separate anyway. Not reported as pieces.
@@ -1682,7 +1795,8 @@ function onePiece(cv: Cv, sc: CvScope, c: BlobCtx, roi: Uint8Array, box: [number
   const score = Math.max(0, Math.min(1, (0.4 + 0.6 * Math.min(1, strongShare / 0.6)) * shapeOk * (flags.glare ? 0.7 : 1) * (flags.cut ? 0.5 : 1)));
   // A faint, badly shaped blob the colour of the table (a soft shadow's or reflection's edge).
   const white = rgbToLab(240, 240, 240);
-  if (flags.weak && score < SEG.minWeakScore && Math.hypot(colour.meanLab[0] - white[0], colour.meanLab[1], colour.meanLab[2]) < SEG.tableLikeDeltaE) return null;
+  if (flags.weak && score < SEG.minWeakScore && Math.hypot(colour.meanLab[0] - white[0], colour.meanLab[1], colour.meanLab[2]) < SEG.tableLikeDeltaE)
+    return null;
 
   return {
     outlineImg,
@@ -1713,7 +1827,17 @@ const MIN_EDGE_CONTRAST = 14;
  * is then removed by erosion along the parallax direction d (photo px), and the outer contour is
  * traced on a 2× upsampled membership map when the photo has fewer than 7 px/mm.
  */
-function traceOutline(cv: Cv, sc: CvScope, c: BlobCtx, roi: Uint8Array, rx0: number, ry0: number, rw: number, rh: number, d: Vec2): { outlineImg: number[]; solidity: number; edgeSharp: number } | null {
+function traceOutline(
+  cv: Cv,
+  sc: CvScope,
+  c: BlobCtx,
+  roi: Uint8Array,
+  rx0: number,
+  ry0: number,
+  rw: number,
+  rh: number,
+  d: Vec2,
+): { outlineImg: number[]; solidity: number; edgeSharp: number } | null {
   const { rgba, factor: f, W, H } = c;
   const ppm = c.sppm * f;
   const X0 = Math.max(0, Math.ceil(rx0 * f - 0.5));
@@ -2114,7 +2238,11 @@ export const SCALE_AREA_BIAS = 1.045;
  * number for the whole photo is enough (tilt ≤ 5–8° → ≤ 1–2 % across the view).
  * Returns null when fewer than 5 piece-like blobs are seen.
  */
-export function estimatePxPerMm(cv: Cv, rgba: PixelBuffer, opts: { pitchMm?: number; zoom?: number; table?: TableModel | null } = {}): { pxPerMm: number; nPieces: number } | null {
+export function estimatePxPerMm(
+  cv: Cv,
+  rgba: PixelBuffer,
+  opts: { pitchMm?: number; zoom?: number; table?: TableModel | null } = {},
+): { pxPerMm: number; nPieces: number } | null {
   return cvGuard(cv, () => {
     const pitch = opts.pitchMm ?? DEFAULT_PITCH_MM;
     const W = rgba.width;

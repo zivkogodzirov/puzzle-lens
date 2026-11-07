@@ -4,6 +4,12 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### Shiny pieces (2026-11-07; checked on your photos, not yet on your iPhone)
+- Under a lamp, the side of a glossy piece facing the light looks lighter and was cut off the outline (pieces looked bitten, some were called "objects", sizes came out 15 % small). Lighter areas that keep the piece's own colour, right next to it (up to 3 mm), now count as part of the piece; shadows keep the table's colour and are left out.
+- Pieces with long knobs at both ends are no longer mistaken for objects.
+- Your 26-piece photos with the 2-denar coin: 26 found in each, sizes within 1.5 % of what the coin measures (before: 21 found, 15 % small, in the portrait photo).
+- On the old tilted photo of the big puzzle (no coin), the size estimate moved from 3.46 to 3.15 px/mm; its true value is only known as a range (3.1–4.0). Use the coin when you want sizes you can trust.
+
 ### Shiny coins (2026-11-07; checked on your screenshot, not yet on your iPhone)
 - Your 2-denar coin was missed: shiny brass is about as bright as the cream table, and a damp mark touched it. The coin is now also found by its yellow colour, judged round by its overall shape (embossing no longer spoils it), and measured at its outer rim. No false coins on any of your 6 earlier table and tray photos.
 
