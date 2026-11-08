@@ -4,6 +4,12 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M4 (part 1): where each piece goes on the box picture (2026-11-08; not yet checked on your iPhone)
+- Every scanned piece now gets its **best spot on the box picture** (column and row from the top-left), how sure (**Strong**, **Likely**, **Several spots look alike**) and up to 4 other possible spots. On the puzzle screen: "On the box picture: N strong · N likely · …"; tap a piece to see its spot marked in green on the box picture. Thumbnails get a green (Strong) or yellow (Likely) dot.
+- How: each piece is straightened by the 4 corners its shape reading found, then its colours and pattern are compared with every spot of the box picture in all 4 turns (coarse to fine); edge and corner pieces only go to matching border spots.
+- Measured on computer-made puzzles: right spot first for 92 % (48 pieces) / 84 % (300 pieces), top 5 for 99 % / 92 %; "Strong" right 95–97 %. On your real pieces: not measured yet (see `docs/M4-CHECKLIST.md`, Part D).
+- Pieces scanned before this version have no spot until scanned again.
+
 ### M3 (part 2): fewer "Not sure" pieces (2026-11-08; not yet checked on your iPhone)
 - A single piece with long knobs at both ends was taken for two touching pieces (on your photo IMG_9276: 4 pieces). When its outline reads as one clean piece, it now counts as one.
 - Shape reading no longer marks pieces down for being ~10 % smaller than their grid cell (the traced top face always is), and it trusts a read when every side is clearly flat or clearly not flat.

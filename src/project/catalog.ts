@@ -11,7 +11,7 @@
  * moved. Pieces that left and matched nothing are marked "missing" (not on the table any more; they
  * come back if found at that spot again). Full fingerprints for lookalikes come in M5.
  */
-import type { PieceFlags, PieceRow, Vec2 } from './types';
+import type { PieceFlags, PiecePatchInfo, PieceRow, Vec2 } from './types';
 
 /** What the reader reports for each piece in a photo (src/cv/pieceFinder.ts FoundPiece, plus a thumbnail). */
 export interface FoundForCatalog {
@@ -24,6 +24,8 @@ export interface FoundForCatalog {
   hueHist: number[];
   flags: PieceFlags;
   thumb?: Blob | null;
+  /** The piece straightened for box placement (M4). */
+  patch?: { blob: Blob; flats: boolean[]; sure: boolean } | null;
 }
 
 export interface MergePlan {
@@ -36,6 +38,8 @@ export interface MergePlan {
   added: PieceRow[];
   /** Thumbnails to store: blob id → JPEG. */
   thumbs: Array<{ id: string; blob: Blob }>;
+  /** Placement patches to store: blob id → raw RGBA. */
+  patches: Array<{ id: string; blob: Blob }>;
   /** Found pieces left out (cut by the photo edge and not known yet). */
   skipped: number;
 }
@@ -147,6 +151,8 @@ export function planMerge(
     now: number;
     newId: () => string;
     thumbId: (pieceId: string) => string;
+    /** Blob id for a piece's placement patch (default: "patch-" + piece id). */
+    patchId?: (pieceId: string) => string;
     /** The photo's view on the table (catalog mm, a polygon). Without it, moved pieces aren't looked for. */
     view?: Vec2[] | null;
   },
@@ -157,6 +163,15 @@ export function planMerge(
   const updates: PieceRow[] = [];
   const added: PieceRow[] = [];
   const thumbs: MergePlan['thumbs'] = [];
+  const patches: MergePlan['patches'] = [];
+  const patchId = ctx.patchId ?? ((pid: string) => `patch-${pid}`);
+  /** This photo's patch for a piece (kept under the piece's existing patch id). */
+  const takePatch = (f: FoundForCatalog, pieceId: string, old: PiecePatchInfo | null | undefined): PiecePatchInfo | null | undefined => {
+    if (!f.patch) return old;
+    const id = old?.blobId ?? patchId(pieceId);
+    patches.push({ id, blob: f.patch.blob });
+    return { blobId: id, flats: f.patch.flats, sure: f.patch.sure, ts: ctx.now };
+  };
   let skipped = 0;
   /** Found pieces matched to nobody by position (index into found), to try as moved pieces. */
   const unmatched: number[] = [];
@@ -207,7 +222,8 @@ export function planMerge(
           next.thumbBlobId = id;
           thumbs.push({ id, blob: f.thumb });
         }
-      }
+        next.patch = takePatch(f, best.id, best.patch);
+      } else if (!best.patch && f.patch && !f.flags.cut && !f.flags.clump) next.patch = takePatch(f, best.id, null);
       updates.push(next);
       continue;
     }
@@ -290,6 +306,7 @@ export function planMerge(
       next.thumbBlobId = id;
       thumbs.push({ id, blob: f.thumb });
     }
+    next.patch = takePatch(f, best.id, best.patch);
     updates.push(next);
   }
   for (const p of left) {
@@ -321,9 +338,10 @@ export function planMerge(
       seen: 1,
       bestPxPerMm: ctx.pxPerMm,
       flags: { ...f.flags },
+      patch: takePatch(f, id, null) ?? null,
     });
   }
-  return { updates, added, thumbs, skipped, moved, missing };
+  return { updates, added, thumbs, patches, skipped, moved, missing };
 }
 
 /**

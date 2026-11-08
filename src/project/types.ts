@@ -126,6 +126,19 @@ export interface PieceRow {
   /** Pixels per mm of the best photo so far (overview ≈ 5, close-up ≈ 10). */
   bestPxPerMm: number;
   flags: PieceFlags;
+  /**
+   * The piece straightened for box placement (M4): blob id of its raw RGBA patch (PATCH_SIZE²),
+   * which sides read as flat (patch top, right, bottom, left), whether that read is trusted, and
+   * when it was taken (placements are redone when this changes). Absent on pieces scanned before M4.
+   */
+  patch?: PiecePatchInfo | null;
+}
+
+export interface PiecePatchInfo {
+  blobId: string;
+  flats: boolean[];
+  sure: boolean;
+  ts: number;
 }
 
 export type SnapKind = 'overview' | 'detail' | 'empty-table' | 'marker-map' | 'box';

@@ -13,6 +13,9 @@ import { deleteScan, restoreScan, scanBinSummary, type ScanBinSummary } from '..
 import type { PieceRow, Project } from '../../project/types';
 import { db } from '../../db/db';
 import { readShape, READ_OK, type PieceKind } from '../../cv/shapeRead';
+import type { Placement } from '../../cv/placement';
+import { boxKeyOf, readPlacements, stalePieces, updatePlacements, type PlacementCache } from '../../project/placements';
+import { readerWorker } from '../workers';
 import { canShareFile, downloadUrl, revokeDownloadUrls, shareOrDownload } from '../../report/share';
 import { formatBytes } from '../../report/collect';
 import { logError, logInfo, logWarn } from '../../log/logger';
@@ -349,7 +352,7 @@ export function PuzzleScreen() {
           <button class="btn btn-primary btn-block" data-testid="scan-pieces" onClick={() => go('scan', p.id)}>
             📷 Scan pieces
           </button>
-          <Catalog projectId={p.id} version={pieces} markers={p.tracking === 'markers'} grid={p.grid} pitch={p.piecePitch} />
+          <Catalog projectId={p.id} version={pieces} markers={p.tracking === 'markers'} grid={p.grid} pitch={p.piecePitch} project={p} />
           {scanNote && (
             <div class="notice notice-good" role="status" data-testid="scan-bin-note">
               {scanNote}
@@ -513,22 +516,52 @@ function Catalog({
   markers,
   grid,
   pitch,
+  project,
 }: {
   projectId: string;
   version: unknown;
   markers: boolean;
   grid: Project['grid'];
   pitch: Project['piecePitch'];
+  project: Project;
 }) {
   const [rows, setRows] = useState<PieceRow[]>([]);
   const [show, setShow] = useState<'all' | 'border' | 'interior' | 'unsure'>('all');
+  const [places, setPlaces] = useState<PlacementCache | null>(null);
+  const [placing, setPlacing] = useState<{ done: number; total: number } | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const boxUrl = useBlobUrl(project.box?.rectifiedBlobId, project.box);
+  const boxKey = boxKeyOf(project);
   useEffect(() => {
-    void db()
-      .pieces.where('projectId')
-      .equals(projectId)
-      .toArray()
-      .then((ps) => setRows(ps.filter((q) => q.status === 'table')));
-  }, [projectId, version]);
+    let live = true;
+    void (async () => {
+      const ps = (await db().pieces.where('projectId').equals(projectId).toArray()).filter((q) => q.status === 'table');
+      if (!live) return;
+      setRows(ps);
+      // Box placement (M4): show what is known, then place pieces that are new or photographed again.
+      if (!boxKey) return;
+      const cached = await readPlacements(projectId);
+      if (live && cached?.boxKey === boxKey) setPlaces(cached);
+      const todo = stalePieces(cached, boxKey, ps).length;
+      if (!todo) return;
+      try {
+        const rw = readerWorker();
+        const info = await rw.ready;
+        if (!info?.ok || !live) return;
+        setPlacing({ done: 0, total: todo });
+        const next = await updatePlacements(project, ps, rw.api, (done, total) => live && setPlacing({ done, total }));
+        if (live) setPlaces(next);
+        logInfo('place', `Placed ${todo} pieces on the box picture`);
+      } catch (err) {
+        logError('place', 'Box placement failed', err);
+      } finally {
+        if (live) setPlacing(null);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [projectId, version, boxKey]);
   const cell: [number, number] | null = pitch ? [pitch.wMm, pitch.hMm] : null;
   const groups = useMemo(() => new Map(rows.map((r) => [r.id, pieceGroup(r, cell)])), [rows, cell?.[0], cell?.[1]]);
   if (!rows.length)
@@ -573,26 +606,170 @@ function Catalog({
           wrong. Check?
         </div>
       )}
+      {project.box && <PlaceSummary places={places} rows={rows} placing={placing} />}
       <div class="catalog-grid" data-testid="catalog">
         {shown.slice(0, SHOW_MAX).map((r) => (
-          <PieceThumb key={r.id} piece={r} group={groups.get(r.id)!} />
+          <PieceThumb
+            key={r.id}
+            piece={r}
+            group={groups.get(r.id)!}
+            place={places?.byPiece[r.id]?.placement ?? null}
+            selected={selected === r.id}
+            onSelect={() => setSelected(selected === r.id ? null : r.id)}
+          />
         ))}
       </div>
+      {selected && project.grid && rows.some((r) => r.id === selected) && (
+        <PieceSpots
+          piece={rows.find((r) => r.id === selected)!}
+          place={places?.byPiece[selected]?.placement ?? null}
+          boxUrl={boxUrl}
+          grid={project.grid}
+          aspect={project.box ? project.box.width / project.box.height : project.grid.cols / project.grid.rows}
+          onClose={() => setSelected(null)}
+        />
+      )}
       {shown.length > SHOW_MAX && <p class="muted small">…and {shown.length - SHOW_MAX} more.</p>}
     </div>
   );
 }
 
-function PieceThumb({ piece, group }: { piece: PieceRow; group: ShapeGroup }) {
+function PieceThumb({
+  piece,
+  group,
+  place,
+  onSelect,
+  selected,
+}: {
+  piece: PieceRow;
+  group: ShapeGroup;
+  place: Placement | null;
+  onSelect: () => void;
+  selected: boolean;
+}) {
   const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
-  const cls = [piece.flags.clump ? 'flag-clump' : piece.flags.weak ? 'flag-weak' : '', group === 'corner' ? 'kind-corner' : group === 'edge' ? 'kind-edge' : '']
+  const cls = [
+    piece.flags.clump ? 'flag-clump' : piece.flags.weak ? 'flag-weak' : '',
+    group === 'corner' ? 'kind-corner' : group === 'edge' ? 'kind-edge' : '',
+    selected ? 'thumb-selected' : '',
+  ]
     .join(' ')
     .trim();
   const title = group === 'corner' ? 'Corner piece' : group === 'edge' ? 'Edge piece' : group === 'interior' ? 'Inside piece' : 'Shape not sure yet';
-  return url ? (
-    <img src={url} class={cls} alt={title} title={title} loading="lazy" data-group={group} />
-  ) : (
-    <div class={`catalog-empty ${cls}`} title={title} data-group={group} />
+  return (
+    <button class="thumb-btn" onClick={onSelect} data-group={group} data-place={place?.verdict ?? 'none'} aria-label={`${title}: show where it goes`}>
+      {url ? <img src={url} class={cls} alt={title} title={title} loading="lazy" /> : <div class={`catalog-empty ${cls}`} title={title} />}
+      {place && place.verdict !== 'several' && <span class={`place-dot place-${place.verdict}`} />}
+    </button>
+  );
+}
+
+const VERDICT_WORDS: Record<Placement['verdict'], string> = { strong: 'Strong', likely: 'Likely', several: 'Several spots look alike' };
+
+/** How many pieces have a spot on the box picture, and progress while placing. */
+function PlaceSummary({ places, rows, placing }: { places: PlacementCache | null; rows: PieceRow[]; placing: { done: number; total: number } | null }) {
+  const n = { strong: 0, likely: 0, several: 0 };
+  for (const r of rows) {
+    const v = places?.byPiece[r.id]?.placement.verdict;
+    if (v) n[v]++;
+  }
+  const none = rows.length - n.strong - n.likely - n.several;
+  return (
+    <p class="small" data-testid="place-summary">
+      {placing ? (
+        <span data-testid="placing">
+          Finding spots on the box picture… {placing.done} of {placing.total}
+        </span>
+      ) : (
+        <>
+          On the box picture: <span class="legend-strong">{n.strong} strong</span> · <span class="legend-likely">{n.likely} likely</span> · {n.several} several
+          spots look alike
+          {none > 0 ? <span class="muted"> · {none} not placed yet (scanned before this version: scan again)</span> : null}. Tap a piece to see where it goes.
+        </>
+      )}
+    </p>
+  );
+}
+
+/** One piece's best spots on the box picture (column, row from the top-left, 1-based). */
+function PieceSpots({
+  piece,
+  place,
+  boxUrl,
+  grid,
+  aspect,
+  onClose,
+}: {
+  piece: PieceRow;
+  place: Placement | null;
+  boxUrl: string | null;
+  grid: { cols: number; rows: number };
+  aspect: number;
+  onClose: () => void;
+}) {
+  const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
+  const best = place?.top[0];
+  return (
+    <div class="card piece-spots" data-testid="piece-spots">
+      <div class="row">
+        {url && <img src={url} class="spot-thumb" alt="This piece" />}
+        <div class="grow">
+          {best ? (
+            <>
+              <p data-testid="spot-verdict">
+                <strong>
+                  Column {best.col + 1}, row {best.row + 1}
+                </strong>{' '}
+                <span class={`legend-${place!.verdict}`}>
+                  ({VERDICT_WORDS[place!.verdict]}, {Math.round(best.p * 100)} %)
+                </span>
+              </p>
+              <p class="muted small">Counted from the top-left corner of the box picture.</p>
+              {place!.top.slice(1).some((t) => t.p >= 0.01) && (
+                <p class="small" data-testid="spot-others">
+                  Also possible:{' '}
+                  {place!.top
+                    .slice(1)
+                    .filter((t) => t.p >= 0.01)
+                    .map((t) => `column ${t.col + 1}, row ${t.row + 1} (${Math.round(t.p * 100)} %)`)
+                    .join('; ')}
+                </p>
+              )}
+            </>
+          ) : (
+            <p data-testid="spot-verdict">No spot yet: scan this piece again (overview or close-up).</p>
+          )}
+        </div>
+        <button class="btn btn-small" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      {boxUrl && place && (
+        <svg
+          class="spot-box"
+          style={{ aspectRatio: String(aspect) }}
+          viewBox={`0 0 ${grid.cols} ${grid.rows}`}
+          preserveAspectRatio="none"
+          data-testid="spot-box"
+        >
+          <image href={boxUrl} x={0} y={0} width={grid.cols} height={grid.rows} preserveAspectRatio="none" />
+          {place.top
+            .filter((t, i) => i === 0 || t.p >= 0.01)
+            .reverse()
+            .map((t, i, arr) => (
+              <rect
+                key={`${t.col},${t.row}`}
+                x={t.col}
+                y={t.row}
+                width={1}
+                height={1}
+                class={i === arr.length - 1 ? 'spot-best' : 'spot-other'}
+                vector-effect="non-scaling-stroke"
+              />
+            ))}
+        </svg>
+      )}
+    </div>
   );
 }
 

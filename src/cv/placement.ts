@@ -1,0 +1,537 @@
+/**
+ * Box placement (M4, RESEARCH §9): where on the box picture does a piece go?
+ *
+ * 1. Piece patch: the piece straightened by its 4 corners (from shape reading) into a square
+ *    "core" of PATCH_CORE px (one grid cell) with a PATCH_MARGIN px border for its knobs; a mask
+ *    keeps only the piece itself (its outline, eroded a little: the edge mixes wall and table).
+ * 2. Box grid: the straightened box picture resampled to exactly CELL px per cell, in Lab.
+ * 3. Score (cell, quarter turn, small shift): masked zero-mean normalised cross-correlation (ZNCC)
+ *    of lightness and of the two colour channels (each weighted by how much texture the piece has
+ *    in it, so plain pieces aren't scored on noise), minus a penalty for different mean colour.
+ *    Coarse to fine: 8 px per cell, every cell × 4 turns → best 48; 16 px, ±2 px shifts → best 12;
+ *    32 px, ±2 px shifts → final scores.
+ * 4. Border rule: a piece read as corner/edge goes only where its flat sides face the picture's
+ *    edges (and an inside piece not on the edge), when the read is trusted; otherwise a penalty.
+ * 5. Probabilities: softmax over the finalists plus "somewhere else"; verdict Strong / Likely /
+ *    Several spots look alike.
+ *
+ * Plain TypeScript on typed arrays (no OpenCV), so it runs in the reader worker.
+ */
+import type { PixelBuffer } from './frameAnalyser';
+import { applyH, fitHomography, invertH } from '../geo/homography';
+import type { Vec2 } from '../project/types';
+
+/** Patch core (one cell) and margin, in px; the patch is PATCH_SIZE square. */
+export const PATCH_CORE = 32;
+export const PATCH_MARGIN = 12;
+export const PATCH_SIZE = PATCH_CORE + 2 * PATCH_MARGIN;
+
+export type Verdict = 'strong' | 'likely' | 'several';
+
+export interface PlacementSpot {
+  col: number;
+  row: number;
+  /** Quarter turns clockwise that make the piece (as photographed, straightened) sit upright. */
+  rot: 0 | 1 | 2 | 3;
+  score: number;
+  /** Probability (finalists plus "somewhere else"). */
+  p: number;
+}
+
+export interface Placement {
+  top: PlacementSpot[];
+  verdict: Verdict;
+}
+
+/** Tuned on the synthetic validation sets (see test/unit/cv-placement*.test.ts). */
+export const PLACE = {
+  /** Softmax temperature on scores (fitted by log-loss on val48 + val300, 2026-11-08). */
+  temperature: 0.008,
+  /** "Somewhere else": as likely as a finalist scoring this far below the best (score units). */
+  elseBelow: 0.04,
+  /** Strong: right 95.4 % of the time on val48 + val300 (78 % of pieces); Likely: ≥ 0.4 (90 % right). */
+  strongP: 0.75,
+  likelyP: 0.4,
+  /** Channel weights (lightness, a, b). */
+  wL: 1,
+  wC: 0.6,
+  /** A channel's ZNCC counts fully once the piece's spread in it reaches this (Lab units). */
+  texL: 6,
+  texC: 3,
+  /** Mean-colour penalty: ΔE / meanDE. */
+  meanDE: 60,
+  /** Penalty per wrong border side when the shape read isn't trusted. */
+  borderSoft: 0.15,
+  /** Mask erosion (px at PATCH_CORE scale). */
+  erode: 2,
+};
+
+// ---- Colour --------------------------------------------------------------------------------------
+
+const LIN = new Float32Array(256);
+for (let i = 0; i < 256; i++) {
+  const v = i / 255;
+  LIN[i] = v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+}
+const f3 = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+
+/** sRGB (0–255, may be fractional) → Lab, written into out at k. */
+function labInto(r: number, g: number, b: number, out: Float32Array, k: number): void {
+  const R = lin(r);
+  const G = lin(g);
+  const B = lin(b);
+  const x = f3((0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047);
+  const y = f3(0.2126 * R + 0.7152 * G + 0.0722 * B);
+  const z = f3((0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883);
+  out[k] = 116 * y - 16;
+  out[k + 1] = 500 * (x - y);
+  out[k + 2] = 200 * (y - z);
+}
+function lin(v: number): number {
+  const i = Math.max(0, Math.min(255, v));
+  const lo = Math.floor(i);
+  const hi = Math.min(255, lo + 1);
+  return LIN[lo]! + (LIN[hi]! - LIN[lo]!) * (i - lo);
+}
+
+// ---- Piece patch ---------------------------------------------------------------------------------
+
+/** A straightened piece: RGBA, PATCH_SIZE square; alpha 255 = piece, 0 = not. */
+export interface PiecePatch {
+  size: number;
+  rgba: Uint8Array;
+}
+
+/**
+ * Straightens one piece from the photo. `corners`: the piece's 4 corners in photo px, in outline
+ * order clockwise on screen (shape reading's order: side k runs from corner k to k + 1); corner 0
+ * goes to the patch's top-left, so side 0 is the patch's top. `outline`: the piece outline (photo px).
+ */
+export function extractPatch(photo: PixelBuffer, corners: Vec2[], outline: ArrayLike<number>): PiecePatch | null {
+  const S = PATCH_SIZE;
+  const m = PATCH_MARGIN;
+  const c = PATCH_CORE;
+  const H = fitHomography(
+    [
+      [m, m],
+      [m + c, m],
+      [m + c, m + c],
+      [m, m + c],
+    ],
+    corners,
+  );
+  if (!H) return null;
+  const out = new Uint8Array(S * S * 4);
+  const mask = new Uint8Array(S * S);
+  // Photo px per patch px (for supersampling).
+  const scale = Math.hypot(corners[1]![0] - corners[0]![0], corners[1]![1] - corners[0]![1]) / c;
+  const sub = Math.max(1, Math.min(4, Math.round(scale)));
+  const { data, stride, width: W, height: Hh } = photo;
+  // The outline in patch coordinates, filled row by row (even-odd), once per piece.
+  const Hinv = invertH(H);
+  if (!Hinv) return null;
+  const poly: number[] = [];
+  for (let i = 0; i < outline.length; i += 2) poly.push(...applyH(Hinv, [outline[i]!, outline[i + 1]!]));
+  const inside = new Uint8Array(S * S);
+  const xs: number[] = [];
+  for (let y = 0; y < S; y++) {
+    const yc = y + 0.5;
+    xs.length = 0;
+    for (let i = 0, n = poly.length / 2, j = n - 1; i < n; j = i++) {
+      const yi = poly[2 * i + 1]!;
+      const yj = poly[2 * j + 1]!;
+      if (yi > yc !== yj > yc) xs.push(poly[2 * i]! + ((yc - yi) * (poly[2 * j]! - poly[2 * i]!)) / (yj - yi));
+    }
+    xs.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < xs.length; k += 2)
+      for (let x = Math.max(0, Math.ceil(xs[k]! - 0.5)); x < Math.min(S, Math.ceil(xs[k + 1]! - 0.5)); x++) inside[y * S + x] = 1;
+  }
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++) {
+      if (!inside[y * S + x]) continue;
+      mask[y * S + x] = 1;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let n = 0;
+      for (let j = 0; j < sub; j++)
+        for (let i = 0; i < sub; i++) {
+          const q = applyH(H, [x + (i + 0.5) / sub, y + (j + 0.5) / sub]);
+          const px = Math.round(q[0] - 0.5);
+          const py = Math.round(q[1] - 0.5);
+          if (px < 0 || py < 0 || px >= W || py >= Hh) continue;
+          const k = py * stride + px * 4;
+          r += data[k]!;
+          g += data[k + 1]!;
+          b += data[k + 2]!;
+          n++;
+        }
+      if (!n) {
+        mask[y * S + x] = 0;
+        continue;
+      }
+      const o = (y * S + x) * 4;
+      out[o] = Math.round(r / n);
+      out[o + 1] = Math.round(g / n);
+      out[o + 2] = Math.round(b / n);
+    }
+  // Erode the mask: the outline's edge mixes the piece's wall, its shadow and the table.
+  let cur = mask;
+  for (let e = 0; e < PLACE.erode; e++) {
+    const next = new Uint8Array(S * S);
+    for (let y = 1; y < S - 1; y++)
+      for (let x = 1; x < S - 1; x++) {
+        const k = y * S + x;
+        next[k] = cur[k]! && cur[k - 1]! && cur[k + 1]! && cur[k - S]! && cur[k + S]! ? 1 : 0;
+      }
+    cur = next;
+  }
+  for (let k = 0; k < S * S; k++) out[k * 4 + 3] = cur[k] ? 255 : 0;
+  return { size: S, rgba: out };
+}
+
+// ---- Box grid ------------------------------------------------------------------------------------
+
+interface Level {
+  /** px per cell at this level. */
+  cell: number;
+  w: number;
+  h: number;
+  /** Lab, w × h × 3. */
+  lab: Float32Array;
+}
+
+export interface BoxGrid {
+  cols: number;
+  rows: number;
+  levels: [Level, Level, Level];
+  /** Mean and spread of the picture's Lab (for colour matching). */
+  stats: { mean: [number, number, number]; std: [number, number, number] };
+}
+
+/** Area-average resize of RGBA (any scale ≤ ~1 per axis; upscaling falls back to nearest). */
+function resizeRgb(src: { data: ArrayLike<number>; width: number; height: number; stride: number }, w: number, h: number): Float32Array {
+  const fx = src.width / w;
+  const fy = src.height / h;
+  const out = new Float32Array(w * h * 3);
+  for (let y = 0; y < h; y++) {
+    const y0 = y * fy;
+    const y1 = Math.min(src.height, (y + 1) * fy);
+    for (let x = 0; x < w; x++) {
+      const x0 = x * fx;
+      const x1 = Math.min(src.width, (x + 1) * fx);
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let ws = 0;
+      for (let yy = Math.floor(y0); yy < Math.max(Math.floor(y0) + 1, Math.ceil(y1)); yy++) {
+        const wy = Math.max(0, Math.min(yy + 1, y1) - Math.max(yy, y0)) || (fy < 1 ? 1 : 0);
+        if (!wy) continue;
+        for (let xx = Math.floor(x0); xx < Math.max(Math.floor(x0) + 1, Math.ceil(x1)); xx++) {
+          const wx = Math.max(0, Math.min(xx + 1, x1) - Math.max(xx, x0)) || (fx < 1 ? 1 : 0);
+          if (!wx) continue;
+          const k = Math.min(src.height - 1, yy) * src.stride + Math.min(src.width - 1, xx) * 4;
+          const wgt = wx * wy;
+          r += src.data[k]! * wgt;
+          g += src.data[k + 1]! * wgt;
+          b += src.data[k + 2]! * wgt;
+          ws += wgt;
+        }
+      }
+      const o = (y * w + x) * 3;
+      out[o] = r / ws;
+      out[o + 1] = g / ws;
+      out[o + 2] = b / ws;
+    }
+  }
+  return out;
+}
+
+function toLab(rgb: Float32Array): Float32Array {
+  const out = new Float32Array(rgb.length);
+  for (let k = 0; k < rgb.length; k += 3) labInto(rgb[k]!, rgb[k + 1]!, rgb[k + 2]!, out, k);
+  return out;
+}
+
+/** The straightened box picture (exactly the puzzle's picture) cut into cols × rows cells. */
+export function buildBoxGrid(picture: { data: ArrayLike<number>; width: number; height: number; stride: number }, cols: number, rows: number): BoxGrid {
+  const levels = [8, 16, 32].map((cell) => {
+    const w = cols * cell;
+    const h = rows * cell;
+    return { cell, w, h, lab: toLab(resizeRgb(picture, w, h)) };
+  }) as [Level, Level, Level];
+  return { cols, rows, levels, stats: labStats(levels[2].lab, null)! };
+}
+
+// ---- Matching ------------------------------------------------------------------------------------
+
+/** A colour transform from the pieces' Lab to the box picture's (per channel: (v − m1) / s1 × s2 + m2). */
+export interface ColourMatch {
+  from: { mean: [number, number, number]; std: [number, number, number] };
+  to: { mean: [number, number, number]; std: [number, number, number] };
+}
+
+/** Mean and spread of the piece pixels' Lab over many patches (for a one-time colour match, RESEARCH §9.5). */
+export function patchStats(patches: PiecePatch[]): { mean: [number, number, number]; std: [number, number, number] } | null {
+  const parts: Float32Array[] = [];
+  for (const p of patches) {
+    const n = p.rgba.length / 4;
+    const lab = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) labInto(p.rgba[i * 4]!, p.rgba[i * 4 + 1]!, p.rgba[i * 4 + 2]!, lab, i * 3);
+    const keep = new Uint8Array(n);
+    for (let i = 0; i < n; i++) keep[i] = p.rgba[i * 4 + 3] ? 1 : 0;
+    parts.push(lab, keep as unknown as Float32Array);
+  }
+  const all: number[] = [];
+  for (let j = 0; j < parts.length; j += 2) {
+    const lab = parts[j]!;
+    const keep = parts[j + 1]! as unknown as Uint8Array;
+    for (let i = 0; i < keep.length; i++) if (keep[i]) all.push(lab[i * 3]!, lab[i * 3 + 1]!, lab[i * 3 + 2]!);
+  }
+  return all.length >= 300 ? labStats(Float32Array.from(all), null) : null;
+}
+
+/** Mean and spread per Lab channel of a packed Lab array (optionally only where keep[i]). */
+function labStats(lab: Float32Array, keep: Uint8Array | null): { mean: [number, number, number]; std: [number, number, number] } | null {
+  const sum = [0, 0, 0];
+  const sq = [0, 0, 0];
+  let n = 0;
+  for (let i = 0; i < lab.length / 3; i++) {
+    if (keep && !keep[i]) continue;
+    for (let c = 0; c < 3; c++) {
+      const v = lab[i * 3 + c]!;
+      sum[c] = sum[c]! + v;
+      sq[c] = sq[c]! + v * v;
+    }
+    n++;
+  }
+  if (!n) return null;
+  const mean = sum.map((v) => v / n) as [number, number, number];
+  const std = sq.map((v, c) => Math.sqrt(Math.max(1e-6, v / n - mean[c]! ** 2))) as [number, number, number];
+  return { mean, std };
+}
+
+interface PatchLevel {
+  size: number;
+  margin: number;
+  /** Lab × 4 rotations, each size × size × 3. */
+  lab: Float32Array[];
+  /** Weights (0–1) × 4 rotations. */
+  w: Float32Array[];
+}
+
+/** Patch at a level (area-averaged), its Lab (colour-matched), rotated 0–3 quarter turns clockwise. */
+function patchLevel(patch: PiecePatch, cell: number, cm: ColourMatch | null): PatchLevel {
+  const k = PATCH_CORE / cell;
+  const size = Math.round(PATCH_SIZE / k);
+  const margin = Math.round(PATCH_MARGIN / k);
+  const S = patch.size;
+  const rgb = new Float32Array(size * size * 3);
+  const w0 = new Float32Array(size * size);
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let n = 0;
+      let tot = 0;
+      for (let yy = Math.floor(y * k); yy < Math.floor((y + 1) * k); yy++)
+        for (let xx = Math.floor(x * k); xx < Math.floor((x + 1) * k); xx++) {
+          tot++;
+          const o = (yy * S + xx) * 4;
+          if (!patch.rgba[o + 3]) continue;
+          r += patch.rgba[o]!;
+          g += patch.rgba[o + 1]!;
+          b += patch.rgba[o + 2]!;
+          n++;
+        }
+      const i = y * size + x;
+      if (n) {
+        rgb[i * 3] = r / n;
+        rgb[i * 3 + 1] = g / n;
+        rgb[i * 3 + 2] = b / n;
+        // A pixel only partly on the piece counts only if mostly on it.
+        w0[i] = n / tot >= 0.75 ? 1 : 0;
+      }
+    }
+  const lab0 = toLab(rgb);
+  if (cm)
+    for (let i = 0; i < size * size; i++)
+      for (let c = 0; c < 3; c++) lab0[i * 3 + c] = ((lab0[i * 3 + c]! - cm.from.mean[c]!) / cm.from.std[c]!) * cm.to.std[c]! + cm.to.mean[c]!;
+  const lab: Float32Array[] = [lab0];
+  const w: Float32Array[] = [w0];
+  for (let r = 1; r < 4; r++) {
+    const pl = lab[r - 1]!;
+    const pw = w[r - 1]!;
+    const nl = new Float32Array(size * size * 3);
+    const nw = new Float32Array(size * size);
+    // Quarter turn clockwise: new[y][x] = old[size − 1 − x][y].
+    for (let y = 0; y < size; y++)
+      for (let x = 0; x < size; x++) {
+        const src = (size - 1 - x) * size + y;
+        const dst = y * size + x;
+        nw[dst] = pw[src]!;
+        nl[dst * 3] = pl[src * 3]!;
+        nl[dst * 3 + 1] = pl[src * 3 + 1]!;
+        nl[dst * 3 + 2] = pl[src * 3 + 2]!;
+      }
+    lab.push(nl);
+    w.push(nw);
+  }
+  return { size, margin, lab, w };
+}
+
+/** Score of a patch level placed with its core's top-left at box pixel (x0, y0). */
+function score(lv: Level, pl: PatchLevel, rot: number, x0: number, y0: number): number {
+  const { size, margin } = pl;
+  const P = pl.lab[rot]!;
+  const Wt = pl.w[rot]!;
+  const B = lv.lab;
+  let n = 0;
+  let outside = 0;
+  const sp = [0, 0, 0];
+  const sb = [0, 0, 0];
+  const spp = [0, 0, 0];
+  const sbb = [0, 0, 0];
+  const spb = [0, 0, 0];
+  for (let y = 0; y < size; y++) {
+    const by = y0 - margin + y;
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      if (!Wt[i]) continue;
+      const bx = x0 - margin + x;
+      if (bx < 0 || by < 0 || bx >= lv.w || by >= lv.h) {
+        outside++;
+        continue;
+      }
+      const bi = (by * lv.w + bx) * 3;
+      for (let c = 0; c < 3; c++) {
+        const p = P[i * 3 + c]!;
+        const b = B[bi + c]!;
+        sp[c] = sp[c]! + p;
+        sb[c] = sb[c]! + b;
+        spp[c] = spp[c]! + p * p;
+        sbb[c] = sbb[c]! + b * b;
+        spb[c] = spb[c]! + p * b;
+      }
+      n++;
+    }
+  }
+  if (n < 8) return -1;
+  let z = 0;
+  let wz = 0;
+  const meanP = [0, 0, 0];
+  const meanB = [0, 0, 0];
+  for (let c = 0; c < 3; c++) {
+    meanP[c] = sp[c]! / n;
+    meanB[c] = sb[c]! / n;
+    const vp = Math.max(1e-6, spp[c]! / n - meanP[c]! ** 2);
+    const vb = Math.max(1e-6, sbb[c]! / n - meanB[c]! ** 2);
+    const cov = spb[c]! / n - meanP[c]! * meanB[c]!;
+    const zc = cov / Math.sqrt(vp * vb);
+    // Texture gate: a channel the piece has hardly any variation in says little.
+    const gate = Math.min(1, Math.sqrt(vp) / (c === 0 ? PLACE.texL : PLACE.texC));
+    const wc = (c === 0 ? PLACE.wL : PLACE.wC) * gate;
+    z += wc * zc;
+    wz += wc;
+  }
+  const zn = wz > 0 ? z / wz : 0;
+  // Mean colour: plain pieces are placed mostly by it.
+  const dE = Math.hypot(meanP[0]! - meanB[0]!, meanP[1]! - meanB[1]!, meanP[2]! - meanB[2]!);
+  const gateAll = Math.min(1, wz / (PLACE.wL + 2 * PLACE.wC));
+  return gateAll * zn - dE / PLACE.meanDE - outside / (n + outside);
+}
+
+/**
+ * Border rule for a quarter turn: which sides of the piece (after turning) are flat must match
+ * which picture edges the cell touches. `flats`: the piece's sides (patch top, right, bottom, left)
+ * read as flat. Returns the number of sides that disagree.
+ */
+function borderMismatch(flats: boolean[], rot: number, col: number, row: number, cols: number, rows: number): number {
+  const atEdge = [row === 0, col === cols - 1, row === rows - 1, col === 0];
+  let bad = 0;
+  for (let d = 0; d < 4; d++) {
+    // After `rot` quarter turns clockwise, the side now facing d was side d − rot.
+    const flat = flats[(d - rot + 4) % 4]!;
+    if (flat !== atEdge[d]) bad++;
+  }
+  return bad;
+}
+
+export interface PlaceOptions {
+  /** The piece's sides (patch top, right, bottom, left) read as flat, and whether that read is trusted. */
+  flats?: boolean[] | null;
+  flatsSure?: boolean;
+  colour?: ColourMatch | null;
+  /** How many spots to return (default 5). */
+  topN?: number;
+}
+
+/** Where a piece goes on the box picture: the best spots with probabilities, and a verdict. */
+export function placePiece(box: BoxGrid, patch: PiecePatch, opts: PlaceOptions = {}): Placement {
+  const { cols, rows } = box;
+  const flats = opts.flats ?? null;
+  const pen = (rot: number, col: number, row: number): number => {
+    if (!flats) return 0;
+    const bad = borderMismatch(flats, rot, col, row, cols, rows);
+    if (!bad) return 0;
+    return opts.flatsSure ? Infinity : PLACE.borderSoft * bad;
+  };
+  const cm = opts.colour ?? null;
+  const pls = box.levels.map((lv) => patchLevel(patch, lv.cell, cm));
+
+  // Level 0: every cell × 4 turns.
+  type Cand = { col: number; row: number; rot: number; dx: number; dy: number; s: number };
+  let cands: Cand[] = [];
+  const l0 = box.levels[0];
+  for (let row = 0; row < rows; row++)
+    for (let col = 0; col < cols; col++)
+      for (let rot = 0; rot < 4; rot++) {
+        const pn = pen(rot, col, row);
+        if (pn === Infinity) continue;
+        cands.push({ col, row, rot, dx: 0, dy: 0, s: score(l0, pls[0]!, rot, col * l0.cell, row * l0.cell) - pn });
+      }
+  cands.sort((a, b) => b.s - a.s);
+  cands = cands.slice(0, 48);
+  // Levels 1 and 2: refine with ±2 px shifts.
+  for (const [li, keep] of [
+    [1, 12],
+    [2, 12],
+  ] as const) {
+    const lv = box.levels[li];
+    const pl = pls[li]!;
+    for (const c of cands) {
+      const bx = c.dx * 2;
+      const by = c.dy * 2;
+      let best = -Infinity;
+      let bdx = bx;
+      let bdy = by;
+      for (let dy = -2; dy <= 2; dy++)
+        for (let dx = -2; dx <= 2; dx++) {
+          const s = score(lv, pl, c.rot, c.col * lv.cell + bx + dx, c.row * lv.cell + by + dy);
+          if (s > best) [best, bdx, bdy] = [s, bx + dx, by + dy];
+        }
+      c.s = best - pen(c.rot, c.col, c.row);
+      c.dx = bdx;
+      c.dy = bdy;
+    }
+    cands.sort((a, b) => b.s - a.s);
+    cands = cands.slice(0, keep);
+  }
+  // One entry per cell (its best turn).
+  const seen = new Set<number>();
+  const finals = cands.filter((c) => {
+    const k = c.row * cols + c.col;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  const T = PLACE.temperature;
+  const best = finals[0]?.s ?? 0;
+  const ex = finals.map((c) => Math.exp((c.s - best) / T));
+  const exElse = Math.exp(-PLACE.elseBelow / T) * Math.max(1, cols * rows - finals.length) ** 0.25;
+  const Z = ex.reduce((a, b) => a + b, 0) + exElse;
+  const top = finals.slice(0, opts.topN ?? 5).map((c, i) => ({ col: c.col, row: c.row, rot: c.rot as 0 | 1 | 2 | 3, score: c.s, p: ex[i]! / Z }));
+  const p1 = top[0]?.p ?? 0;
+  return { top, verdict: p1 >= PLACE.strongP ? 'strong' : p1 >= PLACE.likelyP ? 'likely' : 'several' };
+}

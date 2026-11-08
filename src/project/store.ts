@@ -17,6 +17,8 @@ export const printScaleKey = (projectId: string): string => `printScale:${projec
 export const LAST_SETUP_STEP = 6;
 
 /** Settings key of a puzzle's scan bin (deleted scan, restorable; src/project/scans.ts). */
+/** Settings row holding a puzzle's box placements (M4, src/project/placements.ts). */
+export const placementKey = (projectId: string): string => `placement:${projectId}`;
 export const scanBinKey = (projectId: string): string => `scanBin:${projectId}`;
 
 export type ProjectPatch = Partial<Omit<Project, 'id' | 'createdAt'>>;
@@ -118,7 +120,10 @@ export function referencedBlobIds(project: Project, snaps: SnapRow[], pieces: Pi
     ids.add(project.box.rectifiedBlobId);
   }
   for (const s of snaps) if (s.blobId) ids.add(s.blobId);
-  for (const p of pieces) if (p.thumbBlobId) ids.add(p.thumbBlobId);
+  for (const p of pieces) {
+    if (p.thumbBlobId) ids.add(p.thumbBlobId);
+    if (p.patch?.blobId) ids.add(p.patch.blobId);
+  }
   ids.delete('');
   return [...ids];
 }
@@ -146,6 +151,7 @@ export async function deleteProject(id: string): Promise<void> {
     await d.blobs.bulkDelete(blobIds);
     await d.settings.delete(printScaleKey(id));
     await d.settings.delete(scanBinKey(id));
+    await d.settings.delete(placementKey(id));
     const current = await d.settings.get(CURRENT_PROJECT_KEY);
     if (current?.value === id) await d.settings.delete(CURRENT_PROJECT_KEY);
     await d.projects.delete(id);

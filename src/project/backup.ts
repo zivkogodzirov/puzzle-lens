@@ -66,7 +66,11 @@ const EXT: Record<string, string> = { 'image/jpeg': '.jpg', 'image/png': '.png',
 
 /** A safe file name for the backup, e.g. "Puzzle 1 2026-11-06.pfbackup". */
 export function backupFileName(project: Pick<Project, 'name'>, when = new Date()): string {
-  const safe = project.name.replace(/[^\p{L}\p{N} _-]+/gu, '').trim().slice(0, 40) || 'Puzzle';
+  const safe =
+    project.name
+      .replace(/[^\p{L}\p{N} _-]+/gu, '')
+      .trim()
+      .slice(0, 40) || 'Puzzle';
   const d = `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}-${String(when.getDate()).padStart(2, '0')}`;
   return `${safe} ${d}${BACKUP_EXTENSION}`;
 }
@@ -206,7 +210,13 @@ function remapIds(m: BackupManifest): BackupManifest {
   return {
     ...m,
     project,
-    snaps: m.snaps.map((s) => ({ ...s, id: snapId(s.id), projectId: newPid, blobId: blob(s.blobId), pieceIds: s.pieceIds.map((id) => pieceIds.get(id) ?? id) })),
+    snaps: m.snaps.map((s) => ({
+      ...s,
+      id: snapId(s.id),
+      projectId: newPid,
+      blobId: blob(s.blobId),
+      pieceIds: s.pieceIds.map((id) => pieceIds.get(id) ?? id),
+    })),
     pieces: m.pieces.map((p) => ({
       ...p,
       id: pieceIds.get(p.id)!,

@@ -14,7 +14,7 @@ import { coinById, MK_COINS, type CoinType } from '../../cv/coin';
 import { DEFAULT_PITCH_MM } from '../../cv/pieceFinder';
 import { REAL_PIECE_AREA_SHARE } from '../../cv/scanMarkerless';
 import { CoverageMap, PhotoResult, type OutlineFlag } from '../components/ScanMaps';
-import type { FinishedCheck } from '../../shared/apis';
+import type { FinishedCheck, FreeScanReply } from '../../shared/apis';
 import { logError, logInfo } from '../../log/logger';
 import { errorWords } from './Puzzle';
 
@@ -24,6 +24,8 @@ const SCAN_TIMEOUT_MS = 120_000;
 interface Unified {
   pieces: FoundPiece[];
   thumbs: Array<Blob | null>;
+  /** Placement patches (marker-free scans only). */
+  patches?: FreeScanReply['patches'];
   imgToTable: number[] | null;
   pxPerMm: number | null;
   reasons: string[];
@@ -347,6 +349,7 @@ export function ScanScreen() {
         r = {
           pieces: f.pieces,
           thumbs: f.thumbs,
+          patches: f.patches,
           imgToTable: f.imgToCatalog,
           pxPerMm: f.pxPerMm,
           reasons: f.reasons,
@@ -424,7 +427,14 @@ export function ScanScreen() {
       const existing = await db().pieces.where('projectId').equals(project.id).toArray();
       const plan = planMerge(
         existing,
-        r.pieces.map((p, i) => ({ ...p, thumb: r.thumbs[i] ?? null })),
+        r.pieces.map((p, i) => {
+          const pt = r.patches?.[i];
+          return {
+            ...p,
+            thumb: r.thumbs[i] ?? null,
+            patch: pt ? { blob: new Blob([pt.rgba as Uint8Array<ArrayBuffer>], { type: 'application/octet-stream' }), flats: pt.flats, sure: pt.sure } : null,
+          };
+        }),
         {
           projectId: project.id,
           snapId,
@@ -432,6 +442,7 @@ export function ScanScreen() {
           now,
           newId,
           thumbId: (pid) => projectBlobId(project.id, `thumb-${pid}`),
+          patchId: (pid) => projectBlobId(project.id, `patch-${pid}`),
           // The photo's view on the table, to notice pieces that were moved or taken away.
           view: (
             [
@@ -470,6 +481,7 @@ export function ScanScreen() {
             blob: t.blob,
           })),
         );
+        await db().blobs.bulkPut(plan.patches.map((t) => ({ id: t.id, ts: now, kind: 'patch', blob: t.blob })));
         await db().blobs.put({
           id: fullId,
           ts: now,

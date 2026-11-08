@@ -894,3 +894,20 @@ pre.logbox {
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .pick-photo { display: inline-flex; align-items: center; cursor: pointer; }
+
+.thumb-btn { position: relative; padding: 0; border: 0; background: none; display: block; width: 100%; }
+.catalog-grid .thumb-btn img, .catalog-grid .thumb-btn .catalog-empty { width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--panel-2); border-radius: 8px; display: block; }
+.catalog-grid .thumb-selected { outline: 3px solid #fff; }
+.place-dot { position: absolute; right: 4px; top: 4px; width: 10px; height: 10px; border-radius: 50%; border: 1px solid #000; }
+.place-strong { background: #3ccf7a; }
+.place-likely { background: #ffd84a; }
+.legend-strong { color: #3ccf7a; font-weight: 600; }
+.legend-likely { color: #ffd84a; font-weight: 600; }
+.legend-several { color: #aaa; }
+.piece-spots { margin-top: 10px; }
+.piece-spots .row { align-items: flex-start; gap: 10px; }
+.piece-spots .grow { flex: 1; }
+.spot-thumb { width: 72px; height: 72px; object-fit: contain; border-radius: 8px; background: var(--panel-2); }
+.spot-box { display: block; width: 100%; height: auto; margin-top: 8px; border-radius: 8px; }
+.spot-best { fill: rgba(60, 207, 122, 0.35); stroke: #3ccf7a; stroke-width: 3; }
+.spot-other { fill: rgba(255, 216, 74, 0.2); stroke: #ffd84a; stroke-width: 1.5; stroke-dasharray: 3 2; }

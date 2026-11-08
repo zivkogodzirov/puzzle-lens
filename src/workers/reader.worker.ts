@@ -19,8 +19,10 @@ import { setupFromPhoto, toGray } from '../cv/tableSetup';
 import { ensureRgba, scanPixels, tableFromPixels } from '../cv/scanPhoto';
 import { scanMarkerless } from '../cv/scanMarkerless';
 import { findCoin } from '../cv/coin';
+import { readShape, READ_OK } from '../cv/shapeRead';
+import { buildBoxGrid, extractPatch, patchStats, placePiece, PATCH_SIZE, type BoxGrid, type ColourMatch } from '../cv/placement';
 import { puzzleQuad, readAssembledGrid, SEAM_OK, type AssembledGrid } from '../cv/assembledGrid';
-import type { FreeScanOptions, FreeScanReply, ScanOptions, ScanReply, TableSetupReply } from '../shared/apis';
+import type { FreeScanOptions, FreeScanReply, PieceToPlace, PlaceReply, ScanOptions, ScanReply, TableSetupReply } from '../shared/apis';
 import type { TableModel } from '../project/types';
 import { decodeAtMost, findBoxQuad, RECTIFIED_MAX_SIDE, rectifyQuad, type Point, type RectifyBoxResult } from '../cv/rectify';
 
@@ -227,6 +229,11 @@ async function thumbsAndPreview(
   }
 }
 
+/** The straightened box picture cut into cells, kept between placement calls. */
+let boxCache: { key: string; grid: BoxGrid } | null = null;
+/** The one-time colour match needs at least this many pieces (a handful would pull it toward their colours). */
+const MIN_COLOUR_PIECES = 20;
+
 const api: ReaderApi = {
   async init(): Promise<WorkerInitInfo> {
     const capabilities = await probeWorkerCapabilities();
@@ -366,6 +373,22 @@ const api: ReaderApi = {
             finishedRaw = g;
         }
       }
+      // Box placement (M4): each clean piece straightened by the corners its shape reading finds.
+      const ppmHere = r.pxPerMm ?? 4;
+      const patches: FreeScanReply['patches'] = r.pieces.map((p) => {
+        if (p.flags.cut || p.flags.clump) return null;
+        const rd = readShape(
+          p.outlineImg.map((v) => v / ppmHere),
+          null,
+        );
+        if (!rd) return null;
+        const patch = extractPatch(
+          rgba,
+          rd.corners.map(([x, y]) => [x * ppmHere, y * ppmHere] as [number, number]),
+          p.outlineImg,
+        );
+        return patch ? { rgba: patch.rgba, flats: rd.sides.map((sd) => sd.kind === 'flat'), sure: Boolean(rd.kind) && rd.quality >= READ_OK } : null;
+      });
       const { thumbs, preview, previewScale } = await thumbsAndPreview(
         rgba,
         r.pieces.map((p) => p.bboxImg),
@@ -386,6 +409,7 @@ const api: ReaderApi = {
         ...r,
         coin,
         finished,
+        patches,
         // Without markers, blur is judged from the photo's own sharpness only where markers would be: report tilt/glare reasons from the checker except "no markers".
         reasons: check.quality.reasons.filter((q) => !/marker/i.test(q)),
         sharpness: check.quality.sharpness,
@@ -570,6 +594,28 @@ const api: ReaderApi = {
     } finally {
       reader.close();
     }
+  },
+
+  async placePieces(box: Blob, boxKey: string, grid: { cols: number; rows: number }, pieces: PieceToPlace[], colour: ColourMatch | null): Promise<PlaceReply> {
+    const t0 = performance.now();
+    if (!boxCache || boxCache.key !== boxKey || boxCache.grid.cols !== grid.cols || boxCache.grid.rows !== grid.rows) {
+      const reader = new PhotoReader(await decodeAtMost(box, await headerSize(box), 2048));
+      try {
+        const pixels = ensureRgba(await reader.read({ x: 0, y: 0, width: reader.width, height: reader.height }));
+        boxCache = { key: boxKey, grid: buildBoxGrid(pixels, grid.cols, grid.rows) };
+      } finally {
+        reader.close();
+      }
+    }
+    const bg = boxCache.grid;
+    const patches = pieces.map((p) => ({ size: PATCH_SIZE, rgba: p.rgba }));
+    let cm = colour;
+    if (!cm && pieces.length >= MIN_COLOUR_PIECES) {
+      const st = patchStats(patches);
+      if (st) cm = { from: st, to: bg.stats };
+    }
+    const results = pieces.map((p, i) => ({ id: p.id, placement: placePiece(bg, patches[i]!, { flats: p.flats, flatsSure: p.sure, colour: cm }) }));
+    return { results, colour: cm, ms: performance.now() - t0 };
   },
 
   memory(): WorkerMemory {

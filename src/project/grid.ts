@@ -59,13 +59,7 @@ function knownFor(count: number, cols: number, rows: number): KnownLayout | null
   return KNOWN_LAYOUTS.find((k) => k.count === count && k.long === long && k.short === short) ?? null;
 }
 
-function candidates(
-  pieceCount: number,
-  pictureAspect: number | null,
-  below: number,
-  above: number,
-  maxCellAspect: number,
-): GridOption[] {
+function candidates(pieceCount: number, pictureAspect: number | null, below: number, above: number, maxCellAspect: number): GridOption[] {
   const lo = Math.max(1, Math.ceil(pieceCount * (1 - below) - 1e-9));
   const hi = Math.floor(pieceCount * (1 + above) + 1e-9);
   const out: GridOption[] = [];

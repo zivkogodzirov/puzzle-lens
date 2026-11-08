@@ -2,6 +2,7 @@
  * The functions each worker offers to the main thread (called through Comlink).
  * Declared here, not in the worker files, so the main thread never imports worker code.
  */
+import type { ColourMatch, Placement } from '../cv/placement';
 import type { CvBenchResult, PhotoStats, TrackerFrameResult, TrackerStatus, TwoXResult, WorkerInitInfo, WorkerMemory } from './types';
 import type { MarkerMap } from '../project/types';
 import type { RectifyBoxResult } from '../cv/rectify';
@@ -35,6 +36,22 @@ export interface FreeScanOptions {
   grid?: { cols: number; rows: number } | null;
 }
 
+/** A piece straightened for box placement: RGBA PATCH_SIZE², and which sides read as flat (patch top, right, bottom, left). */
+export interface PatchForCatalog {
+  rgba: Uint8Array;
+  flats: boolean[];
+  /** The shape read behind the corners and flats is trusted. */
+  sure: boolean;
+}
+
+/** A piece to place on the box picture. */
+export interface PieceToPlace {
+  id: string;
+  rgba: Uint8Array;
+  flats: boolean[];
+  sure: boolean;
+}
+
 /** A finished (or nearly finished) puzzle seen in an overview: its rows × columns and gaps. */
 export interface FinishedCheck {
   cols: number;
@@ -55,6 +72,8 @@ export type FreeScanReply = ScanMarkerlessResult & {
   coin: (CoinFound & { diameterCatalogMm: number }) | null;
   /** Set when most of the photo is one assembled area (a finished puzzle). */
   finished: FinishedCheck | null;
+  /** Per piece (same order as pieces): its straightened patch for box placement (M4), or null. */
+  patches: Array<PatchForCatalog | null>;
   reasons: string[];
   sharpness: number;
   clippedShare: number;
@@ -118,6 +137,18 @@ export interface ReaderApi {
   rectifyBox(photo: Blob, corners: Array<[number, number]>, maxSide?: number): Promise<RectifyBoxResult>;
   /** A first guess of the box picture's corners (fractions 0–1, TL, TR, BR, BL), or null. */
   suggestBoxCorners(photo: Blob): Promise<Array<[number, number]> | null>;
+  /**
+   * Box placement (M4): where each piece goes on the straightened box picture (`box`, cached in the
+   * helper under `boxKey`). `colour`: the one-time colour match to use; when null and there are
+   * enough pieces, it is measured from these pieces and returned (store it and pass it next time).
+   */
+  placePieces(box: Blob, boxKey: string, grid: { cols: number; rows: number }, pieces: PieceToPlace[], colour: ColourMatch | null): Promise<PlaceReply>;
+}
+
+export interface PlaceReply {
+  results: Array<{ id: string; placement: Placement }>;
+  colour: ColourMatch | null;
+  ms: number;
 }
 
 export interface ReportFileInput {
