@@ -8,6 +8,7 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 - A single piece with long knobs at both ends was taken for two touching pieces (on your photo IMG_9276: 4 pieces). When its outline reads as one clean piece, it now counts as one.
 - Shape reading no longer marks pieces down for being ~10 % smaller than their grid cell (the traced top face always is), and it trusts a read when every side is clearly flat or clearly not flat.
 - On your photos: the 26 brown pieces (IMG_9263/9264) are all read as inside pieces, none as border, none not sure; IMG_9276: 1 corner, 4 edges, 3 not sure (pale, shiny pieces whose outline is only partly traced). On computer-made photos 97 % of reads are now trusted (was 87–95 %), still 97 % right.
+- The **Not sure** button only shows when at least one piece is not sure.
 - Still not sure: pale or shiny pieces whose outline is cut by glare. A 2× close-up, or less direct lamp light, helps.
 
 ### Scan a photo from your library (2026-11-08; not yet checked on your iPhone)

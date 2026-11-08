@@ -74,4 +74,19 @@ test('Border mode groups pieces by shape and counts them against the grid', asyn
   await page.getByTestId('group-unsure').click();
   await expect(page.locator('[data-testid="catalog"] [data-group]')).toHaveCount(1);
   await expect(page.getByTestId('border-warning')).toHaveCount(0);
+
+  // No "Not sure" button when nothing is not sure.
+  await page.evaluate(async () => {
+    const req = indexedDB.open('puzzle-lens');
+    const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
+    await new Promise<void>((res) => {
+      const tx = dbh.transaction('pieces', 'readwrite');
+      tx.objectStore('pieces').delete('f');
+      tx.oncomplete = () => res();
+    });
+    dbh.close();
+  });
+  await page.reload();
+  await expect(page.getByTestId('group-all')).toContainText('5');
+  await expect(page.getByTestId('group-unsure')).toHaveCount(0);
 });

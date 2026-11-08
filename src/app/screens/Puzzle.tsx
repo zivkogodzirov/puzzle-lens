@@ -540,6 +540,7 @@ function Catalog({
   const count = { all: rows.length, border: n.corner + n.edge, interior: n.interior, unsure: n.unsure };
   const want = borderCounts(grid ?? { cols: 0, rows: 0 });
   const tooMany = grid && (n.corner > want.corners || n.edge > want.edges);
+  if (show === 'unsure' && !count.unsure) setShow('all');
   const shown = rows
     .filter((r) => {
       const g = groups.get(r.id)!;
@@ -550,11 +551,14 @@ function Catalog({
   return (
     <div>
       <div class="chips catalog-groups" role="group" aria-label="Show pieces" data-testid="catalog-groups">
-        {(['all', 'border', 'interior', 'unsure'] as const).map((k) => (
-          <button key={k} class={`chip ${show === k ? 'chip-on' : ''}`} aria-pressed={show === k} data-testid={`group-${k}`} onClick={() => setShow(k)}>
-            {GROUP_LABEL[k]} {count[k]}
-          </button>
-        ))}
+        {/* "Not sure" only when there is something not sure. */}
+        {(['all', 'border', 'interior', 'unsure'] as const)
+          .filter((k) => k !== 'unsure' || count.unsure > 0)
+          .map((k) => (
+            <button key={k} class={`chip ${show === k ? 'chip-on' : ''}`} aria-pressed={show === k} data-testid={`group-${k}`} onClick={() => setShow(k)}>
+              {GROUP_LABEL[k]} {count[k]}
+            </button>
+          ))}
       </div>
       {show === 'border' && (
         <p class="small" data-testid="border-counts">
