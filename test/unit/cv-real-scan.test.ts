@@ -97,64 +97,76 @@ describe.skipIf(photos.length === 0)('real photos, marker-free scan', () => {
     console.log(lines.join('\n'));
   }, 300_000);
 
-  it.skipIf(!has9224)('IMG_9224: assembled area reported, loose pieces found (also inside the frame), no objects as pieces, right scale', async () => {
-    const cv = await getCv();
-    const img = await load(cv, photos.find((p) => p.name.startsWith('IMG_9224'))!.path);
-    expect([img.width, img.height]).toEqual([2268, 4032]);
-    const r = scanMarkerless(cv, img, { catalog: [], zoom: 1, kind: 'overview', table: null });
-    // The assembled puzzle is reported as a region, not as pieces (the whole puzzle is 3476 cm²;
-    // the region excludes the table showing through the frame).
-    const assembled = r.regions.filter((g) => g.kind === 'assembled');
-    expect(Math.max(...assembled.map((g) => g.areaMm2))).toBeGreaterThan(150_000);
-    // Loose pieces: ~95 by eye, many touching. At least 55 found, at least 30 of them single.
-    expect(r.pieces.length).toBeGreaterThanOrEqual(55);
-    expect(r.pieces.filter((p) => !p.flags.clump).length).toBeGreaterThanOrEqual(30);
-    // The dark loose pieces lying inside the assembled frame (image box of the frame) are found.
-    const frame = [230, 980, 2210, 3360];
-    expect(r.pieces.filter((p) => inBox(p, frame) && p.meanLab[0] < 40).length).toBeGreaterThanOrEqual(15);
-    // Nothing reported as a piece on the headphones, the remote or the coaster (image boxes).
-    for (const b of [
-      [970, 113, 1462, 617],
-      [227, 239, 706, 517],
-      [693, 252, 970, 466],
-    ])
-      expect(r.pieces.filter((p) => inBox(p, b))).toHaveLength(0);
-    // Nothing on the floor below the table's near edge.
-    expect(Math.max(...r.pieces.map((p) => centre(p)[1]))).toBeLessThan(3620);
-    // Scale at the image centre: the frame's area gives 3.47 px/mm on average and the photo's
-    // scale varies ~15 % from top to bottom, so only a range is known (3.1–4.0). (Since the
-    // lit-side fix of 2026-11-07 the estimate is 3.15; it was 3.46. On the two photos with a coin,
-    // IMG_9263/9264, the same estimate is within 1.5 % of the coin.)
-    expect(r.pxPerMm!).toBeGreaterThan(3.1);
-    expect(r.pxPerMm!).toBeLessThan(4.0);
-  }, 120_000);
+  it.skipIf(!has9224)(
+    'IMG_9224: assembled area reported, loose pieces found (also inside the frame), no objects as pieces, right scale',
+    async () => {
+      const cv = await getCv();
+      const img = await load(cv, photos.find((p) => p.name.startsWith('IMG_9224'))!.path);
+      expect([img.width, img.height]).toEqual([2268, 4032]);
+      const r = scanMarkerless(cv, img, { catalog: [], zoom: 1, kind: 'overview', table: null });
+      // The assembled puzzle is reported as a region, not as pieces (the whole puzzle is 3476 cm²;
+      // the region excludes the table showing through the frame).
+      const assembled = r.regions.filter((g) => g.kind === 'assembled');
+      expect(Math.max(...assembled.map((g) => g.areaMm2))).toBeGreaterThan(150_000);
+      // Loose pieces: ~95 by eye, many touching. At least 55 found, at least 30 of them single.
+      expect(r.pieces.length).toBeGreaterThanOrEqual(55);
+      expect(r.pieces.filter((p) => !p.flags.clump).length).toBeGreaterThanOrEqual(30);
+      // The dark loose pieces lying inside the assembled frame (image box of the frame) are found.
+      const frame = [230, 980, 2210, 3360];
+      expect(r.pieces.filter((p) => inBox(p, frame) && p.meanLab[0] < 40).length).toBeGreaterThanOrEqual(15);
+      // Nothing reported as a piece on the headphones, the remote or the coaster (image boxes).
+      for (const b of [
+        [970, 113, 1462, 617],
+        [227, 239, 706, 517],
+        [693, 252, 970, 466],
+      ])
+        expect(r.pieces.filter((p) => inBox(p, b))).toHaveLength(0);
+      // Nothing on the floor below the table's near edge.
+      expect(Math.max(...r.pieces.map((p) => centre(p)[1]))).toBeLessThan(3620);
+      // Scale at the image centre: the frame's area gives 3.47 px/mm on average and the photo's
+      // scale varies ~15 % from top to bottom, so only a range is known (3.1–4.0). (Since the
+      // lit-side fix of 2026-11-07 the estimate is 3.15; it was 3.46. On the two photos with a coin,
+      // IMG_9263/9264, the same estimate is within 1.5 % of the coin.)
+      expect(r.pxPerMm!).toBeGreaterThan(3.1);
+      expect(r.pxPerMm!).toBeLessThan(4.0);
+    },
+    120_000,
+  );
 
   // Image boxes of the tray / lid insides (photo px at 2268 × 4032).
   const inTray = (b: number[]) => (p: { bboxImg: number[] }) => inBox(p, b);
   const single = (p: { flags: { clump?: boolean; weak?: boolean; cut?: boolean } }) => !p.flags.clump && !p.flags.weak && !p.flags.cut;
 
-  it.skipIf(!has('IMG_9246'))('IMG_9246: pieces in a grey grainy tray, phone close: right scale, most spread pieces found', async () => {
-    const cv = await getCv();
-    const img = await load(cv, photos.find((p) => p.name.startsWith('IMG_9246'))!.path);
-    const r = scanMarkerless(cv, img, { catalog: [], zoom: 1, kind: 'overview', table: null });
-    expect(Math.abs(r.pxPerMm! / 7 - 1), `${r.pxPerMm}`).toBeLessThan(0.15);
-    const tray = r.pieces.filter(inTray([274, 1037, 2017, 3357]));
-    expect(tray.length).toBeGreaterThanOrEqual(35);
-    expect(tray.filter(single).length).toBeGreaterThanOrEqual(18);
-    // Hardly anything reported as pieces off the tray (clothes, bedding).
-    expect(r.pieces.length - tray.length).toBeLessThanOrEqual(8);
-  }, 120_000);
+  it.skipIf(!has('IMG_9246'))(
+    'IMG_9246: pieces in a grey grainy tray, phone close: right scale, most spread pieces found',
+    async () => {
+      const cv = await getCv();
+      const img = await load(cv, photos.find((p) => p.name.startsWith('IMG_9246'))!.path);
+      const r = scanMarkerless(cv, img, { catalog: [], zoom: 1, kind: 'overview', table: null });
+      expect(Math.abs(r.pxPerMm! / 7 - 1), `${r.pxPerMm}`).toBeLessThan(0.15);
+      const tray = r.pieces.filter(inTray([274, 1037, 2017, 3357]));
+      expect(tray.length).toBeGreaterThanOrEqual(35);
+      expect(tray.filter(single).length).toBeGreaterThanOrEqual(18);
+      // Hardly anything reported as pieces off the tray (clothes, bedding).
+      expect(r.pieces.length - tray.length).toBeLessThanOrEqual(8);
+    },
+    120_000,
+  );
 
-  it.skipIf(!has('IMG_9245'))('IMG_9245: brown pieces in a brown cardboard lid, phone close: scale near right, some pieces found', async () => {
-    const cv = await getCv();
-    const img = await load(cv, photos.find((p) => p.name.startsWith('IMG_9245'))!.path);
-    const r = scanMarkerless(cv, img, { catalog: [], zoom: 1, kind: 'overview', table: null });
-    expect(r.pxPerMm!).toBeGreaterThan(5.2);
-    expect(r.pxPerMm!).toBeLessThan(8);
-    const lid = r.pieces.filter(inTray([346, 1268, 2017, 3458]));
-    expect(lid.length).toBeGreaterThanOrEqual(10);
-    expect(lid.filter(single).length).toBeGreaterThanOrEqual(6);
-  }, 120_000);
+  it.skipIf(!has('IMG_9245'))(
+    'IMG_9245: brown pieces in a brown cardboard lid, phone close: scale near right, some pieces found',
+    async () => {
+      const cv = await getCv();
+      const img = await load(cv, photos.find((p) => p.name.startsWith('IMG_9245'))!.path);
+      const r = scanMarkerless(cv, img, { catalog: [], zoom: 1, kind: 'overview', table: null });
+      expect(r.pxPerMm!).toBeGreaterThan(5.2);
+      expect(r.pxPerMm!).toBeLessThan(8);
+      const lid = r.pieces.filter(inTray([346, 1268, 2017, 3458]));
+      expect(lid.length).toBeGreaterThanOrEqual(10);
+      expect(lid.filter(single).length).toBeGreaterThanOrEqual(6);
+    },
+    120_000,
+  );
 
   // IMG_9263 (landscape) and IMG_9264 (portrait): the owner's 26 brown pieces spread on the cream
   // table with a 2-denar coin (23.5 mm), under a lamp that makes the glossy pieces shine on one
@@ -163,15 +175,39 @@ describe.skipIf(photos.length === 0)('real photos, marker-free scan', () => {
     ['IMG_9263', 8.46, 18],
     ['IMG_9264', 9.36, 20],
   ] as const) {
-    it.skipIf(!has(name))(`${name}: 26 shiny pieces with a 2-denar coin: pieces found whole, scale within 4 % of the coin's`, async () => {
+    it.skipIf(!has(name))(
+      `${name}: 26 shiny pieces with a 2-denar coin: pieces found whole, scale within 4 % of the coin's`,
+      async () => {
+        const cv = await getCv();
+        const img = await load(cv, photos.find((p) => p.name.startsWith(name))!.path);
+        const r = scanMarkerless(cv, img, { catalog: [], zoom: 1, kind: 'overview', table: null });
+        expect(Math.abs(r.pxPerMm! / coinPpm - 1), `${r.pxPerMm}`).toBeLessThan(0.04);
+        const coin = findCoin(cv, img, { pxPerMm: r.pxPerMm! });
+        expect(coin).not.toBeNull();
+        expect(Math.abs(coin!.diameterPx / coinPpm / 23.5 - 1)).toBeLessThan(0.03);
+        expect(r.pieces.filter(single).length, 'clean single pieces').toBeGreaterThanOrEqual(minSingles);
+      },
+      120_000,
+    );
+  }
+
+  // shot-9267: the owner's photo cut out of an app screenshot (1244 × 1652, so ~4.6 px/mm here and
+  // ~12 px/mm in the 4032 px original): 23 brown pieces and the 2-denar coin on the cream table in
+  // low sunlight, phone held ~3× closer than usual. The first scale guess saw no piece-sized blobs
+  // and the pieces were all taken for objects (2026-11-08); the closer restarts fix that.
+  it.skipIf(!has('shot-9267'))(
+    'shot-9267: phone held very close: pieces found at the right size, coin found',
+    async () => {
       const cv = await getCv();
-      const img = await load(cv, photos.find((p) => p.name.startsWith(name))!.path);
+      const img = await load(cv, photos.find((p) => p.name.startsWith('shot-9267'))!.path);
       const r = scanMarkerless(cv, img, { catalog: [], zoom: 1, kind: 'overview', table: null });
-      expect(Math.abs(r.pxPerMm! / coinPpm - 1), `${r.pxPerMm}`).toBeLessThan(0.04);
       const coin = findCoin(cv, img, { pxPerMm: r.pxPerMm! });
       expect(coin).not.toBeNull();
-      expect(Math.abs(coin!.diameterPx / coinPpm / 23.5 - 1)).toBeLessThan(0.03);
-      expect(r.pieces.filter(single).length, 'clean single pieces').toBeGreaterThanOrEqual(minSingles);
-    }, 120_000);
-  }
+      const coinPpm = coin!.diameterPx / 23.5;
+      expect(Math.abs(coinPpm / 4.6 - 1)).toBeLessThan(0.05);
+      expect(Math.abs(r.pxPerMm! / coinPpm - 1), `${r.pxPerMm}`).toBeLessThan(0.2);
+      expect(r.pieces.filter(single).length, 'clean single pieces').toBeGreaterThanOrEqual(16);
+    },
+    120_000,
+  );
 });

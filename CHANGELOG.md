@@ -4,6 +4,9 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### Photos taken very close now work (2026-11-08; not yet checked on your iPhone)
+- With the phone about 3× closer than usual, the app guessed the piece size wrong: real pieces were treated as "objects", the coin wasn't found, and shadows and bits of pieces were saved as pieces. It now tries closer size guesses when the first finds almost nothing. On your photo: about 20 of 23 pieces found cleanly and the coin found.
+
 ### Moved pieces recognised (2026-11-08; not yet checked on your iPhone)
 - Before, a piece moved more than about 6 mm was counted as a new piece (your 23 pieces showed as 30). Now, when a known piece's spot is empty in a new photo, the app compares the "new" piece with the pieces that left by shape, size and colour, and a clear match is the same piece, moved. The scan says "N pieces were moved: recognised, not counted again."
 - A piece taken away (e.g. into the puzzle) is marked "no longer seen at its spot" and no longer counted on the table; it comes back if photographed at that spot again. Only a clear piece in a photo at least about as sharp as its best one can be marked so, never a pale one.

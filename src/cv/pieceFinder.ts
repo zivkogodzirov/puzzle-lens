@@ -2243,6 +2243,32 @@ export function estimatePxPerMm(
   rgba: PixelBuffer,
   opts: { pitchMm?: number; zoom?: number; table?: TableModel | null } = {},
 ): { pxPerMm: number; nPieces: number } | null {
+  // First guess: a hand-held overview at 1× (~4 px/mm at 12 MP), close-ups at 2×.
+  const base = ((opts.zoom ?? 1) >= 2 ? 9 : 4) * (Math.max(rgba.width, rgba.height) / 4032);
+  const first = estimateFrom(cv, rgba, opts, base);
+  if (first && first.nPieces >= SCALE_RETRY_BELOW) return first;
+  // Few or no piece-sized blobs: the phone may be much closer than usual (owner's photo 2026-11-08,
+  // held ~3× closer: every piece was 9× the expected area and none counted). Start again from
+  // closer guesses and keep the one that finds the most pieces.
+  let best = first;
+  for (const k of SCALE_RETRY_STARTS) {
+    const r = estimateFrom(cv, rgba, opts, base * k);
+    if (r && (!best || r.nPieces > best.nPieces)) best = r;
+  }
+  return best;
+}
+
+/** Below this many piece-sized blobs at the usual first guess, closer guesses are tried too. */
+const SCALE_RETRY_BELOW = 8;
+/** Closer starting guesses (× the usual one); each covers about ×0.4–×2.4 of itself. */
+const SCALE_RETRY_STARTS = [2.4, 5.5];
+
+function estimateFrom(
+  cv: Cv,
+  rgba: PixelBuffer,
+  opts: { pitchMm?: number; zoom?: number; table?: TableModel | null },
+  start: number,
+): { pxPerMm: number; nPieces: number } | null {
   return cvGuard(cv, () => {
     const pitch = opts.pitchMm ?? DEFAULT_PITCH_MM;
     const W = rgba.width;
@@ -2251,8 +2277,7 @@ export function estimatePxPerMm(
     const img = shrinkRgb(rgba, factor);
     const { width: w, height: h } = img;
     const none = new Uint8Array(w * h);
-    // First guess: a hand-held overview at 1× (~4 px/mm at 12 MP), close-ups at 2×.
-    let ppm = ((opts.zoom ?? 1) >= 2 ? 9 : 4) * (Math.max(W, H) / 4032);
+    let ppm = start;
     let result: { pxPerMm: number; nPieces: number } | null = null;
     for (let iter = 0; iter < 4; iter++) {
       const sppm = ppm / factor;
