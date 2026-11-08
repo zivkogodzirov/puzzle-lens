@@ -6,6 +6,9 @@ M3 (first part) reads each piece's **shape** (4 corners; each side flat, tab or 
 1. Open Puzzle Lens from your Home Screen. If a banner says an update is ready, tap it.
 2. **Settings**: the version at the bottom should match the one I sent you.
 
+## Away from the puzzle: use photos you already took
+On the scan screen, tap **🖼 Choose a photo** and pick a photo from your library. It is read exactly like a camera photo (overview, or close-up if **Close-ups 2×** is selected). Use the **original photos**, not screenshots. You can do Parts B–D this way with photos of loose pieces, the finished puzzle, and the puzzle with a piece taken out.
+
 ## Part B: Border mode (loose pieces)
 1. Spread **about 20 pieces face up**, with small gaps, and include **some edge pieces and at least one corner** (you know which they are).
 2. On the puzzle screen: **Delete scanned pieces… → Delete and scan again**. Take the overview, then 2–3 close-ups (2×) if offered.

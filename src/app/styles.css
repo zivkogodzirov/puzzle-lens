@@ -893,3 +893,4 @@ pre.logbox {
 .res-gap { stroke: #ff3b3b; stroke-width: 3; fill: rgba(255, 59, 59, 0.25); }
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pick-photo { display: inline-flex; align-items: center; cursor: pointer; }

@@ -598,6 +598,26 @@ export function ScanScreen() {
             </label>
           )}
           {free && <CoverageMap pieces={onTable} coverage={coverage} target={kind === 'detail' ? target : null} view={viewMm} />}
+          {free && (
+            <label class="chip pick-photo" data-testid="pick-photo">
+              🖼 Choose a photo
+              <input
+                type="file"
+                accept="image/*"
+                data-testid="pick-photo-input"
+                hidden
+                onClick={() => setAutoPaused(true)}
+                onChange={(e) => {
+                  const input = e.currentTarget as HTMLInputElement;
+                  const file = input.files?.[0];
+                  input.value = '';
+                  // A photo from the library goes through exactly the same reading as a camera photo
+                  // (as an overview or a 2× close-up, whichever is selected above).
+                  if (file) void onPhoto(file, { zoom: kind === 'detail' ? 2 : 1, fix: null, auto: false, sensorTiltDeg: null });
+                }}
+              />
+            </label>
+          )}
           {lastPhoto && (
             <button class="chip" data-testid="show-photo" onClick={() => setShowPhoto(true)}>
               See the last photo

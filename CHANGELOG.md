@@ -4,6 +4,9 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### Scan a photo from your library (2026-11-08; not yet checked on your iPhone)
+- On the scan screen, **🖼 Choose a photo** picks a photo you already took. It is read exactly like a camera photo: as an overview, or as a 2× close-up when **Close-ups 2×** is selected. A finished puzzle's photo gets the finished-puzzle check. Use the original photos, not screenshots (a screenshot is smaller and includes the app's buttons).
+
 ### M3 first part: shapes, Border mode, finished-puzzle check (2026-11-08; not yet checked on your iPhone)
 - **Shape reading:** each piece's 4 corners and each side as flat, tab or blank, from its outline (works the same face down). On computer-made test photos the piece type is right for ~96 % of clean pieces.
 - **Border mode:** on the puzzle screen, buttons **All / Border / Inside / Not sure**; corners framed orange, edges teal, with "Corners n of 4 · Edges n of 120" for your 28 × 36 grid, and a warning if there are more than the grid allows.
