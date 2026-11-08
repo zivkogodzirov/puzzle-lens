@@ -274,7 +274,10 @@ export function ScanScreen() {
         });
         if (f.isNewFrame && f.pieces.filter((p) => !p.flags.cut).length < 5) {
           setAutoPaused(true);
-          setNote({ ok: false, lines: ['Hardly any pieces in this photo, so it wasn’t used.', 'Hold the phone over the spread-out pieces and tap the button.'] });
+          setNote({
+            ok: false,
+            lines: ['Hardly any pieces in this photo, so it wasn’t used.', 'Hold the phone over the spread-out pieces and tap the button.'],
+          });
           return;
         }
         // Without markers, blur is judged against the earlier good photos of the same kind, and
@@ -291,7 +294,13 @@ export function ScanScreen() {
           setAutoPaused(true);
           // Keep the last photo that couldn't be placed (one, overwritten), for reports and checking.
           void db()
-            .blobs.put({ id: projectBlobId(project.id, 'last-unplaced'), ts: Date.now(), kind: 'snap-unplaced', blob, meta: { kind, zoom, pitchMm, pieces: f.pieces.length } })
+            .blobs.put({
+              id: projectBlobId(project.id, 'last-unplaced'),
+              ts: Date.now(),
+              kind: 'snap-unplaced',
+              blob,
+              meta: { kind, zoom, pitchMm, pieces: f.pieces.length },
+            })
             .catch(() => {});
           setNote({
             ok: false,
@@ -308,7 +317,9 @@ export function ScanScreen() {
           if (f.coin) {
             const k = coinType.diameterMm / f.coin.diameterCatalogMm;
             if (k < 0.6 || k > 1.6) {
-              coinLines.push(`The coin measured ${Math.round(f.coin.diameterCatalogMm)} mm against ${coinType.diameterMm} mm for a ${coinType.label}: is it the right coin? Sizes stay estimates (≈).`);
+              coinLines.push(
+                `The coin measured ${Math.round(f.coin.diameterCatalogMm)} mm against ${coinType.diameterMm} mm for a ${coinType.label}: is it the right coin? Sizes stay estimates (≈).`,
+              );
             } else {
               // Applied only once the photo is accepted (below), so a rejected photo changes nothing.
               scaleChanged = { k, coin: coinType };
@@ -406,6 +417,15 @@ export function ScanScreen() {
           now,
           newId,
           thumbId: (pid) => projectBlobId(project.id, `thumb-${pid}`),
+          // The photo's view on the table, to notice pieces that were moved or taken away.
+          view: (
+            [
+              [0, 0],
+              [r.width - 1, 0],
+              [r.width - 1, r.height - 1],
+              [0, r.height - 1],
+            ] as Vec2[]
+          ).map((c) => applyH(r.imgToTable!, c)),
         },
       );
       const snap: SnapRow = {
@@ -419,7 +439,7 @@ export function ScanScreen() {
         imgToTable: r.imgToTable,
         quality: r.quality,
         blobId: null,
-        pieceIds: [...plan.added, ...plan.updates].map((p) => p.id),
+        pieceIds: [...plan.added, ...plan.updates.filter((p) => p.status === 'table')].map((p) => p.id),
       };
       // The full photo is kept for the latest KEEP_FULL_PHOTOS scans (they travel in backups, so the
       // owner can send real scans for checking); older ones are dropped to save space.
@@ -457,12 +477,20 @@ export function ScanScreen() {
       setPieces(all);
       if (scaleChanged) setSnaps(await db().snaps.where('projectId').equals(project.id).toArray());
       else setSnaps((s) => [...s, snap]);
+      const lines0: string[] = [];
+      if (plan.moved || plan.missing) logInfo('scan', `Moved pieces recognised: ${plan.moved}; no longer at their spot: ${plan.missing}`);
+      if (plan.moved) lines0.push(`${plan.moved === 1 ? '1 piece was' : `${plan.moved} pieces were`} moved: recognised, not counted again.`);
+      if (plan.missing)
+        lines0.push(
+          `${plan.missing === 1 ? '1 piece is' : `${plan.missing} pieces are`} no longer where ${plan.missing === 1 ? 'it was' : 'they were'} (taken away, or moved out of view).`,
+        );
       const clumps = r.pieces.filter((p) => p.flags.clump).length;
       const weak = r.pieces.filter((p) => p.flags.weak).length;
       const lines: string[] = [
         kind === 'overview'
           ? `Found ${r.pieces.filter((p) => !p.flags.cut).length} pieces (${plan.added.length} new).`
-          : `Close-up read: ${plan.updates.length + plan.added.length} pieces (${plan.added.length} new).`,
+          : `Close-up read: ${plan.updates.length - plan.missing + plan.added.length} pieces (${plan.added.length} new).`,
+        ...lines0,
       ];
       if (clumps)
         lines.push(
@@ -514,7 +542,7 @@ export function ScanScreen() {
               data-testid="mode-overview"
               onClick={() => {
                 kindChosen.current = true;
-              setAutoPaused(false);
+                setAutoPaused(false);
                 setKind('overview');
               }}
             >
@@ -526,7 +554,7 @@ export function ScanScreen() {
               data-testid="mode-detail"
               onClick={() => {
                 kindChosen.current = true;
-              setAutoPaused(false);
+                setAutoPaused(false);
                 setKind('detail');
               }}
             >
@@ -564,7 +592,12 @@ export function ScanScreen() {
         </div>
       </TableCamera>
       {note && (
-        <div class={note.ok ? 'notice notice-good scan-note scan-note-top' : 'notice notice-bad scan-note scan-note-top'} data-testid="scan-note" role="status" onClick={() => setNote(null)}>
+        <div
+          class={note.ok ? 'notice notice-good scan-note scan-note-top' : 'notice notice-bad scan-note scan-note-top'}
+          data-testid="scan-note"
+          role="status"
+          onClick={() => setNote(null)}
+        >
           {note.lines.map((l) => (
             <p key={l}>{l}</p>
           ))}

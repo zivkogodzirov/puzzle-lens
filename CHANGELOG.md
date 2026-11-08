@@ -4,6 +4,12 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### Moved pieces recognised (2026-11-08; not yet checked on your iPhone)
+- Before, a piece moved more than about 6 mm was counted as a new piece (your 23 pieces showed as 30). Now, when a known piece's spot is empty in a new photo, the app compares the "new" piece with the pieces that left by shape, size and colour, and a clear match is the same piece, moved. The scan says "N pieces were moved: recognised, not counted again."
+- A piece taken away (e.g. into the puzzle) is marked "no longer seen at its spot" and no longer counted on the table; it comes back if photographed at that spot again. Only a clear piece in a photo at least about as sharp as its best one can be marked so, never a pale one.
+- Limits: when two pieces that left look alike, the app doesn't guess (the moved one is added as new). Pieces moved before this version stay doubled: use **Delete and scan again**.
+- On computer-made test sets where nothing moves: no false "moved", 3 false "missing" in 1,193 pieces.
+
 ### Delete, restore and scan again (2026-11-08; not yet checked on your iPhone)
 - On the puzzle screen, under Pieces: **Delete scanned pieces…** → **Delete and scan again** (starts a fresh overview) or **Delete pieces**. The box picture and grid stay.
 - Deleted pieces go to a **bin** with their photos and the measured size; **Restore** brings them back exactly. The bin holds one scan: deleting again replaces it. Restoring while you have a newer scan swaps the two (two scans can't be mixed, because each one measures the table its own way).

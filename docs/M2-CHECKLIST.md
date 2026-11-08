@@ -69,7 +69,7 @@ Tell me:
 - **Sizes are estimates unless you use a coin.** Without anything of known size on the table, the app assumes a typical piece (about 18.6 mm). With a coin, sizes are measured (the coin is measured to about 1 % in tests). The sizes of the 2, 10 and 50 denar coins come from coin catalogues; the 1 and 5 denar sizes come from the National Bank.
 - **Each close-up must show some of the pieces already scanned** (about half the picture), so the app can tell where it was taken. If it can't, it says so and adds nothing.
 - **Outlines don't follow the pieces live yet**: you see them on each photo. Live outlines without markers come in M5.
-- **Moved pieces:** if you move pieces between photos, a moved piece may be counted twice. Recognising moved pieces comes in M5.
+- **Moved pieces:** a moved piece is now recognised by its shape when its old spot is empty in the new photo. When two pieces that left look alike, the app doesn't guess and may count one twice.
 - Touching pieces are flagged, not split.
 - **Box lids and trays** work too (grey tray: good; brown pieces in a brown lid: about half found). A plain surface that contrasts with the pieces works best; spread the pieces so they don't touch.
 - Printed markers are still available for extra precision: during set-up, open "I have a printer and want extra precision".

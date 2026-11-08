@@ -7,7 +7,7 @@ import { TopBar } from '../components/TopBar';
 import { go, routeArg } from '../router';
 import { APP_VERSION } from '../env';
 import { reportWorker } from '../workers';
-import { countPieces, deleteProject, getBlob, getProject, LAST_SETUP_STEP, setCurrentProjectId, updateProject } from '../../project/store';
+import { countPiecesByStatus, deleteProject, getBlob, getProject, LAST_SETUP_STEP, setCurrentProjectId, updateProject } from '../../project/store';
 import { exportBackup, zipHere } from '../../project/backup';
 import { deleteScan, restoreScan, scanBinSummary, type ScanBinSummary } from '../../project/scans';
 import type { PieceRow, Project } from '../../project/types';
@@ -77,6 +77,7 @@ export function PuzzleScreen() {
   const [share, setShare] = useState<'none' | 'sharing' | 'shared' | 'fallback'>('none');
   const [error, setError] = useState<string | null>(null);
   const [bin, setBin] = useState<ScanBinSummary | null>(null);
+  const [missingN, setMissingN] = useState(0);
   const [scanAction, setScanAction] = useState<'none' | 'confirm-delete' | 'confirm-restore' | 'busy'>('none');
   const [scanNote, setScanNote] = useState<string | null>(null);
   const mounted = useRef(true);
@@ -102,7 +103,9 @@ export function PuzzleScreen() {
         setProject(p ?? null);
         if (p) {
           void setCurrentProjectId(p.id).catch(() => {});
-          setPieces(await countPieces(p.id));
+          const c = await countPiecesByStatus(p.id);
+          setPieces(c.all);
+          setMissingN(c.missing);
           setBin(await scanBinSummary(p.id));
         }
       })
@@ -198,10 +201,11 @@ export function PuzzleScreen() {
 
   /** After deleting or restoring: the puzzle (size), piece count and bin as stored now. */
   const reloadScan = async () => {
-    const [np, n, b] = await Promise.all([getProject(p.id), countPieces(p.id), scanBinSummary(p.id)]);
+    const [np, c, b] = await Promise.all([getProject(p.id), countPiecesByStatus(p.id), scanBinSummary(p.id)]);
     if (!mounted.current) return;
     if (np) setProject(np);
-    setPieces(n);
+    setPieces(c.all);
+    setMissingN(c.missing);
     setBin(b);
   };
 
@@ -291,7 +295,13 @@ export function PuzzleScreen() {
           <dd data-testid="puzzle-grid">{p.grid ? `${p.grid.cols} across × ${p.grid.rows} down (${p.grid.cols * p.grid.rows} pieces)` : 'Not chosen yet'}</dd>
           <dt>Pieces read</dt>
           <dd data-testid="puzzle-pieces">
-            {pieces ?? '—'}
+            {pieces === null ? '—' : pieces - missingN}
+            {missingN > 0 && (
+              <span class="muted small" data-testid="puzzle-missing-count">
+                {' '}
+                on the table (+{missingN} no longer seen at {missingN === 1 ? 'its' : 'their'} spot)
+              </span>
+            )}
             {p.piecePitch && (
               <div class="muted small" data-testid="puzzle-size">
                 Measured piece size {p.scaleSource === 'estimate' ? '≈ ' : ''}

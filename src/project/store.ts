@@ -98,7 +98,13 @@ export async function updateProject(id: string, patch: ProjectPatch): Promise<Pr
   return d.transaction('rw', d.projects, async () => {
     const row = await d.projects.get(id);
     if (!row) throw new Error('This puzzle is no longer on this iPhone.');
-    const next = normalizeProject({ ...normalizeProject(row), ...patch, id, createdAt: row.createdAt, updatedAt: Math.max(Date.now(), (row.updatedAt ?? 0) + 1) });
+    const next = normalizeProject({
+      ...normalizeProject(row),
+      ...patch,
+      id,
+      createdAt: row.createdAt,
+      updatedAt: Math.max(Date.now(), (row.updatedAt ?? 0) + 1),
+    });
     await d.projects.put(next);
     return next;
   });
@@ -175,6 +181,13 @@ export async function setBlobMeta(id: string, meta: unknown): Promise<void> {
 
 export async function deleteBlob(id: string): Promise<void> {
   await db().blobs.delete(id);
+}
+
+/** Pieces catalogued for a puzzle: on the table now, and no longer seen at their spot (missing). */
+export async function countPiecesByStatus(projectId: string): Promise<{ table: number; missing: number; all: number }> {
+  const rows = await db().pieces.where('projectId').equals(projectId).toArray();
+  const missing = rows.filter((p) => p.status === 'missing').length;
+  return { table: rows.length - missing, missing, all: rows.length };
 }
 
 /** Number of pieces catalogued for a puzzle. */

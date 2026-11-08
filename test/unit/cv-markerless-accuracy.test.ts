@@ -85,6 +85,8 @@ describe.skipIf(!RUN)('marker-free scanning accuracy', () => {
         let registered = 0;
         let dups = 0;
         let catalogRows = 0;
+        let falseMissing = 0;
+        let movedFalse = 0;
         let refusals = 0;
         let refusalTries = 0;
         let movedOk = 0;
@@ -111,19 +113,47 @@ describe.skipIf(!RUN)('marker-free scanning accuracy', () => {
             const est = estimatePxPerMm(cv, buf(s), { zoom: sh.zoom });
             if (est) scaleErr.push(est.pxPerMm / s.truth.pxPerMm - 1);
             const t0 = performance.now();
-            const r: ScanMarkerlessResult = scanMarkerless(cv, buf(s), { catalog, zoom: sh.zoom, kind: sh.zoom === 2 ? 'detail' : 'overview', table: null, pieceAreaShare: 1 });
+            const r: ScanMarkerlessResult = scanMarkerless(cv, buf(s), {
+              catalog,
+              zoom: sh.zoom,
+              kind: sh.zoom === 2 ? 'detail' : 'overview',
+              table: null,
+              pieceAreaShare: 1,
+            });
             ms.push(performance.now() - t0);
             photos++;
             if (!r.registered) continue;
             registered++;
             const sc = segmentationScore(r.pieces, s.truth);
             const pairs = sc.matches.map((m) => [r.pieces[m.foundIndex]!.centreMm, centroid(s.truth.pieces.find((p) => p.id === m.id)!.outlineMm)] as const);
-            if (i === 0) S = fitSim(pairs.map((p) => p[0]), pairs.map((p) => p[1]));
+            if (i === 0)
+              S = fitSim(
+                pairs.map((p) => p[0]),
+                pairs.map((p) => p[1]),
+              );
             for (const [a, b] of pairs) {
               const p = applyH(S!, a);
               (i === 0 ? frameErr : laterErr).push(Math.hypot(p[0] - b[0], p[1] - b[1]));
             }
-            const plan = planMerge(catalog, r.pieces, { projectId: 'p', snapId: `s${i}`, pxPerMm: r.pxPerMm ?? 4, now: 1, newId: () => `n${nid++}`, thumbId: (id) => id });
+            // The photo's view, as the app passes it (moved / missing pieces are looked for).
+            const view: Vec2[] = (
+              [
+                [0, 0],
+                [s.width - 1, 0],
+                [s.width - 1, s.height - 1],
+                [0, s.height - 1],
+              ] as Vec2[]
+            ).map((c) => applyH(r.imgToCatalog!, c));
+            const plan = planMerge(catalog, r.pieces, {
+              projectId: 'p',
+              snapId: `s${i}`,
+              pxPerMm: r.pxPerMm ?? 4,
+              now: 1,
+              newId: () => `n${nid++}`,
+              thumbId: (id) => id,
+              view,
+            });
+            movedFalse += plan.moved;
             const upd = new Map(plan.updates.map((u) => [u.id, u]));
             catalog = catalog.map((c) => upd.get(c.id) ?? c).concat(plan.added);
             if (sh.zoom === 2) lastDetail = s;
@@ -147,6 +177,8 @@ describe.skipIf(!RUN)('marker-free scanning accuracy', () => {
             }
             dups += [...count.values()].filter((v) => v > 1).length;
             catalogRows += catalog.length;
+            // Nothing was moved or taken away between these photos: every "missing" is false.
+            falseMissing += catalog.filter((c) => c.status === 'missing').length;
           }
           // Refusal: the next puzzle's close-up against this catalog.
           const otherKey = keys[(k + 1) % keys.length]!;
@@ -158,7 +190,9 @@ describe.skipIf(!RUN)('marker-free scanning accuracy', () => {
           if (lastDetail) {
             let seed = 7 + k;
             const rnd = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296;
-            const changed = catalog.filter(() => rnd() > 0.1).map((c) => (rnd() < 0.11 ? { ...c, table: { ...c.table, x: c.table.x + (rnd() - 0.5) * 120, y: c.table.y + (rnd() - 0.5) * 120 } } : c));
+            const changed = catalog
+              .filter(() => rnd() > 0.1)
+              .map((c) => (rnd() < 0.11 ? { ...c, table: { ...c.table, x: c.table.x + (rnd() - 0.5) * 120, y: c.table.y + (rnd() - 0.5) * 120 } } : c));
             movedTries++;
             if (scanMarkerless(cv, buf(lastDetail), { catalog: changed, zoom: 2, kind: 'detail', table: null, pieceAreaShare: 1 }).registered) movedOk++;
           }
@@ -169,6 +203,7 @@ describe.skipIf(!RUN)('marker-free scanning accuracy', () => {
             `  frame-1 error       median ${quant(frameErr, 0.5).toFixed(2)} mm, p95 ${quant(frameErr, 0.95).toFixed(2)} mm (n ${frameErr.length})\n` +
             `  later photos error  median ${quant(laterErr, 0.5).toFixed(2)} mm, p95 ${quant(laterErr, 0.95).toFixed(2)} mm (n ${laterErr.length})\n` +
             `  duplicates          ${dups} of ${catalogRows} catalog rows\n` +
+            `  false "missing"     ${falseMissing} of ${catalogRows} catalog rows; false "moved" ${movedFalse}\n` +
             `  refused other puzzle ${refusals}/${refusalTries}; registered with 10 % moved + 10 % removed ${movedOk}/${movedTries}\n` +
             `  scale estimate      median ${(quant(scaleErr, 0.5) * 100).toFixed(1)} %, |err| p95 ${(quant(scaleErr.map(Math.abs), 0.95) * 100).toFixed(1)} %\n` +
             `  scanMarkerless      median ${quant(ms, 0.5).toFixed(0)} ms, max ${Math.max(...ms).toFixed(0)} ms`,
@@ -179,6 +214,7 @@ describe.skipIf(!RUN)('marker-free scanning accuracy', () => {
         expect.soft(quant(laterErr, 0.5), 'median centre error (mm)').toBeLessThanOrEqual(1);
         expect.soft(quant(laterErr, 0.95), 'p95 centre error (mm)').toBeLessThanOrEqual(2);
         expect.soft(dups, 'duplicates').toBe(0);
+        expect.soft(falseMissing / Math.max(1, catalogRows), 'false missing share').toBeLessThanOrEqual(0.01);
       },
       60 * 60_000,
     );
