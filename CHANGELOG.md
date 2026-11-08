@@ -4,6 +4,12 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M3 (part 2): fewer "Not sure" pieces (2026-11-08; not yet checked on your iPhone)
+- A single piece with long knobs at both ends was taken for two touching pieces (on your photo IMG_9276: 4 pieces). When its outline reads as one clean piece, it now counts as one.
+- Shape reading no longer marks pieces down for being ~10 % smaller than their grid cell (the traced top face always is), and it trusts a read when every side is clearly flat or clearly not flat.
+- On your photos: the 26 brown pieces (IMG_9263/9264) are all read as inside pieces, none as border, none not sure; IMG_9276: 1 corner, 4 edges, 3 not sure (pale, shiny pieces whose outline is only partly traced). On computer-made photos 97 % of reads are now trusted (was 87–95 %), still 97 % right.
+- Still not sure: pale or shiny pieces whose outline is cut by glare. A 2× close-up, or less direct lamp light, helps.
+
 ### Scan a photo from your library (2026-11-08; not yet checked on your iPhone)
 - On the scan screen, **🖼 Choose a photo** picks a photo you already took. It is read exactly like a camera photo: as an overview, or as a 2× close-up when **Close-ups 2×** is selected. A finished puzzle's photo gets the finished-puzzle check. Use the original photos, not screenshots (a screenshot is smaller and includes the app's buttons).
 

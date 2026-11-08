@@ -16,6 +16,7 @@
  *     and registration is repeated.
  *  5. Outlines and centres are mapped into the catalog frame; area, size and angle recomputed there.
  */
+import { readShape, READ_OK } from './shapeRead';
 import type { Cv } from './loadCv';
 import type { PixelBuffer } from './frameAnalyser';
 import { DEFAULT_PITCH_MM, estimatePxPerMm, findPieces, minAreaRect, type FindResult, type FoundPiece, type FoundRegion } from './pieceFinder';
@@ -132,7 +133,16 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
   const find = (pxPerMm: number) => {
     const f = scaleFrame(W, H, pxPerMm);
     const t1 = performance.now();
-    const r = findPieces(cv, rgba, { imgToTable: f.imgToMm, tableToImg: f.mmToImg, map: null, table: opts.table, pxPerMm, zoom: opts.zoom, pieceAreaMm2, withGlareMask: false });
+    const r = findPieces(cv, rgba, {
+      imgToTable: f.imgToMm,
+      tableToImg: f.mmToImg,
+      map: null,
+      table: opts.table,
+      pxPerMm,
+      zoom: opts.zoom,
+      pieceAreaMm2,
+      withGlareMask: false,
+    });
     timings.find = (timings.find ?? 0) + performance.now() - t1;
     return { frame: f, res: r };
   };
@@ -158,7 +168,13 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
   // median and upper-quartile size: on a grainy lid some pieces are only partly found), and keep the
   // one that gives clearly more single pieces.
   const singles = (r: FindResult) => r.pieces.filter((p) => !p.flags.cut && !p.flags.clump && !p.flags.weak).length;
-  const big = res.pieces.filter((p) => !p.flags.cut && p.flags.clump && p.areaMm2 < CLOSE_MAX_AREA * pieceAreaMm2 && Math.max(p.sizeMm[0], p.sizeMm[1]) <= 1.6 * Math.min(p.sizeMm[0], p.sizeMm[1]));
+  const big = res.pieces.filter(
+    (p) =>
+      !p.flags.cut &&
+      p.flags.clump &&
+      p.areaMm2 < CLOSE_MAX_AREA * pieceAreaMm2 &&
+      Math.max(p.sizeMm[0], p.sizeMm[1]) <= 1.6 * Math.min(p.sizeMm[0], p.sizeMm[1]),
+  );
   if (big.length >= Math.max(CLOSE_MIN_CLUMPS, singles(res))) {
     const areas = big.map((p) => p.areaMm2).sort((a, b) => a - b);
     const ks: number[] = [];
@@ -184,14 +200,40 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
       ppm = measured;
       ({ frame, res } = find(ppm));
       const again = measureScale(res.pieces, ppm, pitch, share);
-      if (again && Math.abs(again / ppm - 1) <= RESCALE_LIMIT) ({ frame, res } = { frame: scaleFrame(W, H, again), res: rescale(res, ppm / again) }), (ppm = again);
+      if (again && Math.abs(again / ppm - 1) <= RESCALE_LIMIT)
+        (({ frame, res } = { frame: scaleFrame(W, H, again), res: rescale(res, ppm / again) }), (ppm = again));
     } else {
       res = rescale(res, ppm / measured);
       ppm = measured;
       frame = scaleFrame(W, H, ppm);
     }
   }
-  const empty = (): ScanMarkerlessResult => ({ pieces: [], regions: [], photoToCatalog: null, imgToCatalog: null, registered: false, isNewFrame: false, pxPerMm: null, inliers: 0, rmsMm: 0, confidence: 0, timings: { ...timings, total: performance.now() - T0 } });
+  // With the scale settled: a "touching pieces" blob that reads as ONE clean piece of a piece's size
+  // is one piece (a single piece with long knobs at both ends comes out too long; owner's IMG_9276,
+  // 2026-11-08: 4 single pieces were "touching"). Done here, after the scale checks, which rely on
+  // whole pieces showing as clumps when the first scale guess is too small (IMG_9245).
+  {
+    const side = Math.sqrt(pieceAreaMm2);
+    res = {
+      ...res,
+      pieces: res.pieces.map((p) =>
+        p.flags.clump && !p.flags.cut && oneCleanPiece(p, side, pieceAreaMm2) ? { ...p, flags: { ...p.flags, clump: false } } : p,
+      ),
+    };
+  }
+  const empty = (): ScanMarkerlessResult => ({
+    pieces: [],
+    regions: [],
+    photoToCatalog: null,
+    imgToCatalog: null,
+    registered: false,
+    isNewFrame: false,
+    pxPerMm: null,
+    inliers: 0,
+    rmsMm: 0,
+    confidence: 0,
+    timings: { ...timings, total: performance.now() - T0 },
+  });
 
   if (!opts.catalog.length) {
     // The first photo defines the frame. Undo the phone's small tilt, measured from how piece
@@ -199,7 +241,19 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
     const Hr = levelFromSizes(res.pieces, { W, H, zoom: opts.zoom, pxPerMm: ppm }) ?? IDENTITY;
     const pieces = res.pieces.map((p) => mapPiece(p, Hr));
     timings.total = performance.now() - T0;
-    return { pieces, regions: res.regions.map((g) => mapRegion(g, Hr)), photoToCatalog: Hr, imgToCatalog: mulH(Hr, frame.imgToMm), registered: true, isNewFrame: true, pxPerMm: ppm, inliers: 0, rmsMm: 0, confidence: 1, timings };
+    return {
+      pieces,
+      regions: res.regions.map((g) => mapRegion(g, Hr)),
+      photoToCatalog: Hr,
+      imgToCatalog: mulH(Hr, frame.imgToMm),
+      registered: true,
+      isNewFrame: true,
+      pxPerMm: ppm,
+      inliers: 0,
+      rmsMm: 0,
+      confidence: 1,
+      timings,
+    };
   }
 
   const register = (pieces: FoundPiece[]): Registration | null => {
@@ -343,7 +397,14 @@ function solve3(A: number[][], b: number[]): number[] | null {
  * Null with fewer than 5 single pieces.
  */
 export function measureScale(pieces: FoundPiece[], ppm: number, pitchMm: number, areaShare = 1): number | null {
-  const singles = pieces.filter((p) => !p.flags.cut && !p.flags.clump && !p.flags.weak && p.areaMm2 > 0 && Math.max(p.sizeMm[0], p.sizeMm[1]) / Math.max(1e-6, Math.min(p.sizeMm[0], p.sizeMm[1])) <= 1.6);
+  const singles = pieces.filter(
+    (p) =>
+      !p.flags.cut &&
+      !p.flags.clump &&
+      !p.flags.weak &&
+      p.areaMm2 > 0 &&
+      Math.max(p.sizeMm[0], p.sizeMm[1]) / Math.max(1e-6, Math.min(p.sizeMm[0], p.sizeMm[1])) <= 1.6,
+  );
   if (singles.length < 5) return null;
   const logs = singles.map((p) => Math.log(p.areaMm2));
   const lo = Math.min(...logs);
@@ -401,7 +462,24 @@ function rescale(r: FindResult, k: number): FindResult {
   const sc = (v: number[]) => v.map((x) => x * k);
   return {
     ...r,
-    pieces: r.pieces.map((p) => ({ ...p, outlineMm: sc(p.outlineMm), centreMm: [p.centreMm[0] * k, p.centreMm[1] * k] as Vec2, areaMm2: p.areaMm2 * k * k, sizeMm: [p.sizeMm[0] * k, p.sizeMm[1] * k] as Vec2 })),
+    pieces: r.pieces.map((p) => ({
+      ...p,
+      outlineMm: sc(p.outlineMm),
+      centreMm: [p.centreMm[0] * k, p.centreMm[1] * k] as Vec2,
+      areaMm2: p.areaMm2 * k * k,
+      sizeMm: [p.sizeMm[0] * k, p.sizeMm[1] * k] as Vec2,
+    })),
     regions: r.regions.map((g) => ({ ...g, outlineMm: sc(g.outlineMm), areaMm2: g.areaMm2 * k * k })),
   };
+}
+
+/** A blob up to 1.6 × a piece's area whose outline reads as one clean piece with sides about a piece long. */
+function oneCleanPiece(p: FoundPiece, sideMm: number, areaMm2: number): boolean {
+  if (p.areaMm2 > 1.6 * areaMm2) return false;
+  const rd = readShape(p.outlineMm, null);
+  return Boolean(
+    rd?.kind &&
+    rd.quality >= READ_OK &&
+    rd.sides.every((sd) => sd.lengthMm > 0.75 * sideMm && sd.lengthMm < 1.25 * sideMm && Math.max(sd.outMm, sd.inMm) < 0.55 * sd.lengthMm),
+  );
 }

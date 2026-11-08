@@ -27,6 +27,8 @@ export interface SideRead {
   kind: SideKind;
   /** 0–1: how clearly the side is what it is said to be. */
   conf: number;
+  /** 0–1: how clearly it is flat (for a flat side) or not flat (tab, blank). */
+  flatConf: number;
   /** Largest bump outwards / inwards from the chord (mm, both ≥ 0). */
   outMm: number;
   inMm: number;
@@ -310,9 +312,13 @@ export function readShape(outline: ArrayLike<number>, cellMm?: Vec2 | null): Sha
           if (cellMm) {
             const w0 = (lens[0]! + lens[2]!) / 2;
             const h0 = (lens[1]! + lens[3]!) / 2;
-            const e1 = Math.abs(w0 / cellMm[0] - 1) + Math.abs(h0 / cellMm[1] - 1);
-            const e2 = Math.abs(w0 / cellMm[1] - 1) + Math.abs(h0 / cellMm[0] - 1);
-            sizePen = Math.min(e1, e2);
+            // Shape (either way round) must match; size only loosely: a traced top face is ~10 %
+            // smaller than its cell (rounded, bevelled edge), so 84–103 % of the cell is fine.
+            const ra = Math.log(w0 / h0);
+            const rc = Math.log(cellMm[0] / cellMm[1]);
+            const aspectErr = Math.min(Math.abs(ra - rc), Math.abs(ra + rc));
+            const sizeErr = Math.max(0, Math.abs(Math.log(Math.sqrt((w0 * h0) / (cellMm[0] * cellMm[1]))) - Math.log(0.93)) - 0.1);
+            sizePen = aspectErr + sizeErr;
           } else {
             // Without a cell size: a piece's base is near-square (aspect ≤ ~1.3).
             const w0 = (lens[0]! + lens[2]!) / 2;
@@ -390,6 +396,10 @@ export function readShape(outline: ArrayLike<number>, cellMm?: Vec2 | null): Sha
       kind = 'unsure';
       conf = 0;
     }
+    // How sure the side is flat / not flat (what decides corner, edge or inside): a tab is never
+    // flat; a blank dipping ≥ 2 × BLANK_REL (≈ 1.2 mm) surely isn't either, even when a shadow in
+    // its hollow makes tab-or-blank less clear.
+    const flatConf = kind === 'flat' ? conf : kind === 'tab' ? 1 : kind === 'blank' ? Math.min(1, 0.5 + (0.5 * (i - BLANK_REL)) / BLANK_REL) : 0;
     // Profile: the side's points (corner to corner) evenly re-spaced along their own length.
     const raw: number[] = [];
     for (let j = 0; j <= n; j++) {
@@ -397,7 +407,17 @@ export function readShape(outline: ArrayLike<number>, cellMm?: Vec2 | null): Sha
       raw.push((q[0] - a[0]) * tx + (q[1] - a[1]) * ty, (q[0] - a[0]) * nx + (q[1] - a[1]) * ny);
     }
     const profile = respaceOpen(raw, PROFILE_N);
-    sides.push({ kind, conf: Math.max(0, Math.min(1, conf)), outMm: out, inMm: inn, lengthMm: len, outMidMm: outMid, inMidMm: inMid, profile });
+    sides.push({
+      kind,
+      conf: Math.max(0, Math.min(1, conf)),
+      flatConf: Math.max(0, Math.min(1, flatConf)),
+      outMm: out,
+      inMm: inn,
+      lengthMm: len,
+      outMidMm: outMid,
+      inMidMm: inMid,
+      profile,
+    });
   }
 
   // 5. Piece type.
@@ -409,9 +429,9 @@ export function readShape(outline: ArrayLike<number>, cellMm?: Vec2 | null): Sha
     else if (nFlat === 1) kind = 'edge';
     else if (nFlat === 2 && flats.some((f, i) => f && flats[(i + 1) % 4])) kind = 'corner';
   }
-  const minConf = Math.min(...sides.map((s) => s.conf));
-  // Calibrated on traced val48 outlines: reads with a rectangle fit ≥ FIT_OK and every side ≥ 0.5
-  // sure were right 97 % of the time (91 % of reads); the rest are shown as not sure.
+  // Piece type depends only on which sides are flat, so the read is as sure as its least sure
+  // flat / not-flat call (and the rectangle fit). Calibrated on traced val48 outlines.
+  const minConf = Math.min(...sides.map((s) => s.flatConf));
   const quality = kind ? Math.min(1, best.rect / FIT_OK) * minConf : 0;
   return {
     corners: [P[0]!, P[1]!, P[2]!, P[3]!],
