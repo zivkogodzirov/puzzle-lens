@@ -4,6 +4,12 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M3 first part: shapes, Border mode, finished-puzzle check (2026-11-08; not yet checked on your iPhone)
+- **Shape reading:** each piece's 4 corners and each side as flat, tab or blank, from its outline (works the same face down). On computer-made test photos the piece type is right for ~96 % of clean pieces.
+- **Border mode:** on the puzzle screen, buttons **All / Border / Inside / Not sure**; corners framed orange, edges teal, with "Corners n of 4 · Edges n of 120" for your 28 × 36 grid, and a warning if there are more than the grid allows.
+- **Finished-puzzle check:** an overview of a finished puzzle now says "28 across × 36 down = 1,008 pieces" (counted from the seams), whether that matches your puzzle, and any gaps (red squares on the photo). It isn't added to your pieces. On your photo: 28 × 36, no gaps; with one piece removed digitally, exactly that gap.
+- **Shape-only solving (your idea):** a first test on computer-made pieces: from close-ups, shape alone puts the true neighbour first for ~37 % of sides in a 1000-piece puzzle (top 5: 63 %); from overviews only 7 %. Real pieces may differ: the 7 × 7 test in `docs/M3-CHECKLIST.md` will tell.
+
 ### Your finished puzzle photo (2026-11-08)
 - Added as a test photo (kept on the Mac only). The app's own tools confirm your grid, **28 × 36**, and the picture's true **50 × 70 cm** shape (within 0.5 %).
 - Found and fixed: the scan recognised only about 70 % of the finished puzzle as one assembled area (where the puzzle nearly touches the photo's edge, that part was taken as "off the table") and listed 3 bits of it as loose pieces. Now the whole puzzle is one assembled area with no pieces on it. Your other photos give the same results as before.

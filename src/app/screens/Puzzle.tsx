@@ -2,7 +2,7 @@
  * One puzzle (PLAN §5): name, piece count, grid, box picture, setup progress with "Continue
  * setup", pieces catalogued so far, Export backup and Delete.
  */
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { TopBar } from '../components/TopBar';
 import { go, routeArg } from '../router';
 import { APP_VERSION } from '../env';
@@ -12,6 +12,7 @@ import { exportBackup, zipHere } from '../../project/backup';
 import { deleteScan, restoreScan, scanBinSummary, type ScanBinSummary } from '../../project/scans';
 import type { PieceRow, Project } from '../../project/types';
 import { db } from '../../db/db';
+import { readShape, READ_OK, type PieceKind } from '../../cv/shapeRead';
 import { canShareFile, downloadUrl, revokeDownloadUrls, shareOrDownload } from '../../report/share';
 import { formatBytes } from '../../report/collect';
 import { logError, logInfo, logWarn } from '../../log/logger';
@@ -348,7 +349,7 @@ export function PuzzleScreen() {
           <button class="btn btn-primary btn-block" data-testid="scan-pieces" onClick={() => go('scan', p.id)}>
             📷 Scan pieces
           </button>
-          <Catalog projectId={p.id} version={pieces} markers={p.tracking === 'markers'} />
+          <Catalog projectId={p.id} version={pieces} markers={p.tracking === 'markers'} grid={p.grid} pitch={p.piecePitch} />
           {scanNote && (
             <div class="notice notice-good" role="status" data-testid="scan-bin-note">
               {scanNote}
@@ -488,33 +489,107 @@ export function PuzzleScreen() {
   );
 }
 
-/** Thumbnails of the pieces on the table (first 120; the full catalog screen comes in M3). */
-function Catalog({ projectId, version, markers }: { projectId: string; version: unknown; markers: boolean }) {
+export type ShapeGroup = PieceKind | 'unsure';
+
+/** A catalogued piece's group from its outline: corner, edge, interior, or not sure (touching, cut, or a read not trusted). */
+export function pieceGroup(p: PieceRow, cell: [number, number] | null): ShapeGroup {
+  if (p.flags.clump || p.flags.cut) return 'unsure';
+  const r = readShape(p.outlineMm, cell);
+  return r && r.kind && r.quality >= READ_OK ? r.kind : 'unsure';
+}
+
+/** How many corner and edge pieces a cols × rows puzzle has. */
+export function borderCounts(grid: { cols: number; rows: number }): { corners: number; edges: number } {
+  return { corners: 4, edges: 2 * Math.max(0, grid.cols - 2) + 2 * Math.max(0, grid.rows - 2) };
+}
+
+const SHOW_MAX = 200;
+const GROUP_LABEL: Record<'all' | 'border' | 'interior' | 'unsure', string> = { all: 'All', border: 'Border', interior: 'Inside', unsure: 'Not sure' };
+
+/** The pieces on the table, with Border mode: corners (orange) and edges (teal) read from each piece's outline. */
+function Catalog({
+  projectId,
+  version,
+  markers,
+  grid,
+  pitch,
+}: {
+  projectId: string;
+  version: unknown;
+  markers: boolean;
+  grid: Project['grid'];
+  pitch: Project['piecePitch'];
+}) {
   const [rows, setRows] = useState<PieceRow[]>([]);
+  const [show, setShow] = useState<'all' | 'border' | 'interior' | 'unsure'>('all');
   useEffect(() => {
     void db()
       .pieces.where('projectId')
       .equals(projectId)
       .toArray()
-      .then((ps) => setRows(ps.filter((q) => q.status === 'table').slice(0, 120)));
+      .then((ps) => setRows(ps.filter((q) => q.status === 'table')));
   }, [projectId, version]);
+  const cell: [number, number] | null = pitch ? [pitch.wMm, pitch.hMm] : null;
+  const groups = useMemo(() => new Map(rows.map((r) => [r.id, pieceGroup(r, cell)])), [rows, cell?.[0], cell?.[1]]);
   if (!rows.length)
     return (
       <p class="muted small">No pieces yet. Spread pieces face up {markers ? 'inside the markers' : 'on the table, with small gaps'} and tap Scan pieces.</p>
     );
+  const n = { corner: 0, edge: 0, interior: 0, unsure: 0 };
+  for (const g of groups.values()) n[g]++;
+  const count = { all: rows.length, border: n.corner + n.edge, interior: n.interior, unsure: n.unsure };
+  const want = borderCounts(grid ?? { cols: 0, rows: 0 });
+  const tooMany = grid && (n.corner > want.corners || n.edge > want.edges);
+  const shown = rows
+    .filter((r) => {
+      const g = groups.get(r.id)!;
+      return show === 'all' || (show === 'border' ? g === 'corner' || g === 'edge' : g === show);
+    })
+    // Border view: corners first.
+    .sort((a, b) => (show === 'border' ? Number(groups.get(b.id) === 'corner') - Number(groups.get(a.id) === 'corner') : 0));
   return (
-    <div class="catalog-grid" data-testid="catalog">
-      {rows.map((r) => (
-        <PieceThumb key={r.id} piece={r} />
-      ))}
+    <div>
+      <div class="chips catalog-groups" role="group" aria-label="Show pieces" data-testid="catalog-groups">
+        {(['all', 'border', 'interior', 'unsure'] as const).map((k) => (
+          <button key={k} class={`chip ${show === k ? 'chip-on' : ''}`} aria-pressed={show === k} data-testid={`group-${k}`} onClick={() => setShow(k)}>
+            {GROUP_LABEL[k]} {count[k]}
+          </button>
+        ))}
+      </div>
+      {show === 'border' && (
+        <p class="small" data-testid="border-counts">
+          <span class="legend-corner">Corners {grid ? `${n.corner} of ${want.corners}` : n.corner}</span> ·{' '}
+          <span class="legend-edge">Edges {grid ? `${n.edge} of ${want.edges}` : n.edge}</span>
+          {n.unsure ? <span class="muted"> · {n.unsure} not sure yet (a close-up helps)</span> : null}
+        </p>
+      )}
+      {tooMany && (
+        <div class="notice notice-warn" data-testid="border-warning">
+          More {n.corner > want.corners ? 'corner' : 'edge'} pieces than a {grid!.cols} × {grid!.rows} puzzle has: some shapes were misread, or the grid may be
+          wrong. Check?
+        </div>
+      )}
+      <div class="catalog-grid" data-testid="catalog">
+        {shown.slice(0, SHOW_MAX).map((r) => (
+          <PieceThumb key={r.id} piece={r} group={groups.get(r.id)!} />
+        ))}
+      </div>
+      {shown.length > SHOW_MAX && <p class="muted small">…and {shown.length - SHOW_MAX} more.</p>}
     </div>
   );
 }
 
-function PieceThumb({ piece }: { piece: PieceRow }) {
+function PieceThumb({ piece, group }: { piece: PieceRow; group: ShapeGroup }) {
   const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
-  const cls = piece.flags.clump ? 'flag-clump' : piece.flags.weak ? 'flag-weak' : '';
-  return url ? <img src={url} class={cls} alt="" loading="lazy" /> : <div class="catalog-empty" />;
+  const cls = [piece.flags.clump ? 'flag-clump' : piece.flags.weak ? 'flag-weak' : '', group === 'corner' ? 'kind-corner' : group === 'edge' ? 'kind-edge' : '']
+    .join(' ')
+    .trim();
+  const title = group === 'corner' ? 'Corner piece' : group === 'edge' ? 'Edge piece' : group === 'interior' ? 'Inside piece' : 'Shape not sure yet';
+  return url ? (
+    <img src={url} class={cls} alt={title} title={title} loading="lazy" data-group={group} />
+  ) : (
+    <div class={`catalog-empty ${cls}`} title={title} data-group={group} />
+  );
 }
 
 /** Pieces can be scanned once set-up is finished (marker-free) or the markers are measured. */

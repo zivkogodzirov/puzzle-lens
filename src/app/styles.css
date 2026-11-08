@@ -858,6 +858,11 @@ pre.logbox {
 .catalog-grid img { width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--panel-2); border-radius: 8px; }
 .catalog-grid img.flag-clump { outline: 2px dashed #ff9f2e; }
 .catalog-grid img.flag-weak { outline: 2px solid #ffd84a; }
+.catalog-grid .kind-corner { outline: 3px solid #ff9f2e; outline-offset: -1px; }
+.catalog-grid .kind-edge { outline: 3px solid #2ec4b6; outline-offset: -1px; }
+.catalog-groups { margin: 6px 0 8px; }
+.legend-corner { color: #ff9f2e; font-weight: 600; }
+.legend-edge { color: #2ec4b6; font-weight: 600; }
 .table-camera .scan-note { color: var(--text); background: var(--panel); text-align: left; }
 .table-camera .table-camera-extra { bottom: calc(var(--safe-bottom) + 120px); }
 .table-camera .gauge-wrap { top: calc(var(--safe-top) + 64px); }
@@ -884,3 +889,7 @@ pre.logbox {
 .scan-note-top { position: fixed; left: 12px; right: 12px; top: calc(var(--safe-top) + 196px); z-index: 6; max-height: 24vh; overflow: auto; font-size: 14px; color: var(--text); background: var(--panel); }
 .res-assembled { stroke: #3ccf7a; stroke-width: 3; }
 .res-object { stroke: #ff6b6b; stroke-dasharray: 3 3; }
+.res-finished { stroke: #3ccf7a; stroke-width: 4; }
+.res-gap { stroke: #ff3b3b; stroke-width: 3; fill: rgba(255, 59, 59, 0.25); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }

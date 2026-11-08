@@ -19,7 +19,13 @@ export function CoverageMap({ pieces, coverage, target, view }: { pieces: PieceR
     cells.push(<rect key={i} x={c[0] - 5} y={c[1] - 5} width={10} height={10} class="cov-cell" />);
   }
   return (
-    <svg class="coverage-map" viewBox={`${a.x0 - pad} ${a.y0 - pad} ${w} ${h}`} role="img" aria-label="Map of your pieces: green parts have a close-up" data-testid="coverage-map">
+    <svg
+      class="coverage-map"
+      viewBox={`${a.x0 - pad} ${a.y0 - pad} ${w} ${h}`}
+      role="img"
+      aria-label="Map of your pieces: green parts have a close-up"
+      data-testid="coverage-map"
+    >
       <rect x={a.x0 - pad} y={a.y0 - pad} width={w} height={h} class="cov-bg" />
       {cells}
       {pieces.map((p) => (
@@ -30,8 +36,21 @@ export function CoverageMap({ pieces, coverage, target, view }: { pieces: PieceR
   );
 }
 
+/** How an outline on the photo result is drawn: pieces (ok/clump/weak), areas, a finished puzzle's frame and its gaps. */
+export type OutlineFlag = 'ok' | 'clump' | 'weak' | 'assembled' | 'object' | 'finished' | 'gap';
+
 /** The last photo (small preview) with the outlines of the pieces found in it. */
-export function PhotoResult({ url, size, outlines, onClose }: { url: string; size: { width: number; height: number }; outlines: Array<{ points: number[]; flag: 'ok' | 'clump' | 'weak' | 'assembled' | 'object' }>; onClose: () => void }) {
+export function PhotoResult({
+  url,
+  size,
+  outlines,
+  onClose,
+}: {
+  url: string;
+  size: { width: number; height: number };
+  outlines: Array<{ points: number[]; flag: OutlineFlag }>;
+  onClose: () => void;
+}) {
   return (
     <div class="photo-result" data-testid="photo-result" onClick={onClose}>
       <svg viewBox={`0 0 ${size.width} ${size.height}`} preserveAspectRatio="xMidYMid meet">

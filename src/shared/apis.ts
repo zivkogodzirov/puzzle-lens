@@ -2,15 +2,7 @@
  * The functions each worker offers to the main thread (called through Comlink).
  * Declared here, not in the worker files, so the main thread never imports worker code.
  */
-import type {
-  CvBenchResult,
-  PhotoStats,
-  TrackerFrameResult,
-  TrackerStatus,
-  TwoXResult,
-  WorkerInitInfo,
-  WorkerMemory,
-} from './types';
+import type { CvBenchResult, PhotoStats, TrackerFrameResult, TrackerStatus, TwoXResult, WorkerInitInfo, WorkerMemory } from './types';
 import type { MarkerMap } from '../project/types';
 import type { RectifyBoxResult } from '../cv/rectify';
 import type { TableSetupResult } from '../cv/tableSetup';
@@ -38,11 +30,31 @@ export interface FreeScanOptions {
   table: TableModel | null;
   /** Look for a coin (for true size) in this photo. */
   findCoin?: boolean;
+  /** The box's piece count and the chosen grid: for the finished-puzzle check. */
+  pieceCount?: number;
+  grid?: { cols: number; rows: number } | null;
+}
+
+/** A finished (or nearly finished) puzzle seen in an overview: its rows × columns and gaps. */
+export interface FinishedCheck {
+  cols: number;
+  rows: number;
+  colsExact: number;
+  rowsExact: number;
+  /** How clearly the seams repeat (below SEAM_OK the count isn't trusted). */
+  seamStrength: number;
+  /** Missing-piece spots (column, row from the top-left, 0-based) and their centres in preview px. */
+  gaps: Array<[number, number]>;
+  gapsPreview: Array<[number, number]>;
+  /** The puzzle's 4 corners in preview px. */
+  cornersPreview: Array<[number, number]>;
 }
 
 export type FreeScanReply = ScanMarkerlessResult & {
   /** The coin, if one was asked for and found: its size in the catalog's current mm. */
   coin: (CoinFound & { diameterCatalogMm: number }) | null;
+  /** Set when most of the photo is one assembled area (a finished puzzle). */
+  finished: FinishedCheck | null;
   reasons: string[];
   sharpness: number;
   clippedShare: number;

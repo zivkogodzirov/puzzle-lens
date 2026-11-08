@@ -19,6 +19,7 @@ import { setupFromPhoto, toGray } from '../cv/tableSetup';
 import { ensureRgba, scanPixels, tableFromPixels } from '../cv/scanPhoto';
 import { scanMarkerless } from '../cv/scanMarkerless';
 import { findCoin } from '../cv/coin';
+import { puzzleQuad, readAssembledGrid, SEAM_OK, type AssembledGrid } from '../cv/assembledGrid';
 import type { FreeScanOptions, FreeScanReply, ScanOptions, ScanReply, TableSetupReply } from '../shared/apis';
 import type { TableModel } from '../project/types';
 import { decodeAtMost, findBoxQuad, RECTIFIED_MAX_SIDE, rectifyQuad, type Point, type RectifyBoxResult } from '../cv/rectify';
@@ -185,9 +186,11 @@ async function checkTiles(
   };
 }
 
-
 /** Small JPEG thumbnails of the given boxes and a ≤ 1024 px preview, from RGBA-ordered pixels. */
-async function thumbsAndPreview(rgba: { data: Uint8Array | Uint8ClampedArray; width: number; height: number; stride: number }, boxes: Array<[number, number, number, number]>): Promise<{ thumbs: Array<Blob | null>; preview: Blob; previewScale: number }> {
+async function thumbsAndPreview(
+  rgba: { data: Uint8Array | Uint8ClampedArray; width: number; height: number; stride: number },
+  boxes: Array<[number, number, number, number]>,
+): Promise<{ thumbs: Array<Blob | null>; preview: Blob; previewScale: number }> {
   const rowBytes = rgba.width * 4;
   let packed: Uint8ClampedArray<ArrayBuffer>;
   if (rgba.stride === rowBytes) packed = new Uint8ClampedArray(rgba.data.buffer as ArrayBuffer, rgba.data.byteOffset, rowBytes * rgba.height);
@@ -276,7 +279,10 @@ const api: ReaderApi = {
       const rgba = ensureRgba(await reader.read({ x: 0, y: 0, width: reader.width, height: reader.height }));
       checker ??= new PhotoChecker(c);
       const r = scanPixels(c, checker, rgba, opts);
-      const { thumbs, preview } = await thumbsAndPreview(rgba, r.pieces.map((p) => p.bboxImg));
+      const { thumbs, preview } = await thumbsAndPreview(
+        rgba,
+        r.pieces.map((p) => p.bboxImg),
+      );
       {
         return { ...r, thumbs, preview, width: rgba.width, height: rgba.height, ms: performance.now() - t0, decodeMs };
       }
@@ -306,7 +312,13 @@ const api: ReaderApi = {
       // that was measured but didn't match is not retried (that would only double the time).
       const unusable = (x: typeof r) => x.pieces.filter((p) => !p.flags.cut && !p.flags.clump).length < 5;
       if (unusable(r)) {
-        const other = scanMarkerless(c, rgba, { catalog: opts.catalog, pitchMm: opts.pitchMm, zoom: opts.zoom >= 1.5 ? 1 : 2, kind: opts.kind, table: opts.table });
+        const other = scanMarkerless(c, rgba, {
+          catalog: opts.catalog,
+          pitchMm: opts.pitchMm,
+          zoom: opts.zoom >= 1.5 ? 1 : 2,
+          kind: opts.kind,
+          table: opts.table,
+        });
         if (!unusable(other)) r = { ...other, timings: { ...other.timings, retriedOtherZoom: 1 } };
       }
       // A coin for true size: found in the photo, measured in catalog mm at its own position.
@@ -323,7 +335,12 @@ const api: ReaderApi = {
           const rad = found.diameterPx / 2;
           // Average the catalog-mm length of 4 radii (the photo may be slightly tilted).
           let mm = 0;
-          for (const [dx, dy] of [[1, 0], [0, 1], [-1, 0], [0, -1]] as const) {
+          for (const [dx, dy] of [
+            [1, 0],
+            [0, 1],
+            [-1, 0],
+            [0, -1],
+          ] as const) {
             const p0 = at(cx, cy);
             const p1 = at(cx + dx * rad, cy + dy * rad);
             mm += Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
@@ -336,12 +353,39 @@ const api: ReaderApi = {
           });
         }
       }
-      const { thumbs, preview, previewScale } = await thumbsAndPreview(rgba, r.pieces.map((p) => p.bboxImg));
+      // A finished puzzle: most of the photo is one assembled area whose seams count up to the box's
+      // pieces with few gaps (owner's request 2026-11-08).
+      let finishedRaw: AssembledGrid | null = null;
+      if (opts.kind === 'overview' && opts.pieceCount) {
+        const big = (r.regions ?? []).filter((g) => g.kind === 'assembled').sort((a, b) => outlineArea(b.outlineImg) - outlineArea(a.outlineImg))[0];
+        if (big && outlineArea(big.outlineImg) >= FINISHED_MIN_SHARE * rgba.width * rgba.height) {
+          const q = puzzleQuad(c, rgba, big.outlineImg);
+          const g = q ? readAssembledGrid(c, rgba, q, { pieceCount: opts.pieceCount, grid: opts.grid ?? null }) : null;
+          const cells = g ? g.cols * g.rows : 0;
+          if (g && g.seamStrength >= SEAM_OK && Math.abs(cells / opts.pieceCount - 1) <= FINISHED_COUNT_TOL && g.gaps.length <= FINISHED_MAX_GAPS * cells)
+            finishedRaw = g;
+        }
+      }
+      const { thumbs, preview, previewScale } = await thumbsAndPreview(
+        rgba,
+        r.pieces.map((p) => p.bboxImg),
+      );
+      const finished: FreeScanReply['finished'] = finishedRaw && {
+        cols: finishedRaw.cols,
+        rows: finishedRaw.rows,
+        colsExact: finishedRaw.colsExact,
+        rowsExact: finishedRaw.rowsExact,
+        seamStrength: finishedRaw.seamStrength,
+        gaps: finishedRaw.gaps,
+        gapsPreview: finishedRaw.gapsPx.map(([x, y]) => [x * previewScale, y * previewScale] as [number, number]),
+        cornersPreview: finishedRaw.cornersPx.map(([x, y]) => [x * previewScale, y * previewScale] as [number, number]),
+      };
       const outlinesPreview = r.pieces.map((p) => p.outlineImg.filter((_, i) => i % 4 < 2).map((v) => v * previewScale));
       const regionsPreview = (r.regions ?? []).map((g) => ({ kind: g.kind, points: g.outlineImg.filter((_, i) => i % 4 < 2).map((v) => v * previewScale) }));
       return {
         ...r,
         coin,
+        finished,
         // Without markers, blur is judged from the photo's own sharpness only where markers would be: report tilt/glare reasons from the checker except "no markers".
         reasons: check.quality.reasons.filter((q) => !/marker/i.test(q)),
         sharpness: check.quality.sharpness,
@@ -539,3 +583,19 @@ const api: ReaderApi = {
 };
 
 Comlink.expose(api);
+
+/** Finished-puzzle check: the assembled area covers at least this share of the photo… */
+const FINISHED_MIN_SHARE = 0.2;
+/** …its seams count within this share of the box's pieces… */
+const FINISHED_COUNT_TOL = 0.06;
+/** …and at most this share of its cells look empty. */
+const FINISHED_MAX_GAPS = 0.1;
+
+function outlineArea(o: number[]): number {
+  let a = 0;
+  for (let i = 0, n = o.length; i < n; i += 2) {
+    const j = (i + 2) % n;
+    a += o[i]! * o[j + 1]! - o[j]! * o[i + 1]!;
+  }
+  return Math.abs(a) / 2;
+}

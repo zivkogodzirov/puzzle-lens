@@ -13,7 +13,8 @@ import type { FoundPiece } from '../../cv/pieceFinder';
 import { coinById, MK_COINS, type CoinType } from '../../cv/coin';
 import { DEFAULT_PITCH_MM } from '../../cv/pieceFinder';
 import { REAL_PIECE_AREA_SHARE } from '../../cv/scanMarkerless';
-import { CoverageMap, PhotoResult } from '../components/ScanMaps';
+import { CoverageMap, PhotoResult, type OutlineFlag } from '../components/ScanMaps';
+import type { FinishedCheck } from '../../shared/apis';
 import { logError, logInfo } from '../../log/logger';
 import { errorWords } from './Puzzle';
 
@@ -142,7 +143,7 @@ export function ScanScreen() {
   const [lastPhoto, setLastPhoto] = useState<{
     url: string;
     size: { width: number; height: number };
-    outlines: Array<{ points: number[]; flag: 'ok' | 'clump' | 'weak' | 'assembled' | 'object' }>;
+    outlines: Array<{ points: number[]; flag: OutlineFlag }>;
   } | null>(null);
   const [showPhoto, setShowPhoto] = useState(false);
   // After a photo that couldn't be used, wait for a tap instead of firing again and again.
@@ -250,6 +251,8 @@ export function ScanScreen() {
             kind,
             table: null,
             findCoin: kind === 'overview' && Boolean(coinType) && project.scaleSource !== 'coin',
+            pieceCount: project.pieceCount || undefined,
+            grid: project.grid ? { cols: project.grid.cols, rows: project.grid.rows } : null,
           }),
           timeout,
         ]);
@@ -263,15 +266,27 @@ export function ScanScreen() {
           return {
             url: URL.createObjectURL(f.preview),
             size: f.previewSize,
-            outlines: [
-              ...f.regionsPreview.map((g) => ({ points: g.points, flag: g.kind })),
-              ...f.outlinesPreview.map((pts, i) => ({
-                points: pts,
-                flag: (f.pieces[i]!.flags.clump ? 'clump' : f.pieces[i]!.flags.weak ? 'weak' : 'ok') as 'ok' | 'clump' | 'weak',
-              })),
-            ],
+            outlines: f.finished
+              ? finishedOutlines(f.finished)
+              : [
+                  ...f.regionsPreview.map((g) => ({ points: g.points, flag: g.kind })),
+                  ...f.outlinesPreview.map((pts, i) => ({
+                    points: pts,
+                    flag: (f.pieces[i]!.flags.clump ? 'clump' : f.pieces[i]!.flags.weak ? 'weak' : 'ok') as OutlineFlag,
+                  })),
+                ],
           };
         });
+        if (f.finished) {
+          // A finished puzzle: report the count and any gaps; nothing goes into the catalog.
+          logInfo(
+            'scan',
+            `Finished puzzle: ${f.finished.cols} × ${f.finished.rows} (${f.finished.colsExact.toFixed(2)} × ${f.finished.rowsExact.toFixed(2)}), ${f.finished.gaps.length} gaps, seams ${f.finished.seamStrength.toFixed(2)}`,
+          );
+          setAutoPaused(true);
+          setNote({ ok: true, lines: finishedLines(f.finished, project) });
+          return;
+        }
         if (f.isNewFrame && f.pieces.filter((p) => !p.flags.cut).length < 5) {
           setAutoPaused(true);
           setNote({
@@ -606,4 +621,42 @@ export function ScanScreen() {
       {showPhoto && lastPhoto && <PhotoResult url={lastPhoto.url} size={lastPhoto.size} outlines={lastPhoto.outlines} onClose={() => setShowPhoto(false)} />}
     </>
   );
+}
+
+/** The finished-puzzle check in plain words. */
+export function finishedLines(fin: FinishedCheck, project: Pick<Project, 'grid' | 'pieceCount'>): string[] {
+  const n = fin.cols * fin.rows;
+  const lines = [`Finished puzzle: ${fin.cols} across × ${fin.rows} down = ${n.toLocaleString('en')} pieces, counted from the seams.`];
+  const g = project.grid;
+  if (g) {
+    const same = (g.cols === fin.cols && g.rows === fin.rows) || (g.cols === fin.rows && g.rows === fin.cols);
+    lines.push(
+      same
+        ? `That matches your puzzle (${g.cols} × ${g.rows}).`
+        : `Your puzzle is set to ${g.cols} × ${g.rows}: check the grid, or take the photo again from straight above.`,
+    );
+  }
+  if (!fin.gaps.length) lines.push('No gaps found: every spot has a piece.');
+  else {
+    const list = fin.gaps
+      .slice(0, 6)
+      .map(([c, r]) => `column ${c + 1}, row ${r + 1}`)
+      .join('; ');
+    lines.push(
+      `${fin.gaps.length === 1 ? '1 possible gap' : `${fin.gaps.length} possible gaps`} (red squares on the last photo; counted from the top left): ${list}${fin.gaps.length > 6 ? '; …' : ''}.`,
+    );
+  }
+  lines.push('This photo is not added to your pieces.');
+  return lines;
+}
+
+/** The puzzle's frame and a red square on each gap, for the photo result. */
+function finishedOutlines(fin: FinishedCheck): Array<{ points: number[]; flag: OutlineFlag }> {
+  const c = fin.cornersPreview;
+  const side = Math.min(Math.hypot(c[1]![0] - c[0]![0], c[1]![1] - c[0]![1]) / fin.cols, Math.hypot(c[3]![0] - c[0]![0], c[3]![1] - c[0]![1]) / fin.rows);
+  const h = side * 0.45;
+  return [
+    { points: c.flat(), flag: 'finished' },
+    ...fin.gapsPreview.map(([x, y]) => ({ points: [x - h, y - h, x + h, y - h, x + h, y + h, x - h, y + h], flag: 'gap' as const })),
+  ];
 }
