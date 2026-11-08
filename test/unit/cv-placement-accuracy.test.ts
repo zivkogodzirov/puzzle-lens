@@ -4,12 +4,13 @@
  * place it on the puzzle's art (the "box picture", optionally degraded like a photo of a printed
  * lid), and compare with the true cell. Opt-in (minutes):
  *
- *   PLACE_ACCURACY=1 [PLACE_SETS=val48,val300] [PLACE_BOX=clean|photo] npx vitest run --project unit test/unit/cv-placement-accuracy.test.ts
+ *   PLACE_ACCURACY=1 [PLACE_SETS=val48,val300] [PLACE_BOX=clean|photo] [PLACE_SET='{"keep0":48}'] [SEG_SET='{…}'] npx vitest run --project unit test/unit/cv-placement-accuracy.test.ts
  */
 import { describe, expect, it } from 'vitest';
 import { scanMarkerless } from '../../src/cv/scanMarkerless';
 import { readShape, READ_OK } from '../../src/cv/shapeRead';
-import { buildBoxGrid, extractPatch, patchStats, placePiece, type PiecePatch } from '../../src/cv/placement';
+import { buildBoxGrid, extractPatch, patchStats, placePiece, PLACE, type PiecePatch } from '../../src/cv/placement';
+import { SEG } from '../../src/cv/pieceFinder';
 import type { Vec2 } from '../../src/project/types';
 import { getCv } from '../helpers/cv';
 import { renderScene, segmentationScore, type SynthScene } from '../synth/index';
@@ -19,6 +20,9 @@ import { ALL_SETS, sceneOptions } from '../synth/sets';
 const RUN = process.env.PLACE_ACCURACY === '1';
 const SETS = (process.env.PLACE_SETS ?? 'val48').split(',') as Array<keyof typeof ALL_SETS>;
 const BOX = process.env.PLACE_BOX ?? 'photo';
+// Tuning: PLACE_SET / SEG_SET override placement and piece-finder settings (JSON).
+if (process.env.PLACE_SET) Object.assign(PLACE, JSON.parse(process.env.PLACE_SET));
+if (process.env.SEG_SET) Object.assign(SEG, JSON.parse(process.env.SEG_SET));
 const buf = (s: SynthScene) => ({ data: s.rgba, width: s.width, height: s.height, stride: s.stride });
 
 /** The art as a photographed box lid: slightly blurred, warmer and less saturated, a little darker. */

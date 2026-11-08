@@ -43,15 +43,24 @@ export interface Placement {
   verdict: Verdict;
 }
 
-/** Tuned on the synthetic validation sets (see test/unit/cv-placement*.test.ts). */
+/** Tuned on the synthetic validation sets (see test/unit/cv-placement*.test.ts) and the owner's real photos. */
 export const PLACE = {
-  /** Softmax temperature on scores (fitted by log-loss on val48 + val300, 2026-11-08). */
-  temperature: 0.008,
-  /** "Somewhere else": as likely as a finalist scoring this far below the best (score units). */
-  elseBelow: 0.04,
-  /** Strong: right 95.4 % of the time on val48 + val300 (78 % of pieces); Likely: ≥ 0.4 (90 % right). */
+  /**
+   * Softmax temperature on scores and "somewhere else" (as likely as a finalist scoring elseBelow
+   * under the best). Fitted on real photos (2026-11-08): spots cut from the owner's finished puzzle
+   * (IMG_9272) placed on their box picture, and their 21 loose pieces (IMG_9276) against the 21
+   * holes they came from (IMG_9280). Real scores are much noisier than synthetic ones: the first
+   * fit (0.008 / 0.04, synthetic only) called 74 % of the real spots Strong (27 % of those wrong)
+   * and 14 of the 21 loose pieces Strong (9 of those wrong).
+   */
+  temperature: 0.02,
+  elseBelow: 0.06,
+  /**
+   * Strong: right 25 / 25 on the real finished-puzzle spots, 3 of 4 on the loose pieces, 96–97 % on
+   * val48 / val300. Likely: 82 % right on the real spots, 82–92 % on synthetic.
+   */
   strongP: 0.75,
-  likelyP: 0.4,
+  likelyP: 0.55,
   /** Channel weights (lightness, a, b). */
   wL: 1,
   wC: 0.6,
@@ -64,6 +73,15 @@ export const PLACE = {
   borderSoft: 0.15,
   /** Mask erosion (px at PATCH_CORE scale). */
   erode: 2,
+  /**
+   * Candidates kept after the coarse level and after the middle level, and shifts tried at the
+   * coarse level (± px at 8 px per cell). A wider search (150 / 30, ±1 px) placed 2–3 % fewer
+   * synthetic pieces right (val300: 82.8 → 80.1 %: the coarse level's strict alignment weeds out
+   * look-alikes) and no more of the owner's 21 real pieces once their outlines were right (2026-11-08).
+   */
+  keep0: 48,
+  keep1: 12,
+  shift0: 0,
 };
 
 // ---- Colour --------------------------------------------------------------------------------------
@@ -465,6 +483,8 @@ export interface PlaceOptions {
   colour?: ColourMatch | null;
   /** How many spots to return (default 5). */
   topN?: number;
+  /** Only these cells are candidates (e.g. a zone of the picture); default every cell. */
+  only?: (col: number, row: number) => boolean;
 }
 
 /** Where a piece goes on the box picture: the best spots with probabilities, and a verdict. */
@@ -485,18 +505,28 @@ export function placePiece(box: BoxGrid, patch: PiecePatch, opts: PlaceOptions =
   let cands: Cand[] = [];
   const l0 = box.levels[0];
   for (let row = 0; row < rows; row++)
-    for (let col = 0; col < cols; col++)
+    for (let col = 0; col < cols; col++) {
+      if (opts.only && !opts.only(col, row)) continue;
       for (let rot = 0; rot < 4; rot++) {
         const pn = pen(rot, col, row);
         if (pn === Infinity) continue;
-        cands.push({ col, row, rot, dx: 0, dy: 0, s: score(l0, pls[0]!, rot, col * l0.cell, row * l0.cell) - pn });
+        let s0 = -Infinity;
+        let b0x = 0;
+        let b0y = 0;
+        for (let dy = -PLACE.shift0; dy <= PLACE.shift0; dy++)
+          for (let dx = -PLACE.shift0; dx <= PLACE.shift0; dx++) {
+            const v = score(l0, pls[0]!, rot, col * l0.cell + dx, row * l0.cell + dy);
+            if (v > s0) [s0, b0x, b0y] = [v, dx, dy];
+          }
+        cands.push({ col, row, rot, dx: b0x, dy: b0y, s: s0 - pn });
       }
+    }
   cands.sort((a, b) => b.s - a.s);
-  cands = cands.slice(0, 48);
+  cands = cands.slice(0, PLACE.keep0);
   // Levels 1 and 2: refine with ±2 px shifts.
   for (const [li, keep] of [
-    [1, 12],
-    [2, 12],
+    [1, PLACE.keep1],
+    [2, PLACE.keep1],
   ] as const) {
     const lv = box.levels[li];
     const pl = pls[li]!;

@@ -65,4 +65,28 @@ describe('finished-puzzle check', () => {
     },
     300_000,
   );
+
+  // The owner took 21 pieces out (2026-11-08): 10 at the top-right corner (columns 24–28, rows 1–2)
+  // and 11 around the faces (columns 17–20, rows 7–8, and 17–19 in row 9). The corner pieces being
+  // out cuts the outline's corner off; the floor shows below the table.
+  const holes = listRealPhotos().find((p) => p.name.startsWith('IMG_9280'));
+  it.skipIf(!holes)(
+    'IMG_9280: the puzzle with 21 pieces out: 28 × 36 and exactly those 21 gaps',
+    async () => {
+      const cv = await getCv();
+      const img = await decodeRgba(holes!.path);
+      const r = scanMarkerless(cv, img, { catalog: [], zoom: 1, kind: 'overview', table: null });
+      const region = r.regions.filter((g) => g.kind === 'assembled').sort((a, b) => b.areaMm2 - a.areaMm2)[0]!;
+      const q = puzzleQuad(cv, img, region.outlineImg)!;
+      const g = readAssembledGrid(cv, img, q, { pieceCount: 1000, grid: { cols: 28, rows: 36 } })!;
+      expect([g.cols, g.rows], `${g.colsExact} × ${g.rowsExact}`).toEqual([28, 36]);
+      const want: Array<[number, number]> = [];
+      for (const row of [0, 1]) for (let col = 23; col <= 27; col++) want.push([col, row]);
+      for (const row of [6, 7]) for (let col = 16; col <= 19; col++) want.push([col, row]);
+      for (let col = 16; col <= 18; col++) want.push([col, 8]);
+      const key = (a: [number, number]) => a[1] * 100 + a[0];
+      expect([...g.gaps].sort((a, b) => key(a) - key(b))).toEqual(want.sort((a, b) => key(a) - key(b)));
+    },
+    300_000,
+  );
 });

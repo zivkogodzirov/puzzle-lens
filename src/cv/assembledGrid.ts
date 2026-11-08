@@ -3,12 +3,14 @@
  * and count the pieces").
  *
  * Given an assembled area found by the scan (its outline in photo px):
- * 1. Its 4 corners: convex hull of the outline, simplified until 4 points remain.
+ * 1. Its 4 corners: the box-outline finder's, when each of its corners lies on the outline;
+ *    otherwise the 4 sides fitted as straight lines to the outline (a missing corner piece only
+ *    cuts the outline's corner off), then snapped to the puzzle's real edge in the photo.
  * 2. Straightened (rectify.ts, true shape from the corner geometry).
  * 3. Rows and columns from the seams: thin dark lines (darker than the pixels 3 px either side),
  *    summed along each axis; the repeat length of each profile (autocorrelation) is one piece.
- * 4. Gaps: cells whose middle looks like the table (colour within ΔE 12 of the table just outside
- *    the puzzle) and is plain (little texture) — a missing piece shows the table through it.
+ * 4. Gaps: cells whose middle is mostly table (colour of the table just outside the puzzle), that
+ *    part plain — a missing piece shows the table through it (its neighbours' knobs reach in).
  */
 import type { Cv } from './loadCv';
 import type { PixelBuffer } from './frameAnalyser';
@@ -103,6 +105,84 @@ export function quadFromOutline(cv: Cv, outline: number[]): Point[] | null {
       return null;
     }),
   );
+}
+
+/**
+ * The puzzle's 4 sides as straight lines fitted to the outline (each through the outline points
+ * near that side's extreme, in the frame of the outline's own tilt), intersected. A missing corner
+ * piece or two only cut the outline's corner off; the lines still meet where the corner is (owner's
+ * IMG_9280: 10 pieces out at the top right).
+ */
+export function quadByLines(outline: number[]): Point[] | null {
+  const n = outline.length / 2;
+  if (n < 16) return null;
+  // Tilt: the angle that minimises the outline's bounding-box area (search in 0.5° steps over ±45°).
+  let bestA = Infinity;
+  let th = 0;
+  for (let a = -45; a < 45; a += 0.5) {
+    const c = Math.cos((a * Math.PI) / 180);
+    const s = Math.sin((a * Math.PI) / 180);
+    let u0 = Infinity;
+    let u1 = -Infinity;
+    let v0 = Infinity;
+    let v1 = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const x = outline[2 * i]!;
+      const y = outline[2 * i + 1]!;
+      const u = c * x + s * y;
+      const v = -s * x + c * y;
+      u0 = Math.min(u0, u);
+      u1 = Math.max(u1, u);
+      v0 = Math.min(v0, v);
+      v1 = Math.max(v1, v);
+    }
+    if ((u1 - u0) * (v1 - v0) < bestA) [bestA, th] = [(u1 - u0) * (v1 - v0), (a * Math.PI) / 180];
+  }
+  const c = Math.cos(th);
+  const s = Math.sin(th);
+  // Densify (outline points can be far apart along straight runs) so each side has enough points.
+  const pts: Array<[number, number, number, number]> = [];
+  for (let i = 0; i < n; i++) {
+    const ax = outline[2 * i]!;
+    const ay = outline[2 * i + 1]!;
+    const bx = outline[(2 * i + 2) % (2 * n)]!;
+    const by = outline[(2 * i + 3) % (2 * n)]!;
+    const k = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 4));
+    for (let j = 0; j < k; j++) {
+      const x = ax + ((bx - ax) * j) / k;
+      const y = ay + ((by - ay) * j) / k;
+      pts.push([x, y, c * x + s * y, -s * x + c * y]);
+    }
+  }
+  const us = pts.map((p) => p[2]).sort((a, b) => a - b);
+  const vs = pts.map((p) => p[3]).sort((a, b) => a - b);
+  const q = (arr: number[], f: number) => arr[Math.min(arr.length - 1, Math.max(0, Math.floor(f * arr.length)))]!;
+  const [uLo, uHi, vLo, vHi] = [q(us, 0.005), q(us, 0.995), q(vs, 0.005), q(vs, 0.995)];
+  const band = 0.03 * Math.min(uHi - uLo, vHi - vLo);
+  // Sides in order top (v low), right (u high), bottom (v high), left (u low).
+  const sides: Array<(p: [number, number, number, number]) => boolean> = [
+    (p) => p[3] < vLo + band,
+    (p) => p[2] > uHi - band,
+    (p) => p[3] > vHi - band,
+    (p) => p[2] < uLo + band,
+  ];
+  const lines: Array<[number, number, number]> = [];
+  for (const f of sides) {
+    const sel = pts.filter(f).map((p) => [p[0], p[1]] as Point);
+    if (sel.length < 12) return null;
+    const l = fitLine(sel);
+    if (!l) return null;
+    lines.push(l);
+  }
+  const corners: Point[] = [];
+  for (let e = 0; e < 4; e++) {
+    const [a1, b1, c1] = lines[(e + 3) % 4]!;
+    const [a2, b2, c2] = lines[e]!;
+    const det = a1 * b2 - a2 * b1;
+    if (Math.abs(det) < 1e-9) return null;
+    corners.push([(c1 * b2 - c2 * b1) / det, (a1 * c2 - a2 * c1) / det]);
+  }
+  return orderCorners(corners);
 }
 
 /** Total-least-squares line a x + b y = c through the points, refitted on the closest 70 % (3 times). */
@@ -241,10 +321,30 @@ export function puzzleQuad(cv: Cv, rgba: PixelBuffer, outline: number[]): Point[
     const a = polyArea(q.flat());
     const qx = (q[0]![0] + q[1]![0] + q[2]![0] + q[3]![0]) / 4;
     const qy = (q[0]![1] + q[1]![1] + q[2]![1] + q[3]![1]) / 4;
-    if (a > 0.75 * area && a < 1.25 * area && Math.hypot(qx - cx, qy - cy) < 0.1 * Math.sqrt(area)) return q;
+    // …and each corner near the outline: a quad that agrees only on average can still be the table
+    // or the floor on one side (owner's IMG_9280, with pieces out at a corner).
+    const near = q.every((c) => distToPoly(outline, c) < 0.06 * Math.sqrt(area));
+    if (a > 0.75 * area && a < 1.25 * area && Math.hypot(qx - cx, qy - cy) < 0.1 * Math.sqrt(area) && near) return q;
   }
-  const q0 = quadFromOutline(cv, outline);
+  const q0 = quadByLines(outline) ?? quadFromOutline(cv, outline);
   return q0 ? (snapQuad(rgba, q0) ?? q0) : null;
+}
+
+/** Distance from a point to a closed polygon's boundary (flat x, y). */
+function distToPoly(poly: number[], [px, py]: Point): number {
+  let best = Infinity;
+  for (let i = 0, n = poly.length; i < n; i += 2) {
+    const ax = poly[i]!;
+    const ay = poly[i + 1]!;
+    const bx = poly[(i + 2) % n]!;
+    const by = poly[(i + 3) % n]!;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const l2 = dx * dx + dy * dy;
+    const t = l2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
+    best = Math.min(best, Math.hypot(ax + t * dx - px, ay + t * dy - py));
+  }
+  return best;
 }
 
 /**
@@ -316,27 +416,32 @@ export function readAssembledGrid(
     const ch = H / nY;
     for (let j = 0; j < nY; j++)
       for (let i = 0; i < nX; i++) {
+        // Most of the cell's middle is plain table (neighbours' knobs reach into a missing piece's
+        // cell, so not all of it: owner's IMG_9280).
+        let n = 0;
+        let m = 0;
         let r = 0;
         let gg = 0;
         let b = 0;
-        let n = 0;
         let s1 = 0;
         let s2 = 0;
-        for (let y = Math.round((j + 0.3) * ch); y < (j + 0.7) * ch; y++)
-          for (let x = Math.round((i + 0.3) * cw); x < (i + 0.7) * cw; x++) {
+        for (let y = Math.round((j + 0.25) * ch); y < (j + 0.75) * ch; y += 2)
+          for (let x = Math.round((i + 0.25) * cw); x < (i + 0.75) * cw; x += 2) {
             const k = (y * W + x) * 4;
+            n++;
+            if (deltaE(rgbToLab(data[k]!, data[k + 1]!, data[k + 2]!), tableLab) >= GAP_PIXEL_DELTA_E) continue;
+            m++;
             r += data[k]!;
             gg += data[k + 1]!;
             b += data[k + 2]!;
             const l = g[y * W + x]!;
             s1 += l;
             s2 += l * l;
-            n++;
           }
-        if (!n) continue;
-        const lab = rgbToLab(r / n, gg / n, b / n);
-        const sd = Math.sqrt(Math.max(0, s2 / n - (s1 / n) ** 2));
-        if (deltaE(lab, tableLab) < GAP_DELTA_E && sd < GAP_SD) {
+        if (!n || m < GAP_SHARE * n) continue;
+        const lab = rgbToLab(r / m, gg / m, b / m);
+        const sd = Math.sqrt(Math.max(0, s2 / m - (s1 / m) ** 2));
+        if (deltaE(lab, tableLab) / GAP_DELTA_E + sd / GAP_SD < 1) {
           // In the reported orientation (turned: the straightened picture's x runs down the puzzle).
           // Turned: the puzzle's columns run down the straightened picture and its rows right to left.
           gaps.push(turnedNow ? [j, nX - 1 - i] : [i, j]);
@@ -347,9 +452,17 @@ export function readAssembledGrid(
   return { cornersPx, aspect: rect.aspect, colsExact, rowsExact, cols, rows, seamStrength: Math.min(cx.strength, cy.strength), gaps, gapsPx };
 }
 
-const GAP_DELTA_E = 12;
-/** Plain: the table measures ~1–2 (8-bit luma σ), the finished Kiss's plainest print cells ≥ 10. */
-const GAP_SD = 5;
+/**
+ * The table-like part of the cell must be the table's colour and plain, together:
+ * ΔE / GAP_DELTA_E + σ / GAP_SD < 1 (σ: 8-bit luma). Owner's photos: the 21 holes in IMG_9280
+ * score 0.63–0.81 (ΔE ≤ 2.4, σ 2–8 with the hole edges' shadows); white and pale-blue print on
+ * IMG_9272 / IMG_9280 ≥ 1.5 (ΔE 4–11).
+ */
+const GAP_DELTA_E = 5;
+const GAP_SD = 12;
+/** Table-like pixels (ΔE from the table below this) must be at least this share of the cell's middle. */
+const GAP_PIXEL_DELTA_E = 15;
+const GAP_SHARE = 0.55;
 
 /** Median Lab of a ring 2–5 % of the puzzle's size outside its corners (the table around it). */
 function ringLab(rgba: PixelBuffer, c: Point[]): [number, number, number] | null {

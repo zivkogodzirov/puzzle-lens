@@ -449,6 +449,12 @@ So I'm designing and testing this from scratch.
 - One piece × 1000 cells × 4 rotations at 32×32×3 takes 14.6 ms in plain JS (measured), so adding pieces one at a time is fast on the CPU.
 - Re-scoring all 1000 pieces after a colour-calibration change is ~15 s single-threaded (measured): fine as a background job, or ~0.1–0.4 s on WebGPU (estimate).
 
+**Real-photo findings (2026-11-08, owner's 21 pieces from two areas of The Kiss, with the holes they came from):**
+- The box picture matched the real puzzle to within ~0.15 cell (block matching), so the box picture was not the problem.
+- Spots cut from a photo of the finished puzzle with exact corners, placed on the box picture: right spot first 57 % (top 5: 73 %). Failures are almost all plain wall cells. Real loose pieces: 5 of 21 first, 7 of 21 in the top 5. With colour statistics taken from the true areas (an oracle): 8 of 21 / 11 of 21. Real scores are far noisier than synthetic ones, so the softmax was refitted on real data (T 0.008 → 0.02).
+- A batch of pieces from only two areas makes the one-time colour match (step 5.2) wrong. Self-calibration from the most confident placements didn't help (they reinforce themselves).
+- Next candidates: restrict candidates to known-empty spots or a zone (the finished check now lists gaps), one-piece-per-cell assignment (step 6), and a learned embedding (§12) for real lighting and sheen.
+
 ---
 
 ## 10. Grid size

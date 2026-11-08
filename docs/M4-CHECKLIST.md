@@ -1,4 +1,4 @@
-# M4 (part 1) checklist for your iPhone: where does each piece go?
+# M4 (part 1 and 1b) checklist for your iPhone: where does each piece go?
 
 M4 part 1 suggests, for every scanned piece, **where it goes on the box picture**: the best spot (column and row, counted from the top-left), how sure it is (**Strong**, **Likely**, or **Several spots look alike**) and up to 4 other possible spots. Allow about 20 minutes. Screenshots of anything wrong help.
 
@@ -23,7 +23,12 @@ This tells us exactly how well it works on your pieces:
 4. Tap each piece: is its green spot one of the holes?
 5. **Export backup** and put it in the images folder on your Mac (it holds your box picture, so I can measure everything here).
 
+## Part E: after the part 1b fixes (your 21 pieces)
+1. Scan your 21-piece photo again (**🖼 Choose a photo** → IMG_9276). The pale pieces' outlines should now follow their real edge.
+2. Under Pieces, most should now say **Several spots look alike** (honest), a few **Strong**. Tap a Strong one: its green spot should be one of the holes (top-right corner, or around the faces).
+3. Scan the holes photo (IMG_9280): the finished-puzzle check should list **21 gaps**, with red squares exactly on the holes.
+
 ## Known limits (honest)
-- On computer-made test puzzles: right spot first for **92 %** of pieces (48-piece puzzles) and **84 %** (300-piece), in the top 5 for 99 % / 92 %. "Strong" was right 95–97 % of the time there.
-- On your real pieces it is **not measured yet** (that's Part D). Shiny pieces under a lamp, and plain areas (the wall), will be harder; the app then says "Several spots look alike".
+- On computer-made test puzzles: right spot first for **91 %** of pieces (48-piece puzzles) and **83 %** (300-piece), in the top 5 for 97 % / 90 %. "Strong" was right 96–97 % of the time there.
+- On your real pieces (21 pieces, 2026-11-08): right spot first for **5 of 21**, in the top 5 for **7 of 21**. Plain areas (the wall) can't be told apart by colour and pattern; shiny pieces under a lamp look different from the box. The app now says "Several spots look alike" for most of them instead of a wrong "Strong".
 - Not yet in this part: Zones and Trays, "Fill this spot", one-piece-per-spot (two pieces can still claim the same spot), the box-border question and box-to-grid correction.

@@ -4,6 +4,14 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M4 (part 1b): fixes from your real test with the 21 pieces (2026-11-08; not yet checked on your iPhone)
+- **What your test showed.** Your holes photo (IMG_9280) gives the true spots of your 21 pieces (IMG_9276): 10 from the top-right corner (columns 24–28, rows 1–2) and 11 around the faces (columns 17–20, rows 7–9). Your box picture lines up with the real puzzle to within about a tenth of a piece, so the box picture was fine. Three things went wrong on the piece side:
+  1. **Pale pieces were outlined wrongly.** On your white table, the beige wall pieces are close to the table's colour, so their outline cut into the piece (9 of 21). Every straightened piece was then crooked. **Fixed:** where colour can't tell, the app now uses the print's fine linen texture (the table is smooth). All 21 pieces are now outlined along their real edge.
+  2. **The app was far too sure of itself.** It called 14 of your 21 pieces "Strong", and 9 of those were wrong. **Fixed:** the confidence is now fitted on your real photos. "Strong" is now rare on real pieces but right (25 of 25 spots cut from your finished-puzzle photo; 3 of 4 of your loose pieces), and most real pieces honestly say **Several spots look alike**, with the possible spots shown.
+  3. **Matching real pieces is hard.** Even with clean outlines, your 21 pieces put a right spot first for only **5 of 21**, and in their top 5 for **7 of 21**. The 10 plain wall pieces are close to impossible by colour and pattern alone (the wall is a large part of the picture). Shiny dark pieces under a lamp look grey-blue, and a batch from only two areas skews the colour match.
+- **Finished-puzzle check with pieces out.** On your holes photo, the check now finds the puzzle's corners (pieces were missing at a corner) and lists **exactly the 21 empty spots**, with no false ones. Your complete-puzzle photo still shows none.
+- Known, not fixed yet: other things on the table can be taken for pieces (the bottle's label, a patch of table).
+
 ### M4 (part 1): where each piece goes on the box picture (2026-11-08; not yet checked on your iPhone)
 - Every scanned piece now gets its **best spot on the box picture** (column and row from the top-left), how sure (**Strong**, **Likely**, **Several spots look alike**) and up to 4 other possible spots. On the puzzle screen: "On the box picture: N strong · N likely · …"; tap a piece to see its spot marked in green on the box picture. Thumbnails get a green (Strong) or yellow (Likely) dot.
 - How: each piece is straightened by the 4 corners its shape reading found, then its colours and pattern are compared with every spot of the box picture in all 4 turns (coarse to fine); edge and corner pieces only go to matching border spots.

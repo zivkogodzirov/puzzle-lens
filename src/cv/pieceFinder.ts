@@ -293,6 +293,24 @@ export const SEG = {
   refineSigmaMm: 0.7,
   /** Membership level of the edge (½ = half-way between piece and background colour). */
   memberLevel: 0.5,
+  /**
+   * Texture where colour can't tell (pale pieces on the owner's smooth white table, IMG_9276): the
+   * print's fine linen texture vs the smooth table. Only on a smooth table and at ≥ textureMinPpm
+   * photo px per mm (the texture isn't resolved below). Looked for up to textureMarginMm around the
+   * blob; high-pass σ and averaging σ (mm); on when the piece's texture is ≥ textureRatio × the
+   * table's; a pixel is textured above max(textureTable × table, textureLevel × piece) (std units);
+   * then an opening (mm) removes dust and scratches.
+   */
+  textureMinPpm: 6,
+  textureMarginMm: 2.5,
+  textureHpMm: 0.2,
+  textureWinMm: 0.25,
+  textureRatio: 3,
+  textureTable: 2.5,
+  textureLevel: 0.65,
+  textureOpenMm: 0.4,
+  /** High-pass values are capped at this × the piece's typical texture (std). */
+  textureCap: 2,
 };
 
 export function findPieces(cv: Cv, rgba: PixelBuffer, opts: FindOptions): FindResult {
@@ -1940,10 +1958,12 @@ function traceOutline(
 ): { outlineImg: number[]; solidity: number; edgeSharp: number } | null {
   const { rgba, factor: f, W, H } = c;
   const ppm = c.sppm * f;
-  const X0 = Math.max(0, Math.ceil(rx0 * f - 0.5));
-  const Y0 = Math.max(0, Math.ceil(ry0 * f - 0.5));
-  const X1 = Math.min(W - 1, Math.floor((rx0 + rw) * f - 0.5));
-  const Y1 = Math.min(H - 1, Math.floor((ry0 + rh) * f - 0.5));
+  const useTexture = c.field.noise <= SEG.grainyNoise && ppm >= SEG.textureMinPpm;
+  const mg = useTexture ? Math.round(SEG.textureMarginMm * ppm) : 0;
+  const X0 = Math.max(0, Math.ceil(rx0 * f - 0.5) - mg);
+  const Y0 = Math.max(0, Math.ceil(ry0 * f - 0.5) - mg);
+  const X1 = Math.min(W - 1, Math.floor((rx0 + rw) * f - 0.5) + mg);
+  const Y1 = Math.min(H - 1, Math.floor((ry0 + rh) * f - 0.5) + mg);
   const fw = X1 - X0 + 1;
   const fh = Y1 - Y0 + 1;
   if (fw < 4 || fh < 4) return null;
@@ -2010,6 +2030,8 @@ function traceOutline(
   const WO: Float32Array = wOut.data32F;
   const md: Uint8Array = mem.data;
   const k2 = MIN_EDGE_CONTRAST * MIN_EDGE_CONTRAST;
+  // Where colour decides the edge (texture doesn't override it there).
+  const decided = new Uint8Array(n);
   for (let p = 0; p < n; p++) {
     if (inner[p]) {
       md[p] = 255;
@@ -2033,7 +2055,10 @@ function traceOutline(
       const dg = pg - bg;
       const db = pb - bb;
       const dd = dr * dr + dg * dg + db * db;
-      if (dd >= k2) m = ((I[p * 3]! - br) * dr + (I[p * 3 + 1]! - bg) * dg + (I[p * 3 + 2]! - bb) * db) / dd;
+      if (dd >= k2) {
+        m = ((I[p * 3]! - br) * dr + (I[p * 3 + 1]! - bg) * dg + (I[p * 3 + 2]! - bb) * db) / dd;
+        decided[p] = 1;
+      }
     }
     md[p] = Math.max(0, Math.min(255, Math.round(m * 255)));
   }
@@ -2052,6 +2077,15 @@ function traceOutline(
   grads.sort((a, b) => a - b);
   // No half-way pixels at all = an abrupt edge (inner and outer zones touch): sharp.
   const edgeSharp = grads.length >= 5 ? (grads[grads.length >> 1]! / 255) * ppm : Infinity;
+
+  if (useTexture) {
+    const tex = textureMask(cv, sc, rgba, X0, Y0, fw, fh, ppm, inner, outerD);
+    if (tex) {
+      // Allocations above may have moved WebAssembly memory: take the view again.
+      const md2: Uint8Array = mem.data;
+      for (let p = 0; p < n; p++) if (tex[p] && !decided[p]) md2[p] = 255;
+    }
+  }
 
   // Sub-pixel: trace on a 2× upsampled map when pixels are coarse.
   const U = ppm < 7 ? 2 : 1;
@@ -2123,6 +2157,92 @@ function traceOutline(
     outlineImg.push(X0 + (ux + 0.5) / U - 0.5, Y0 + (uy + 0.5) / U - 0.5);
   }
   return { outlineImg, solidity, edgeSharp };
+}
+
+/**
+ * Textured pixels of one piece (SEG.texture*): local spread of high-passed brightness, compared
+ * with the table's (low quartile outside the blob) and the piece's own (median inside it). Returns
+ * the textured parts that overlap the blob's inner zone, or null when texture can't tell piece
+ * from table here (no fine texture, a grainy or glary patch of table, too little of either).
+ */
+function textureMask(
+  cv: Cv,
+  sc: CvScope,
+  rgba: PixelBuffer,
+  X0: number,
+  Y0: number,
+  fw: number,
+  fh: number,
+  ppm: number,
+  inner: Uint8Array,
+  outerD: Uint8Array,
+): Uint8Array | null {
+  const n = fw * fh;
+  const L = sc.keep(new cv.Mat(fh, fw, cv.CV_32FC1));
+  const lo = sc.keep(new cv.Mat());
+  const sq = sc.keep(new cv.Mat(fh, fw, cv.CV_32FC1));
+  const T = sc.keep(new cv.Mat(fh, fw, cv.CV_8UC1));
+  const ro = Math.max(1, Math.round(SEG.textureOpenMm * ppm));
+  const ker = sc.keep(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(2 * ro + 1, 2 * ro + 1)));
+  const lab = sc.keep(new cv.Mat());
+  const lf: Float32Array = L.data32F;
+  const src = rgba.data;
+  for (let y = 0; y < fh; y++) {
+    let q = (Y0 + y) * rgba.stride + X0 * 4;
+    for (let x = 0; x < fw; x++, q += 4) lf[y * fw + x] = 0.299 * src[q]! + 0.587 * src[q + 1]! + 0.114 * src[q + 2]!;
+  }
+  const sh = Math.max(0.7, SEG.textureHpMm * ppm);
+  cv.GaussianBlur(L, lo, new cv.Size(0, 0), sh, sh, cv.BORDER_REFLECT);
+  cv.subtract(L, lo, L);
+  const hp: Float32Array = L.data32F.slice();
+  const sw = Math.max(1, SEG.textureWinMm * ppm);
+  // Local variance of the high-pass, with |high-pass| capped at `cap` (the piece's dark edge line is
+  // far stronger than the print's texture and would otherwise spread around the piece).
+  const localVar = (cap: number): Float32Array => {
+    const d: Float32Array = sq.data32F;
+    for (let p = 0; p < n; p++) {
+      const v = Math.max(-cap, Math.min(cap, hp[p]!));
+      d[p] = v * v;
+    }
+    cv.GaussianBlur(sq, sq, new cv.Size(0, 0), sw, sw, cv.BORDER_REFLECT);
+    return sq.data32F.slice();
+  };
+  const levels = (v: Float32Array): [number, number] | null => {
+    const outside: number[] = [];
+    const inside: number[] = [];
+    for (let p = 0; p < n; p++) {
+      if (inner[p]) inside.push(v[p]!);
+      else if (!outerD[p]) outside.push(v[p]!);
+    }
+    if (inside.length < 50 || outside.length < 50) return null;
+    outside.sort((a, b) => a - b);
+    inside.sort((a, b) => a - b);
+    return [outside[Math.floor(outside.length * 0.25)]!, inside[inside.length >> 1]!];
+  };
+  const first = levels(localVar(Infinity));
+  if (!first) return null;
+  const v = localVar(SEG.textureCap * Math.sqrt(first[1]));
+  const lv = levels(v);
+  if (!lv) return null;
+  const [table, piece] = lv;
+  // Variances: compare squared ratios.
+  if (piece < SEG.textureRatio ** 2 * table) return null;
+  const thr = Math.max(SEG.textureTable ** 2 * table, SEG.textureLevel ** 2 * piece);
+  const td: Uint8Array = T.data;
+  for (let p = 0; p < n; p++) td[p] = v[p]! > thr ? 255 : 0;
+  cv.morphologyEx(T, T, cv.MORPH_OPEN, ker);
+  const nl: number = cv.connectedComponents(T, lab, 8, cv.CV_32S);
+  const ld: Int32Array = lab.data32S.slice();
+  const keep = new Uint8Array(nl);
+  for (let p = 0; p < n; p++) if (inner[p] && ld[p]! > 0) keep[ld[p]!] = 1;
+  const out = new Uint8Array(n);
+  let any = false;
+  for (let p = 0; p < n; p++)
+    if (keep[ld[p]!] && ld[p]! > 0) {
+      out[p] = 1;
+      any = true;
+    }
+  return any ? out : null;
 }
 
 function polySigned(pts: ArrayLike<number>): number {
