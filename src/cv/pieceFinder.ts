@@ -167,6 +167,13 @@ export const SEG = {
   tableMinAlpha: 0.85,
   /** Closing across pieces when finding the table (mm). */
   tableCloseMm: 30,
+  /** Everything inside the table area's convex hull is on the table (a table top is convex). */
+  tableConvex: true as boolean,
+  /** …for a non-table area there when its open sides (photo edge, hull chord) are at most this × its border with the table (a finished puzzle reaching the photo's edge: 0.2; bays and floor on the owner's other photos: ≥ 0.4). */
+  tableEdgeShare: 0.3,
+  /** A pale blob is part of an assembled area's print when ≥ gapShare of a ring gapRing × a piece side outside its box is that area (white dress in IMG_9272: 55 %; nothing on the owner's other photos is dropped at 50 %). */
+  gapRing: 0.5,
+  gapShare: 0.5,
   /** No pale cue within this distance (mm) of the table's edge. */
   tableEdgeMm: 30,
   /** Shape gate for a single piece: solidity above this, or a box this elongated, is an object (a piece with long knobs at both ends reaches ~2.1 on real photos). */
@@ -863,7 +870,66 @@ function tableRegion(cv: Cv, cls: Uint8Array, alpha: Float32Array, w: number, h:
     const lab: Int32Array = l.data32S.slice();
     const only = new Uint8Array(cw * ch);
     for (let g = 0; g < cw * ch; g++) only[g] = lab[g] === best ? 255 : 0;
-    const filled = fillHoles(cv, sc, toMat(cv, sc, only, cw, ch));
+    // A table top is convex (a rectangle seen in perspective, cut by the photo's edges): everything
+    // inside its outline's convex hull lies on it. Filling only enclosed holes missed a finished
+    // puzzle reaching to the photo's edge, where the table no longer surrounds it (owner's
+    // IMG_9272, 2026-11-08: ~30 % of the puzzle taken as off the table).
+    const onlyMat = toMat(cv, sc, only, cw, ch);
+    const cts = sc.keep(new cv.MatVector());
+    const hier = sc.keep(new cv.Mat());
+    cv.findContours(onlyMat, cts, hier, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+    let big = -1;
+    let bigA = 0;
+    for (let i = 0; i < cts.size(); i++) {
+      const a = cv.contourArea(sc.keep(cts.get(i)));
+      if (a > bigA) [big, bigA] = [i, a];
+    }
+    const filled = fillHoles(cv, sc, onlyMat);
+    if (SEG.tableConvex && big >= 0) {
+      // Non-table areas inside the hull that the table borders far more than their open sides (the
+      // photo's edge or the hull's chord) join the table: a puzzle reaching the photo's edge. Bays
+      // in the table's outline (floor past its edge, clutter around a tray) are open along the
+      // chord and stay off.
+      const hullM = sc.keep(cv.Mat.zeros(ch, cw, cv.CV_8UC1));
+      const hull = sc.keep(new cv.Mat());
+      cv.convexHull(sc.keep(cts.get(big)), hull, false, true);
+      const hv = sc.keep(new cv.MatVector());
+      hv.push_back(hull);
+      cv.fillPoly(hullM, hv, new cv.Scalar(255));
+      const fd: Uint8Array = filled.data;
+      const hd: Uint8Array = hullM.data;
+      const cand = new Uint8Array(cw * ch);
+      for (let g = 0; g < cw * ch; g++) cand[g] = hd[g] && !fd[g] ? 255 : 0;
+      const cl = sc.keep(new cv.Mat());
+      const cs = sc.keep(new cv.Mat());
+      const cc = sc.keep(new cv.Mat());
+      const nc: number = cv.connectedComponentsWithStats(toMat(cv, sc, cand, cw, ch), cl, cs, cc, 4, cv.CV_32S);
+      const lab2: Int32Array = cl.data32S;
+      const edge = new Float64Array(nc);
+      const tab = new Float64Array(nc);
+      for (let y = 0; y < ch; y++)
+        for (let x = 0; x < cw; x++) {
+          const i = lab2[y * cw + x]!;
+          if (!i) continue;
+          // Open sides: the photo's edge, or the hull's own chord (a bay in the table's outline).
+          if (
+            x === 0 ||
+            y === 0 ||
+            x === cw - 1 ||
+            y === ch - 1 ||
+            !hd[y * cw + x - 1] ||
+            !hd[y * cw + x + 1] ||
+            !hd[(y - 1) * cw + x] ||
+            !hd[(y + 1) * cw + x]
+          )
+            edge[i]!++;
+          if ((x > 0 && fd[y * cw + x - 1]) || (x < cw - 1 && fd[y * cw + x + 1]) || (y > 0 && fd[(y - 1) * cw + x]) || (y < ch - 1 && fd[(y + 1) * cw + x]))
+            tab[i]!++;
+        }
+      const join = new Uint8Array(nc);
+      for (let i = 1; i < nc; i++) join[i] = tab[i]! > 0 && edge[i]! <= SEG.tableEdgeShare * tab[i]! ? 1 : 0;
+      for (let g = 0; g < cw * ch; g++) if (join[lab2[g]!]) fd[g] = 255;
+    }
     const f: Uint8Array = filled.data.slice();
     const out = new Uint8Array(w * h);
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) out[y * w + x] = f[Math.floor(y / B) * cw + Math.floor(x / B)]!;
@@ -1397,6 +1463,7 @@ function blobsToPieces(cv: Cv, sc: CvScope, c: BlobCtx): { pieces: FoundPiece[];
   // blobs of their own. The rest is reported as a region, never traced or counted as pieces.
   const regions: FoundRegion[] = [];
   const isRegion = new Uint8Array(nl);
+  const isAssembled = new Uint8Array(nl);
   for (let i = 1; i < nl; i++) {
     if (st[i * 5 + 4]! <= SEG.regionArea * expOf(i)) continue;
     isRegion[i] = 1;
@@ -1429,8 +1496,10 @@ function blobsToPieces(cv: Cv, sc: CvScope, c: BlobCtx): { pieces: FoundPiece[];
     };
     // Interquartile range: robust to the object's rim and shadow.
     const printed = pct(0.75) - pct(0.25) > SEG.assembledMinIqr;
+    const kind = printed && st[i * 5 + 4]! >= SEG.assembledArea * expOf(i) ? 'assembled' : 'object';
+    if (kind === 'assembled') isAssembled[i] = 1;
     regions.push({
-      kind: printed && st[i * 5 + 4]! >= SEG.assembledArea * expOf(i) ? 'assembled' : 'object',
+      kind,
       outlineImg,
       outlineMm,
       areaMm2: polyAreaCentroid(outlineMm).area,
@@ -1570,9 +1639,40 @@ function blobsToPieces(cv: Cv, sc: CvScope, c: BlobCtx): { pieces: FoundPiece[];
     });
     if (!piece) continue;
     if ('kind' in piece) regions.push(piece);
-    else pieces.push(piece);
+    else if (!(piece.flags.weak && inAssembledGap(piece.bboxImg, lab, isAssembled, w, h, c.factor, Math.sqrt(expPx)))) pieces.push(piece);
   }
   return { pieces, regions };
+}
+
+/**
+ * A pale blob in a small gap of an assembled area (a near-white patch of the print, like a white
+ * dress in the finished puzzle, IMG_9272): most of a ring a little outside it belongs to that
+ * area. A pale loose piece lies on the table, in the open or in a frame's larger hole.
+ */
+function inAssembledGap(bboxImg: number[], lab: Int32Array, isAssembled: Uint8Array, w: number, h: number, factor: number, sidePx: number): boolean {
+  const d = SEG.gapRing * sidePx;
+  const x0 = bboxImg[0]! / factor - d;
+  const y0 = bboxImg[1]! / factor - d;
+  const x1 = (bboxImg[0]! + bboxImg[2]!) / factor + d;
+  const y1 = (bboxImg[1]! + bboxImg[3]!) / factor + d;
+  let n = 0;
+  let inA = 0;
+  const at = (x: number, y: number) => {
+    const xi = Math.round(x);
+    const yi = Math.round(y);
+    if (xi < 0 || yi < 0 || xi >= w || yi >= h) return;
+    n++;
+    if (isAssembled[lab[yi * w + xi]!]) inA++;
+  };
+  const steps = 64;
+  for (let k = 0; k < steps; k++) {
+    const t = k / steps;
+    at(x0 + t * (x1 - x0), y0);
+    at(x1, y0 + t * (y1 - y0));
+    at(x1 - t * (x1 - x0), y1);
+    at(x0, y1 - t * (y1 - y0));
+  }
+  return n > 0 && inA >= SEG.gapShare * n;
 }
 
 /**
