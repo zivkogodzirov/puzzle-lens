@@ -4,6 +4,10 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### Your finished puzzle photo (2026-11-08)
+- Added as a test photo (kept on the Mac only). The app's own tools confirm your grid, **28 × 36**, and the picture's true **50 × 70 cm** shape (within 0.5 %).
+- Found: the scan recognises only about 70 % of a finished puzzle as one assembled area and would list 3 bits of it as loose pieces. Not fixed yet.
+
 ### Photos taken very close now work (2026-11-08; not yet checked on your iPhone)
 - With the phone about 3× closer than usual, the app guessed the piece size wrong: real pieces were treated as "objects", the coin wasn't found, and shadows and bits of pieces were saved as pieces. It now tries closer size guesses when the first finds almost nothing. On your photo: about 20 of 23 pieces found cleanly and the coin found.
 

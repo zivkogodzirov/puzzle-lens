@@ -455,6 +455,7 @@ These are adjusted to the headroom measured on your phone in M1. Automated timin
 6. **Speed:** a 300-piece overview takes about 3 s on the Mac, so roughly 4–8 s on the phone, close to the 8 s budget. The phone measures it (scan log).
 7. **Full-size photos** of the latest 10 scans are kept (3–10 MB each) so they can travel in a backup for checking; older ones are dropped.
 8. Printing from the Home Screen app (`window.print()`) is untested on iOS; "Send to my Mac" is the fallback.
+9. **A whole finished puzzle in one photo (IMG_9272, 2026-11-08)** is only partly recognised as one assembled area (~70 %): its darker, beige lower part is missed, and 3 small bits inside it would be listed as loose pieces. The same photo confirms the grid (28 × 36 seams counted) and the picture's true 50 × 70 shape (within 0.5 %). It is kept as the real reference for M3 (every piece's outline in place) and M4 (every spot's true colours).
 
 **Seventh report (2026-11-06, Safari tab) — M1 checked on the phone:** Device check steps 1–5 all done in the Safari tab; Snap sharp 3024×4032 with full-size tracking (chosen by the Photo test, now also the default); tracker 22–28 fps; memory headroom 1,792 MB (the most the test tries). The marker test was right in all three positions (upright, sideways left and right).
 - **The 2× lens test now gives a verdict.** Your phone measured 1.83 and 2.40; ≥ 1.3 counts as a true 2× lens. A lower ratio only says "not confirmed" (digital zoom has not been measured on a phone, so it is never called that).
