@@ -9,6 +9,7 @@ import { APP_VERSION } from '../env';
 import { reportWorker } from '../workers';
 import { countPieces, deleteProject, getBlob, getProject, LAST_SETUP_STEP, setCurrentProjectId, updateProject } from '../../project/store';
 import { exportBackup, zipHere } from '../../project/backup';
+import { deleteScan, restoreScan, scanBinSummary, type ScanBinSummary } from '../../project/scans';
 import type { PieceRow, Project } from '../../project/types';
 import { db } from '../../db/db';
 import { canShareFile, downloadUrl, revokeDownloadUrls, shareOrDownload } from '../../report/share';
@@ -75,6 +76,9 @@ export function PuzzleScreen() {
   const [exp, setExp] = useState<ExportPhase>({ kind: 'idle' });
   const [share, setShare] = useState<'none' | 'sharing' | 'shared' | 'fallback'>('none');
   const [error, setError] = useState<string | null>(null);
+  const [bin, setBin] = useState<ScanBinSummary | null>(null);
+  const [scanAction, setScanAction] = useState<'none' | 'confirm-delete' | 'confirm-restore' | 'busy'>('none');
+  const [scanNote, setScanNote] = useState<string | null>(null);
   const mounted = useRef(true);
   const thumb = useBlobUrl(project?.box?.rectifiedBlobId, project?.box);
 
@@ -99,6 +103,7 @@ export function PuzzleScreen() {
         if (p) {
           void setCurrentProjectId(p.id).catch(() => {});
           setPieces(await countPieces(p.id));
+          setBin(await scanBinSummary(p.id));
         }
       })
       .catch((err) => {
@@ -191,6 +196,48 @@ export function PuzzleScreen() {
     }
   };
 
+  /** After deleting or restoring: the puzzle (size), piece count and bin as stored now. */
+  const reloadScan = async () => {
+    const [np, n, b] = await Promise.all([getProject(p.id), countPieces(p.id), scanBinSummary(p.id)]);
+    if (!mounted.current) return;
+    if (np) setProject(np);
+    setPieces(n);
+    setBin(b);
+  };
+
+  const onDeleteScan = async (thenScan: boolean) => {
+    setScanAction('busy');
+    try {
+      const n = await deleteScan(p.id);
+      logInfo('puzzle', `Scan deleted (moved to the bin): ${n} pieces`);
+      if (thenScan) {
+        go('scan', p.id);
+        return;
+      }
+      await reloadScan();
+      setScanNote(`${n} pieces moved to the bin. Tap "Restore" to bring them back.`);
+    } catch (err) {
+      logError('puzzle', 'The scan could not be deleted', err);
+      setError(errorWords(err));
+    }
+    if (mounted.current) setScanAction('none');
+  };
+
+  const onRestoreScan = async () => {
+    setScanAction('busy');
+    try {
+      const swapped = (pieces ?? 0) > 0;
+      const n = await restoreScan(p.id);
+      logInfo('puzzle', `Scan restored from the bin: ${n} pieces${swapped ? ' (the newer scan went to the bin)' : ''}`);
+      await reloadScan();
+      setScanNote(swapped ? `${n} pieces restored. The newer scan is now in the bin.` : `${n} pieces restored.`);
+    } catch (err) {
+      logError('puzzle', 'The scan could not be restored', err);
+      setError(errorWords(err));
+    }
+    if (mounted.current) setScanAction('none');
+  };
+
   const setupDone = p.setupStep >= LAST_SETUP_STEP;
   return (
     <main class="screen" data-testid="puzzle-screen">
@@ -249,7 +296,9 @@ export function PuzzleScreen() {
               <div class="muted small" data-testid="puzzle-size">
                 Measured piece size {p.scaleSource === 'estimate' ? '≈ ' : ''}
                 {p.piecePitch.wMm.toFixed(1)} × {p.piecePitch.hMm.toFixed(1)} mm
-                {p.grid ? ` → finished puzzle ≈ ${Math.round((p.grid.cols * p.piecePitch.wMm) / 10)} × ${Math.round((p.grid.rows * p.piecePitch.hMm) / 10)} cm` : ''}
+                {p.grid
+                  ? ` → finished puzzle ≈ ${Math.round((p.grid.cols * p.piecePitch.wMm) / 10)} × ${Math.round((p.grid.rows * p.piecePitch.hMm) / 10)} cm`
+                  : ''}
                 {p.scaleSource === 'estimate'
                   ? ' (estimated from a typical piece; put a coin next to the pieces in the next overview for true sizes)'
                   : p.scaleSource === 'coin'
@@ -289,7 +338,75 @@ export function PuzzleScreen() {
           <button class="btn btn-primary btn-block" data-testid="scan-pieces" onClick={() => go('scan', p.id)}>
             📷 Scan pieces
           </button>
-          <Catalog projectId={p.id} version={pieces} />
+          <Catalog projectId={p.id} version={pieces} markers={p.tracking === 'markers'} />
+          {scanNote && (
+            <div class="notice notice-good" role="status" data-testid="scan-bin-note">
+              {scanNote}
+            </div>
+          )}
+          {(pieces ?? 0) > 0 && scanAction !== 'confirm-delete' && scanAction !== 'confirm-restore' && (
+            <button
+              class="btn btn-block"
+              data-testid="delete-scan"
+              disabled={scanAction === 'busy'}
+              onClick={() => (setScanNote(null), setScanAction('confirm-delete'))}
+            >
+              Delete scanned pieces…
+            </button>
+          )}
+          {scanAction === 'confirm-delete' && (
+            <div class="notice notice-warn" data-testid="delete-scan-confirm">
+              <p>
+                This moves the <strong>{pieces} pieces</strong> read so far, with their photos, to the bin. You can restore them later. The box picture and grid
+                stay.
+              </p>
+              {bin && <p class="small">The bin already holds an older scan ({bin.pieces} pieces); it will be replaced.</p>}
+              <div class="row" style={{ flexWrap: 'wrap', gap: '8px' }}>
+                <button class="btn btn-primary" data-testid="delete-scan-rescan" onClick={() => void onDeleteScan(true)}>
+                  Delete and scan again
+                </button>
+                <button class="btn btn-danger" data-testid="delete-scan-yes" onClick={() => void onDeleteScan(false)}>
+                  Delete pieces
+                </button>
+                <button class="btn" onClick={() => setScanAction('none')}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {bin && scanAction !== 'confirm-delete' && (
+            <div class="card" data-testid="scan-bin">
+              <p class="small">
+                <strong>Bin:</strong> an earlier scan with {bin.pieces} {bin.pieces === 1 ? 'piece' : 'pieces'} and {bin.photos}{' '}
+                {bin.photos === 1 ? 'photo' : 'photos'} (deleted {new Date(bin.ts).toLocaleString()}).
+              </p>
+              {scanAction !== 'confirm-restore' ? (
+                <button
+                  class="btn btn-small"
+                  data-testid="restore-scan"
+                  disabled={scanAction === 'busy'}
+                  onClick={() => (setScanNote(null), (pieces ?? 0) > 0 ? setScanAction('confirm-restore') : void onRestoreScan())}
+                >
+                  Restore
+                </button>
+              ) : (
+                <div class="notice notice-warn" data-testid="restore-scan-confirm">
+                  <p class="small">
+                    Restoring swaps the scans: the <strong>{pieces} pieces</strong> you have now go to the bin (two scans can't be mixed, because each one
+                    measures the table its own way).
+                  </p>
+                  <div class="row" style={{ gap: '8px' }}>
+                    <button class="btn btn-primary" data-testid="restore-scan-yes" onClick={() => void onRestoreScan()}>
+                      Swap and restore
+                    </button>
+                    <button class="btn" onClick={() => setScanAction('none')}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -324,7 +441,12 @@ export function PuzzleScreen() {
             </div>
           )}
           <div class="row" style={{ marginTop: '10px' }}>
-            <a class={share === 'fallback' ? 'btn btn-primary btn-block' : 'btn btn-small'} data-testid="download-backup" href={exp.url} download={exp.file.name}>
+            <a
+              class={share === 'fallback' ? 'btn btn-primary btn-block' : 'btn btn-small'}
+              data-testid="download-backup"
+              href={exp.url}
+              download={exp.file.name}
+            >
               {share === 'fallback' ? 'Download backup' : 'Download instead'}
             </a>
           </div>
@@ -357,7 +479,7 @@ export function PuzzleScreen() {
 }
 
 /** Thumbnails of the pieces on the table (first 120; the full catalog screen comes in M3). */
-function Catalog({ projectId, version }: { projectId: string; version: unknown }) {
+function Catalog({ projectId, version, markers }: { projectId: string; version: unknown; markers: boolean }) {
   const [rows, setRows] = useState<PieceRow[]>([]);
   useEffect(() => {
     void db()
@@ -366,7 +488,10 @@ function Catalog({ projectId, version }: { projectId: string; version: unknown }
       .toArray()
       .then((ps) => setRows(ps.filter((q) => q.status === 'table').slice(0, 120)));
   }, [projectId, version]);
-  if (!rows.length) return <p class="muted small">No pieces yet. Spread 200–300 pieces face up inside the markers and tap Scan pieces.</p>;
+  if (!rows.length)
+    return (
+      <p class="muted small">No pieces yet. Spread pieces face up {markers ? 'inside the markers' : 'on the table, with small gaps'} and tap Scan pieces.</p>
+    );
   return (
     <div class="catalog-grid" data-testid="catalog">
       {rows.map((r) => (

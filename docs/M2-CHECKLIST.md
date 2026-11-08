@@ -54,6 +54,11 @@ Tell me:
 - Did any close-up say it could not be matched?
 - How long did each photo take to process?
 
+## Part C2: delete, restore, scan again (2 minutes)
+1. On the puzzle screen, under **Pieces**, tap **Delete scanned pieces…**, then **Delete pieces**. The count goes to 0 and a **Bin** box appears.
+2. Tap **Restore**: the pieces and the measured size come back.
+3. Optional: tap **Delete scanned pieces…** → **Delete and scan again** to start a fresh overview (the old scan waits in the bin).
+
 ## Part D: send me the results
 1. On the puzzle screen, tap **Export backup**, then **Share backup**, and AirDrop it to your Mac. Put the `.pfbackup` file in the `images` folder. It holds the full photos of your last 10 scans plus the catalog, so I can measure exactly what was missed.
 2. Also send a **report** (Report screen) and put it in the `images` folder.

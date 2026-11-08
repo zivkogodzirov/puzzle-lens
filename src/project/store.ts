@@ -16,6 +16,9 @@ export const printScaleKey = (projectId: string): string => `printScale:${projec
 
 export const LAST_SETUP_STEP = 6;
 
+/** Settings key of a puzzle's scan bin (deleted scan, restorable; src/project/scans.ts). */
+export const scanBinKey = (projectId: string): string => `scanBin:${projectId}`;
+
 export type ProjectPatch = Partial<Omit<Project, 'id' | 'createdAt'>>;
 
 export function newId(): string {
@@ -136,6 +139,7 @@ export async function deleteProject(id: string): Promise<void> {
     await d.snaps.where('projectId').equals(id).delete();
     await d.blobs.bulkDelete(blobIds);
     await d.settings.delete(printScaleKey(id));
+    await d.settings.delete(scanBinKey(id));
     const current = await d.settings.get(CURRENT_PROJECT_KEY);
     if (current?.value === id) await d.settings.delete(CURRENT_PROJECT_KEY);
     await d.projects.delete(id);

@@ -4,6 +4,11 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### Delete, restore and scan again (2026-11-08; not yet checked on your iPhone)
+- On the puzzle screen, under Pieces: **Delete scanned pieces…** → **Delete and scan again** (starts a fresh overview) or **Delete pieces**. The box picture and grid stay.
+- Deleted pieces go to a **bin** with their photos and the measured size; **Restore** brings them back exactly. The bin holds one scan: deleting again replaces it. Restoring while you have a newer scan swaps the two (two scans can't be mixed, because each one measures the table its own way).
+- The bin is not included in backups.
+
 ### Shiny pieces (2026-11-07; checked on your photos, not yet on your iPhone)
 - Under a lamp, the side of a glossy piece facing the light looks lighter and was cut off the outline (pieces looked bitten, some were called "objects", sizes came out 15 % small). Lighter areas that keep the piece's own colour, right next to it (up to 3 mm), now count as part of the piece; shadows keep the table's colour and are left out.
 - Pieces with long knobs at both ends are no longer mistaken for objects.
