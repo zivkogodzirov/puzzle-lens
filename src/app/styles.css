@@ -928,3 +928,12 @@ pre.logbox {
 .table-photo-bar { width: 100%; gap: 8px; align-items: center; color: #fff; margin-bottom: 8px; }
 .table-photo svg { width: 100%; max-height: 80vh; }
 .tray-labels .tl-pages { margin-top: 12px; }
+
+/* Fill this spot (M4) */
+.fill-spot { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.fill-box { cursor: crosshair; touch-action: manipulation; }
+.fill-grid { stroke: rgba(255, 255, 255, 0.45); stroke-width: 1; }
+.fill-arrows { gap: 8px; justify-content: center; }
+.fill-cands { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.fill-cand { border: 3px solid; border-radius: 10px; padding: 4px; text-align: center; }
+.fill-cand img, .fill-cand .catalog-empty { width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 6px; background: var(--panel-2); display: block; }

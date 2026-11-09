@@ -1,4 +1,4 @@
-# M4 (parts 1, 1b, 2, 2b, 3 and 4) checklist for your iPhone: where does each piece go, and trays
+# M4 (parts 1–5) checklist for your iPhone: where does each piece go, trays, and Fill this spot
 
 M4 part 1 suggests, for every scanned piece, **where it goes on the box picture**: the best spot (column and row, counted from the top-left), how sure it is (**Strong**, **Likely**, or **Several spots look alike**) and up to 4 other possible spots. Allow about 20 minutes. Screenshots of anything wrong help.
 
@@ -64,6 +64,14 @@ Part 4b (after your screenshot): colours are now evened out for the lamp. Your p
 7. Go back and tap **Put tray … back on the table**: the pieces come back to the list.
 8. Best real test, if you can: scan a bigger pile of mixed pieces and sort them into 6 trays. Then tell me if any tray is a mix that doesn't make sense, with a screenshot.
 
+## Part I: Fill this spot (part 5)
+1. Update the app (Part A). Settings should show the version I sent you.
+2. Open *The Kiss*. Under Pieces, tap **🎯 Fill this spot**. Your box picture shows the 21 empty spots as light squares.
+3. Tap one of the top-right holes, e.g. column 26, row 1. A close-up shows it in green, and below it **The piece for this spot** with "Strong" and a %. Check it's really the piece for that hole.
+4. Tap **Show on my table photo**: that piece is outlined in **green** on your photo, other possible pieces in **yellow**.
+5. Try a few more holes, including the middle ones (column 17–20, rows 7–9). For column 25, row 2, expect no single piece but a list of possible ones.
+6. If some pieces are in a tray (Part H), they still show here, marked "in tray …" (they aren't lit up on the photo, since they're not on the table).
+
 ## Known limits (honest)
 - On computer-made test puzzles: right spot first for **91 %** of pieces (48-piece puzzles) and **83 %** (300-piece), in the top 5 for 97 % / 90 %. "Strong" was right 96–97 % of the time there.
 - On your real pieces (21 pieces, 2026-11-08): right spot first for **5 of 21**, in the top 5 for **7 of 21**. Plain areas (the wall) can't be told apart by colour and pattern; shiny pieces under a lamp look different from the box. The app now says "Several spots look alike" for most of them instead of a wrong "Strong".
@@ -72,4 +80,5 @@ Part 4b (after your screenshot): colours are now evened out for the lamp. Your p
 - **Knob shapes (part 3)**, in the app with your photos: 17 Strong, all right. Still not placed: two wall pieces with the same knob pattern (they swap between two neighbouring holes; the app says "several spots"), and one shadowed wall piece that says "fits none".
 - **Trays by colour (parts 4, 4b):** groups follow each piece's main colour, evened out for the lamp's light on the table around it. Shine on the piece itself isn't evened out, so with many trays the same colour can still split into a lighter and a darker group. Things that aren't pieces (a label, a patch of table) take a tray of their own. Pieces of two colours go by the bigger one ("+B" marks the other). A tray's pieces photographed again later (e.g. in the tray) would be added as new pieces: telling them apart comes with re-identification (M5).
 - **Zones of the box picture** were measured and not built: right zone for 60 % of finished-puzzle spots and 8 of 19 loose pieces. The AI picture model (DINOv2-small) didn't help and isn't in the app.
-- Not yet: "Fill this spot", the box-border question and box-to-grid correction.
+- **Fill this spot (part 5)** is only as good as the pieces' spots: very good among the empty spots of a nearly finished puzzle, weak on the whole picture (a spot often has no piece listed).
+- Not yet: the box-border question and box-to-grid correction, green outlines on the table photo.

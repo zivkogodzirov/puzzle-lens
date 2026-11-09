@@ -207,8 +207,8 @@ export function TraysPanel({
 interface PhotoView {
   snap: SnapRow;
   url: string;
-  /** The pieces' outlines in this photo (px, flat x, y). */
-  outlines: number[][];
+  /** The pieces' outlines in this photo (px, flat x, y), each in its colour. */
+  outlines: Array<{ pts: number[]; colour: string }>;
   view: [number, number, number, number];
 }
 
@@ -220,12 +220,15 @@ export function TablePhoto({
   projectId,
   pieces,
   colour,
+  colourOf,
   title,
   onClose,
 }: {
   projectId: string;
   pieces: PieceRow[];
+  /** The outline colour (or per piece with colourOf). */
   colour: string;
+  colourOf?: (p: PieceRow) => string;
   title: string;
   onClose: () => void;
 }) {
@@ -260,7 +263,7 @@ export function TablePhoto({
         if (!blob) break;
         const url = URL.createObjectURL(blob);
         made.push(url);
-        const outlines: number[][] = [];
+        const outlines: PhotoView['outlines'] = [];
         let x0 = Infinity;
         let y0 = Infinity;
         let x1 = -Infinity;
@@ -276,7 +279,7 @@ export function TablePhoto({
             x1 = Math.max(x1, x);
             y1 = Math.max(y1, y);
           }
-          outlines.push(pts);
+          outlines.push({ pts, colour: colourOf?.(p) ?? colour });
           left.delete(p.id);
         }
         // Show the part of the photo with these pieces (with room around them), at least a third of it.
@@ -331,14 +334,14 @@ export function TablePhoto({
             <mask id="lit">
               <rect x={0} y={0} width={v.snap.width} height={v.snap.height} fill="#fff" />
               {v.outlines.map((o, i) => (
-                <polygon key={i} points={pts(o)} fill="#000" stroke="#000" stroke-width={v.view[2] / 60} />
+                <polygon key={i} points={pts(o.pts)} fill="#000" stroke="#000" stroke-width={v.view[2] / 60} />
               ))}
             </mask>
           </defs>
           <image href={v.url} x={0} y={0} width={v.snap.width} height={v.snap.height} />
           <rect x={0} y={0} width={v.snap.width} height={v.snap.height} fill="#000" fill-opacity="0.6" mask="url(#lit)" />
           {v.outlines.map((o, i) => (
-            <polygon key={i} points={pts(o)} fill="none" stroke={colour} stroke-width="4" vector-effect="non-scaling-stroke" class="lit-outline" />
+            <polygon key={i} points={pts(o.pts)} fill="none" stroke={o.colour} stroke-width="4" vector-effect="non-scaling-stroke" class="lit-outline" />
           ))}
         </svg>
       )}

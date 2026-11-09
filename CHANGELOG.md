@@ -4,6 +4,13 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M4 (part 5): Fill this spot (2026-11-09; tested in the app on the Mac, not yet on your iPhone)
+- **🎯 Fill this spot** (puzzle page, under Pieces): the other way round from tapping a piece. Tap a spot on the box picture and see the pieces that may go there, each with its chance.
+- **With your holes photo** (empty spots): tap near a hole and the app picks that hole (the light squares). The piece chosen for it comes first, in a green frame with Strong / Likely and its %. Other possible pieces follow in yellow frames, each saying where its own best spot is. Pieces already in a tray say "in tray C".
+- **On the whole picture:** tap roughly, then tap the exact spot in the close-up (9 pieces across, with a grid), or move with the arrows. Listed: the pieces that have this spot among their best few. On real pieces that's often none, which the app says plainly.
+- **Show on my table photo** lights up those pieces on your scan photo: the chosen one in green, the others in yellow.
+- **Tested in the app with your photos:** all 21 holes. 17 show a Strong piece (the same 17 as the piece list), 1 Likely, and 2 "several spots look alike". Column 25, row 2 has no clear piece, but lists 4 possible ones (the two look-alike wall pieces among them). The photo lights the right pieces.
+
 ### M4 (part 4b): colour groups no longer fooled by the lamp (2026-11-09; tested in the app on the Mac and checked on your iPhone)
 - **What you saw** (your screenshot IMG_9299, 3 trays): the dark pieces split over trays A and B, and tray C mixed the wall pieces with copper and brown ones. **Why:** your lamp lights the table unevenly. A wall piece in the darker part of the photo read as a dark piece, and wall pieces near the lamp read lighter and greyer, so their measured colours spread out.
 - **Fixed:** the app now measures the table right around each piece and evens out each piece's colours to the same light before grouping. Lightness also counts a little less than colour, because shine changes it most.

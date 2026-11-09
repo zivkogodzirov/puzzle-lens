@@ -18,6 +18,7 @@ import { placeKeyOf, readPlacements, shownPlacements, stalePieces, unplacedStatu
 import type { SpotChoice } from '../../cv/openSpots';
 import { readerWorker } from '../workers';
 import { TraysPanel, useColourGroups } from '../components/Trays';
+import { FillSpot } from '../components/FillSpot';
 import type { Groups } from '../../project/groups';
 import { canShareFile, downloadUrl, revokeDownloadUrls, shareOrDownload } from '../../report/share';
 import { formatBytes } from '../../report/collect';
@@ -553,6 +554,7 @@ function Catalog({
   const [rows, setRows] = useState<PieceRow[]>([]);
   const [allRows, setAllRows] = useState<PieceRow[]>([]);
   const [traysOpen, setTraysOpen] = useState(false);
+  const [fillOpen, setFillOpen] = useState(false);
   const [trayGroup, setTrayGroup] = useState<number | null>(null);
   const [show, setShow] = useState<'all' | 'border' | 'interior' | 'unsure'>('all');
   const [places, setPlaces] = useState<PlacementCache | null>(null);
@@ -605,6 +607,19 @@ function Catalog({
   const { groups: colourGroups, uneven } = useColourGroups(traysOpen, project, allRows);
   const cell: [number, number] | null = pitch ? [pitch.wMm, pitch.hMm] : null;
   const groups = useMemo(() => new Map(rows.map((r) => [r.id, pieceGroup(r, cell)])), [rows, cell?.[0], cell?.[1]]);
+  const unplaced = useMemo(() => allRows.filter(unplacedStatus), [allRows]);
+  // Fill this spot (M4): from a spot on the box picture to the pieces that may go there.
+  const fillBlock =
+    project.box && project.grid && boxUrl && places ? (
+      <>
+        <button class={`btn btn-block ${fillOpen ? 'btn-on' : ''}`} aria-expanded={fillOpen} data-testid="fill-toggle" onClick={() => setFillOpen(!fillOpen)}>
+          🎯 Fill this spot
+        </button>
+        {fillOpen && (
+          <FillSpot project={project} boxUrl={boxUrl} shown={shownPlaces} spots={places.open?.cells.length ? places.open.cells : null} pieces={unplaced} />
+        )}
+      </>
+    ) : null;
   const traysBlock = (
     <>
       <button
@@ -633,6 +648,7 @@ function Catalog({
     return allRows.some((q) => q.status === 'tray') ? (
       <div>
         <p class="muted small">All your scanned pieces are in trays.</p>
+        {fillBlock}
         {traysBlock}
       </div>
     ) : (
@@ -692,6 +708,7 @@ function Catalog({
           }}
         />
       )}
+      {fillBlock}
       {traysBlock}
       <div class="catalog-grid" data-testid="catalog">
         {shown.slice(0, SHOW_MAX).map((r) => (

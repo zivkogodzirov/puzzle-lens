@@ -137,6 +137,13 @@ async function eachPieceAtItsCell(page: import('@playwright/test').Page): Promis
   }
 }
 
+/** Taps the middle of a cell (0-based) on a Fill-this-spot picture showing cells [x0, x0 + w) × [y0, y0 + h). */
+async function tapCell(page: import('@playwright/test').Page, testId: string, col: number, row: number, view = { x0: 0, y0: 0, w: 10, h: 8 }): Promise<void> {
+  const svg = page.getByTestId(testId);
+  const b = (await svg.boundingBox())!;
+  await svg.click({ position: { x: ((col + 0.5 - view.x0) / view.w) * b.width, y: ((row + 0.5 - view.y0) / view.h) * b.height } });
+}
+
 test('pieces are placed on the box picture; tapping one shows its spot', async ({ page }) => {
   await seed(page, null);
   await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
@@ -144,6 +151,21 @@ test('pieces are placed on the box picture; tapping one shows its spot', async (
   await expect(page.getByTestId('open-spots')).toHaveCount(0);
   await eachPieceAtItsCell(page);
   await page.screenshot({ path: test.info().outputPath('box-placement.png'), fullPage: true });
+
+  // Fill this spot: tap the cell of piece r3c7 (row 3, column 7): that piece is offered for it.
+  await page.getByTestId('fill-toggle').click();
+  await tapCell(page, 'fill-picture', 7, 3);
+  await expect(page.getByTestId('fill-spot-name')).toContainText('Column 8, row 4');
+  await expect(page.getByTestId('fill-best').getByTestId('fill-cand')).toHaveCount(1);
+  await expect(page.getByTestId('fill-best')).toContainText('%');
+  // One cell to the right (arrow), then back by tapping the close-up (9 × 8 cells, from column 1 here).
+  await page.getByRole('button', { name: 'Right' }).click();
+  await expect(page.getByTestId('fill-spot-name')).toContainText('Column 9, row 4');
+  await expect(page.getByTestId('fill-best')).toHaveCount(0);
+  await tapCell(page, 'fill-zoom', 7, 3, { x0: 1, y0: 0, w: 9, h: 8 });
+  await expect(page.getByTestId('fill-spot-name')).toContainText('Column 8, row 4');
+  await expect(page.getByTestId('fill-best').getByTestId('fill-cand')).toHaveCount(1);
+  await page.screenshot({ path: test.info().outputPath('fill-spot.png'), fullPage: true });
 });
 
 test('with empty spots from an upside-down finished-puzzle photo: pieces go only there, one per spot', async ({ page }) => {
@@ -159,6 +181,16 @@ test('with empty spots from an upside-down finished-puzzle photo: pieces go only
   await eachPieceAtItsCell(page);
   await expect(page.getByTestId('spot-box').locator('rect.spot-open')).toHaveCount(8);
   await page.screenshot({ path: test.info().outputPath('box-placement-open-spots.png'), fullPage: true });
+  // Fill this spot among the empty spots: a tap snaps to the nearest one (a tap far from all is in the unit tests).
+  await page.getByTestId('fill-toggle').click();
+  await expect(page.getByTestId('fill-picture').locator('rect.spot-open')).toHaveCount(8);
+  await tapCell(page, 'fill-picture', 4, 4);
+  await expect(page.getByTestId('fill-spot-name')).toContainText('Column 5, row 6');
+  await expect(page.getByTestId('fill-best').getByTestId('fill-cand')).toHaveCount(1);
+  // A spot whose piece wasn't scanned (one of the two extra gaps): nobody fits it.
+  await tapCell(page, 'fill-picture', 0, 7);
+  await expect(page.getByTestId('fill-spot-name')).toContainText('Column 1, row 8');
+  await expect(page.getByTestId('fill-best')).toHaveCount(0);
   // Back to the whole picture.
   await page.getByTestId('whole-picture').click();
   await expect(page.getByTestId('open-spots')).toHaveCount(0);
