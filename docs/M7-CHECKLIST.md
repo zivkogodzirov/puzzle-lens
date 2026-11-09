@@ -33,3 +33,11 @@ Allow about 10 minutes. Settings should show the version I sent you.
 1. On *The Kiss*, tap **📈 Progress**. It should say about **987 of 1008 pieces in the puzzle**, from your photo of the puzzle.
 2. On the box picture, your holes are dark; most have a yellow dot. Does that match your table?
 3. Put a piece in (✓ Fits), then open Progress again: one more in, one dot fewer.
+
+## Part 3: backups, with reminders
+
+**New:** the puzzle page reminds you to back up when there's no backup yet, or when things changed and the last one is a few days old. **Back up now** prepares the file; **Not now** hides the reminder for a day. The backup now holds everything (also each piece's spot on the box picture and the scan bin).
+
+1. Open *The Kiss*. If you've never backed it up, a box says **💾 No backup yet**. Tap **Back up now**.
+2. Tap **Share backup** and save it to Files (or send it to your Mac). Under Backup it says **Last backup:** with today's date, and the reminder is gone.
+3. (Optional) On Home, **Import a backup** and choose that file: it's added as "The Kiss (copy)", with the same pieces and spots. Delete the copy afterwards.

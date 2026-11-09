@@ -1,8 +1,10 @@
 /**
- * Minimal project backup (PLAN §4, RESEARCH §14): one `.pfbackup` file = a ZIP holding
+ * Project backup (PLAN §4, RESEARCH §14): one `.pfbackup` file = a ZIP holding
  *
- *   backup.json        format, version, the project, its pieces and snaps, the list of blobs
- *   blobs/0001.jpg …   the photos and thumbnails, stored as they are (not re-compressed)
+ *   backup.json        format, version, the project, its pieces and snaps, the list of blobs, and
+ *                      (version 2, M7 part 3) the per-puzzle settings: print scale, the pieces'
+ *                      spots on the box picture (placement cache) and the scan bin
+ *   blobs/0001.jpg …   the photos, thumbnails and straightened pieces, stored as they are
  *
  * Export collects everything from the database; the ZIP itself is made by a function passed in
  * (the app uses the report worker, so the screen stays responsive; tests zip in place).
@@ -15,10 +17,13 @@ import { buildZip } from '../report/zip';
 import type { ReportFileInput } from '../shared/apis';
 import { db, type BlobRow } from '../db/db';
 import type { PieceRow, Project, SnapRow } from './types';
-import { getPrintScale, newId, normalizeProject, printScaleKey, projectBlobId, projectBlobIds } from './store';
+import { getPrintScale, newId, normalizeProject, placementKey, printScaleKey, projectBlobId, projectBlobIds, scanBinKey } from './store';
+import type { PlacementCache } from './placements';
+import type { ScanBin } from './scans';
 
 export const BACKUP_FORMAT = 'puzzle-lens-backup';
-export const BACKUP_VERSION = 1;
+/** 2 (M7 part 3): settings also carry the placement cache and the scan bin. Version 1 files still import. */
+export const BACKUP_VERSION = 2;
 export const BACKUP_EXTENSION = '.pfbackup';
 export const MANIFEST_NAME = 'backup.json';
 
@@ -42,7 +47,13 @@ export interface BackupManifest {
   pieces: PieceRow[];
   snaps: SnapRow[];
   blobs: BackupBlobEntry[];
-  settings: { printScale: number | null };
+  settings: {
+    printScale: number | null;
+    /** The pieces' spots on the box picture, so they needn't be worked out again (version 2). */
+    placements?: PlacementCache | null;
+    /** An earlier scan in the bin (version 2). */
+    scanBin?: ScanBin | null;
+  };
 }
 
 /** A problem with a backup file, in words for the screen. */
@@ -103,7 +114,11 @@ export async function collectBackup(projectId: string, appVersion = 'dev'): Prom
     pieces,
     snaps,
     blobs,
-    settings: { printScale: await getPrintScale(projectId) },
+    settings: {
+      printScale: await getPrintScale(projectId),
+      placements: ((await d.settings.get(placementKey(projectId)))?.value as PlacementCache | undefined) ?? null,
+      scanBin: ((await d.settings.get(scanBinKey(projectId)))?.value as ScanBin | undefined) ?? null,
+    },
   };
   files.unshift({ name: MANIFEST_NAME, text: JSON.stringify(manifest), stored: false });
   return { manifest, files };
@@ -174,6 +189,11 @@ export async function readBackup(data: Blob | Uint8Array): Promise<ParsedBackup>
   const manifest = m as unknown as BackupManifest;
   manifest.project = normalizeProject(manifest.project);
   manifest.settings = isObj(m.settings) ? (m.settings as BackupManifest['settings']) : { printScale: null };
+  // Version 2 extras: left out (worked out again / no bin) when they don't look right.
+  const st = manifest.settings;
+  if (st.placements && !(isObj(st.placements) && isObj(st.placements.byPiece) && typeof st.placements.boxKey === 'string')) st.placements = null;
+  if (st.scanBin && !(isObj(st.scanBin) && Array.isArray(st.scanBin.pieces) && Array.isArray(st.scanBin.snaps) && typeof st.scanBin.ts === 'number'))
+    st.scanBin = null;
   return { manifest, files };
 }
 
@@ -191,8 +211,9 @@ export interface ImportResult {
 /** Gives every record a new id (for "import as a copy"), keeping all links between them. */
 function remapIds(m: BackupManifest): BackupManifest {
   const newPid = newId();
-  const snapIds = new Map(m.snaps.map((s) => [s.id, newId()]));
-  const pieceIds = new Map(m.pieces.map((p) => [p.id, newId()]));
+  const bin = m.settings?.scanBin ?? null;
+  const snapIds = new Map([...m.snaps, ...(bin?.snaps ?? [])].map((s) => [s.id, newId()]));
+  const pieceIds = new Map([...m.pieces, ...(bin?.pieces ?? [])].map((p) => [p.id, newId()]));
   const oldPrefix = `p:${m.project.id}:`;
   const blobIds = new Map(
     m.blobs.map((b) => [b.id, b.id.startsWith(oldPrefix) ? projectBlobId(newPid, b.id.slice(oldPrefix.length)) : projectBlobId(newPid, `imported-${newId()}`)]),
@@ -211,25 +232,41 @@ function remapIds(m: BackupManifest): BackupManifest {
     answers: (m.project.answers ?? []).map((a) => ({ ...a, pieceId: pieceIds.get(a.pieceId) ?? a.pieceId })),
     pairAnswers: (m.project.pairAnswers ?? []).map((a) => ({ ...a, a: pieceIds.get(a.a) ?? a.a, b: pieceIds.get(a.b) ?? a.b })),
   };
+  const snap = (s: SnapRow): SnapRow => ({
+    ...s,
+    id: snapId(s.id),
+    projectId: newPid,
+    blobId: blob(s.blobId),
+    pieceIds: s.pieceIds.map((id) => pieceIds.get(id) ?? id),
+  });
+  const piece = (p: PieceRow): PieceRow => ({
+    ...p,
+    id: pieceIds.get(p.id)!,
+    projectId: newPid,
+    thumbBlobId: blob(p.thumbBlobId),
+    patch: p.patch ? { ...p.patch, blobId: blob(p.patch.blobId)! } : p.patch,
+    table: p.table ? { ...p.table, snapId: snapId(p.table.snapId) } : p.table,
+    maybe: p.maybe ? p.maybe.map((id) => pieceIds.get(id) ?? id) : p.maybe,
+  });
+  const placements = m.settings?.placements;
   return {
     ...m,
     project,
-    snaps: m.snaps.map((s) => ({
-      ...s,
-      id: snapId(s.id),
-      projectId: newPid,
-      blobId: blob(s.blobId),
-      pieceIds: s.pieceIds.map((id) => pieceIds.get(id) ?? id),
-    })),
-    pieces: m.pieces.map((p) => ({
-      ...p,
-      id: pieceIds.get(p.id)!,
-      projectId: newPid,
-      thumbBlobId: blob(p.thumbBlobId),
-      patch: p.patch ? { ...p.patch, blobId: blob(p.patch.blobId)! } : p.patch,
-      table: p.table ? { ...p.table, snapId: snapId(p.table.snapId) } : p.table,
-    })),
+    snaps: m.snaps.map(snap),
+    pieces: m.pieces.map(piece),
     blobs: m.blobs.map((b) => ({ ...b, id: blobIds.get(b.id)! })),
+    settings: {
+      ...m.settings,
+      // The placements are keyed by the box picture (its blob id): the copy's key, its pieces' ids.
+      placements: placements
+        ? {
+            ...placements,
+            boxKey: placements.boxKey.split(m.project.box?.rectifiedBlobId ?? '\u0000').join(project.box?.rectifiedBlobId ?? ''),
+            byPiece: Object.fromEntries(Object.entries(placements.byPiece).map(([id, v]) => [pieceIds.get(id) ?? id, v])),
+          }
+        : null,
+      scanBin: bin ? { ...bin, pieces: bin.pieces.map(piece), snaps: bin.snaps.map(snap) } : null,
+    },
   };
 }
 
@@ -251,6 +288,8 @@ export async function importBackup(data: Blob | Uint8Array): Promise<ImportResul
     await d.pieces.bulkPut(m.pieces);
     await d.snaps.bulkPut(m.snaps);
     if (typeof m.settings?.printScale === 'number') await d.settings.put({ key: printScaleKey(project.id), value: m.settings.printScale });
+    if (m.settings?.placements?.byPiece) await d.settings.put({ key: placementKey(project.id), value: m.settings.placements });
+    if (m.settings?.scanBin?.pieces) await d.settings.put({ key: scanBinKey(project.id), value: m.settings.scanBin });
     await d.projects.put(project);
   });
   return { project, copied: exists, pieces: m.pieces.length, snaps: m.snaps.length, blobs: blobRows.length };

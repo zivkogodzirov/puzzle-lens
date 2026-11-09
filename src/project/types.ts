@@ -116,6 +116,12 @@ export interface Project {
    * Missing = batch 1, started with the puzzle.
    */
   batch?: { n: number; startedAt: number } | null;
+  /**
+   * The last backup taken off the phone (M7 part 3: shared or downloaded), with how much there was
+   * then; and "Not now" on the reminder (until when). src/project/backupReminder.ts.
+   */
+  lastBackup?: { at: number; pieces: number; answers: number } | null;
+  backupSnoozedUntil?: number | null;
 }
 
 /**

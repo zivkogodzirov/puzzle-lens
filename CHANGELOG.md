@@ -4,6 +4,13 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M7 (part 3): full backup, with reminders (2026-11-09; tested in the app with your Kiss photos, not yet on your iPhone)
+- **A reminder to back up** on the puzzle page: when there's no backup yet (once 20 or more pieces are read), or when things changed since the last one and it's 3 days old (or 100 things changed). **Back up now** prepares the file; **Not now** hides the reminder for a day. It counts once the backup has left the app (shared or downloaded).
+- **"Last backup: …"** under Backup, with how many pieces there were then.
+- **The backup now holds everything:** besides the puzzle, its pieces, photos and answers, also each piece's spots on the box picture (no waiting for them to be worked out again after restoring) and an earlier scan in the bin. Backups made before still import.
+- **Timed on a full 1000-piece puzzle** (with 10 full-size scan photos): prepared in **1.9 s** (57 MB), imported back in **2.2 s**, on the Mac in Safari's engine. Expect a few times longer on the iPhone.
+- **Tested with your Kiss puzzle in the app:** the reminder showed, the backup took 0.2 s (2.5 MB); I deleted the puzzle and restored it from the file: the same spots for every piece straight away, and the piece I'd said fits was still in the puzzle.
+
 ### M7 (part 2): progress page (2026-11-09; tested in the app with your Kiss photos, not yet on your iPhone)
 - **New: 📈 Progress** on the puzzle page (next to 📊 How often is the app right?).
 - **How many pieces are in the puzzle**, with a bar. With a photo of the nearly finished puzzle it counts everything but its empty spots (plus the pieces you said fit since); without one, the pieces you said fit.

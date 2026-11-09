@@ -223,7 +223,7 @@ test('new puzzle: steps 0–4, resume after reload, puzzle screen, backup export
   const backup = await readFile(backupPath);
   const files = unzipSync(new Uint8Array(backup));
   const manifest = JSON.parse(new TextDecoder().decode(files['backup.json']));
-  expect(manifest).toMatchObject({ format: 'puzzle-lens-backup', version: 1, settings: { printScale: 0.97 } });
+  expect(manifest).toMatchObject({ format: 'puzzle-lens-backup', version: 2, settings: { printScale: 0.97 } });
   expect(manifest.project).toMatchObject({ id: projectId, name: 'Lighthouse', pieceCount: 1000, grid: { cols: 28, rows: 36 }, setupStep: 5 });
   expect(manifest.blobs.map((b: { kind: string }) => b.kind).sort()).toEqual(['box-photo', 'box-rectified']);
 

@@ -37,6 +37,7 @@ import { answerPair, pairAnswerView, undoPairAnswer } from '../../project/pairAn
 import { answerSpot, answerView, clearNotHere, placedPieces, removeNotAPiece, undoFits } from '../../project/answers';
 import { resolvePending } from '../../project/pending';
 import { startNewBatch } from '../../project/batches';
+import { backupReminder, markBackedUp, snoozeBackupReminder, type BackupReminder } from '../../project/backupReminder';
 import { TableContrast } from '../components/TableContrast';
 import { BoxFitNotice } from '../components/BoxFitNotice';
 import type { Groups } from '../../project/groups';
@@ -121,6 +122,7 @@ export function PuzzleScreen() {
   const [asideN, setAsideN] = useState(0);
   const [scanAction, setScanAction] = useState<'none' | 'confirm-delete' | 'confirm-restore' | 'confirm-batch' | 'busy'>('none');
   const [scanNote, setScanNote] = useState<string | null>(null);
+  const [reminder, setReminder] = useState<BackupReminder | null>(null);
   const mounted = useRef(true);
   const thumb = useBlobUrl(project?.box?.rectifiedBlobId, boxVersion(project?.box));
 
@@ -161,6 +163,21 @@ export function PuzzleScreen() {
         setProject(null);
       });
   }, [id]);
+
+  // Backup reminder (M7 part 3): from the pieces' and answers' times against the last backup.
+  useEffect(() => {
+    if (!project) return;
+    let live = true;
+    void db()
+      .pieces.where('projectId')
+      .equals(project.id)
+      .toArray()
+      .then((rows) => live && setReminder(backupReminder(project, rows)))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [project?.id, project?.updatedAt, project?.lastBackup?.at, project?.backupSnoozedUntil, pieces, tableN, trayN, placedN]);
 
   if (project === undefined) {
     return (
@@ -216,6 +233,16 @@ export function PuzzleScreen() {
     }
   };
 
+  // The backup has left the app: the reminder starts counting again from now.
+  const backedUp = async () => {
+    try {
+      const next = await markBackedUp(p.id);
+      if (mounted.current) setProject(next);
+    } catch (err) {
+      logError('backup', 'The backup time could not be saved', err);
+    }
+  };
+
   const onShare = () => {
     if (exp.kind !== 'ready' || share === 'sharing') return;
     // FIRST thing in the tap, file already made (iOS ~5 s rule).
@@ -226,6 +253,7 @@ export function PuzzleScreen() {
       if (outcome.kind === 'shared') {
         setShare('shared');
         logInfo('backup', 'Backup shared');
+        void backedUp();
       } else if (outcome.kind === 'cancelled') setShare('none');
       else {
         setShare('fallback');
@@ -404,6 +432,53 @@ export function PuzzleScreen() {
         </dl>
       </div>
 
+      {reminder && (
+        <div class="notice notice-warn" role="status" data-testid="backup-reminder">
+          <p>
+            💾{' '}
+            {reminder.never ? (
+              <>
+                <strong>No backup yet.</strong> Everything about this puzzle is only on this iPhone ({pieces} pieces read).
+              </>
+            ) : (
+              <>
+                <strong>Last backup {reminder.days === 0 ? 'today' : reminder.days === 1 ? 'yesterday' : `${reminder.days} days ago`}.</strong> Since then{' '}
+                {[
+                  reminder.pieces ? `${reminder.pieces} ${reminder.pieces === 1 ? 'piece' : 'pieces'} read or changed` : '',
+                  reminder.answers ? `${reminder.answers} ${reminder.answers === 1 ? 'answer' : 'answers'}` : '',
+                ]
+                  .filter(Boolean)
+                  .join(' and ')}
+                .
+              </>
+            )}
+          </p>
+          <div class="row" style={{ gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              class="btn btn-primary btn-small"
+              data-testid="backup-now"
+              onClick={() => {
+                document.getElementById('backup')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                if (exp.kind !== 'ready' && exp.kind !== 'preparing') void prepareBackup();
+              }}
+            >
+              Back up now
+            </button>
+            <button
+              class="btn btn-small"
+              data-testid="backup-later"
+              onClick={() =>
+                void snoozeBackupReminder(p.id)
+                  .then(setProject)
+                  .catch((err) => logError('backup', 'The reminder could not be put off', err))
+              }
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      )}
+
       <h2>Set-up</h2>
       <ol class="setup-progress" data-testid="setup-progress">
         {SETUP_STEPS.slice(1).map((label, i) => {
@@ -554,8 +629,16 @@ export function PuzzleScreen() {
         </>
       )}
 
-      <h2>Backup</h2>
-      <p class="muted small">One file with this puzzle and its photos. Keep it in Files or send it to your Mac, so the puzzle is never lost.</p>
+      <h2 id="backup">Backup</h2>
+      <p class="muted small">
+        One file with this puzzle, its pieces, photos and answers. Keep it in Files or send it to your Mac, so the puzzle is never lost if something happens to
+        this iPhone.
+      </p>
+      <p class="small" data-testid="last-backup">
+        {p.lastBackup
+          ? `Last backup: ${new Date(p.lastBackup.at).toLocaleString()} (${p.lastBackup.pieces} pieces then).`
+          : 'No backup of this puzzle has left this iPhone yet.'}
+      </p>
       {exp.kind !== 'ready' && (
         <button class="btn btn-block" data-testid="export-backup" disabled={exp.kind === 'preparing'} onClick={() => void prepareBackup()}>
           {exp.kind === 'preparing' ? 'Preparing backup…' : 'Export backup'}
@@ -590,6 +673,10 @@ export function PuzzleScreen() {
               data-testid="download-backup"
               href={exp.url}
               download={exp.file.name}
+              onClick={() => {
+                logInfo('backup', 'Backup downloaded');
+                void backedUp();
+              }}
             >
               {share === 'fallback' ? 'Download backup' : 'Download instead'}
             </a>

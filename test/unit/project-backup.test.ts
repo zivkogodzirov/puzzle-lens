@@ -7,7 +7,19 @@ import { strToU8, unzipSync, zipSync } from 'fflate';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db, eraseAllData } from '../../src/db/db';
 import { BACKUP_VERSION, BackupError, backupFileName, collectBackup, exportBackup, importBackup, readBackup } from '../../src/project/backup';
-import { createProject, deleteProject, getPrintScale, getProject, listProjects, projectBlobId, putBlob, setPrintScale, updateProject } from '../../src/project/store';
+import {
+  createProject,
+  deleteProject,
+  getPrintScale,
+  getProject,
+  listProjects,
+  placementKey,
+  projectBlobId,
+  putBlob,
+  scanBinKey,
+  setPrintScale,
+  updateProject,
+} from '../../src/project/store';
 import type { PieceRow, SnapRow } from '../../src/project/types';
 
 beforeEach(async () => {
@@ -39,24 +51,102 @@ async function makeFullProject() {
   const p = await createProject({ name: 'Lighthouse', pieceCount: 1000 });
   const photo = projectBlobId(p.id, 'box-photo');
   const rect = projectBlobId(p.id, 'box-rectified');
-  await putBlob(photo, 'box-photo', new Blob([bytes(1, 5000)], { type: 'image/jpeg' }), { corners: [[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]] });
+  await putBlob(photo, 'box-photo', new Blob([bytes(1, 5000)], { type: 'image/jpeg' }), {
+    corners: [
+      [0.1, 0.1],
+      [0.9, 0.1],
+      [0.9, 0.9],
+      [0.1, 0.9],
+    ],
+  });
   await putBlob(rect, 'box-rectified', new Blob([bytes(2, 3000)], { type: 'image/jpeg' }));
   await putBlob('thumb-1', 'thumb', new Blob([bytes(3)], { type: 'image/jpeg' }));
   await putBlob('snap-1-photo', 'snap', new Blob([bytes(4)], { type: 'image/png' }));
-  const snap: SnapRow = { id: 'snap-1', projectId: p.id, kind: 'overview', ts: 9, width: 4032, height: 3024, zoom: 1, imgToTable: [1, 0, 0, 0, 1, 0, 0, 0, 1], quality: null, blobId: 'snap-1-photo', pieceIds: ['piece-1'] };
+  const snap: SnapRow = {
+    id: 'snap-1',
+    projectId: p.id,
+    kind: 'overview',
+    ts: 9,
+    width: 4032,
+    height: 3024,
+    zoom: 1,
+    imgToTable: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    quality: null,
+    blobId: 'snap-1-photo',
+    pieceIds: ['piece-1'],
+  };
   await db().snaps.put(snap);
   await db().pieces.put(piece('piece-1', p.id, 'thumb-1', 'snap-1'));
   await setPrintScale(p.id, 0.97);
   return updateProject(p.id, {
     grid: { cols: 28, rows: 36, source: 'suggested' },
     setupStep: 5,
-    box: { photoBlobId: photo, rectifiedBlobId: rect, corners: [[10, 10], [90, 10], [90, 90], [10, 90]], photoWidth: 100, photoHeight: 100, width: 1460, height: 2048 },
+    box: {
+      photoBlobId: photo,
+      rectifiedBlobId: rect,
+      corners: [
+        [10, 10],
+        [90, 10],
+        [90, 90],
+        [10, 90],
+      ],
+      photoWidth: 100,
+      photoHeight: 100,
+      width: 1460,
+      height: 2048,
+    },
   });
 }
 
 async function blobBytes(id: string): Promise<Uint8Array | null> {
   const row = await db().blobs.get(id);
   return row ? new Uint8Array(await row.blob.arrayBuffer()) : null;
+}
+
+/** Everything else a puzzle in use holds (M5–M7): answers, a batch, pieces set aside and to check, its spots, a scan in the bin. */
+async function makeBusyProject() {
+  const p = await makeFullProject();
+  await putBlob(projectBlobId(p.id, 'thumb-bin-1'), 'thumb', new Blob([bytes(7)], { type: 'image/jpeg' }));
+  await db().pieces.bulkPut([
+    { ...piece('piece-2', p.id, null, 'snap-1'), status: 'aside' },
+    { ...piece('piece-3', p.id, null, 'snap-1'), status: 'pending', maybe: ['piece-1', 'piece-2'] },
+  ]);
+  await db().settings.put({
+    key: placementKey(p.id),
+    value: {
+      boxKey: `${p.box!.rectifiedBlobId}|10,10;90,10;90,90;10,90|28x36`,
+      colour: null,
+      byPiece: { 'piece-1': { ts: 5, placement: { top: [], verdict: 'several' } } },
+    },
+  });
+  await db().settings.put({
+    key: scanBinKey(p.id),
+    value: {
+      ts: 3,
+      pieces: [{ ...piece('bin-1', p.id, projectBlobId(p.id, 'thumb-bin-1'), 'bin-snap') }],
+      snaps: [
+        {
+          id: 'bin-snap',
+          projectId: p.id,
+          kind: 'overview',
+          ts: 2,
+          width: 10,
+          height: 10,
+          zoom: 1,
+          imgToTable: null,
+          quality: null,
+          blobId: null,
+          pieceIds: ['bin-1'],
+        },
+      ],
+      project: { piecePitch: null, scaleSource: 'estimate' },
+    },
+  });
+  return updateProject(p.id, {
+    batch: { n: 2, startedAt: 9 },
+    lastBackup: { at: 4, pieces: 1, answers: 0 },
+    pairAnswers: [{ a: 'piece-1', b: 'piece-3', dir: 1, fits: true, at: 6, p: 0.9, confirmed: false, from: 'matches' }],
+  });
 }
 
 describe('export', () => {
@@ -101,9 +191,69 @@ describe('import', () => {
     expect(await db().snaps.toArray()).toEqual(before.snaps);
     expect((await db().blobs.toCollection().primaryKeys()).sort()).toEqual(blobIds);
     expect(await Promise.all(blobIds.map(blobBytes))).toEqual(originals);
-    expect((await db().blobs.get(projectBlobId(p.id, 'box-photo')))?.meta).toEqual({ corners: [[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]] });
+    expect((await db().blobs.get(projectBlobId(p.id, 'box-photo')))?.meta).toEqual({
+      corners: [
+        [0.1, 0.1],
+        [0.9, 0.1],
+        [0.9, 0.9],
+        [0.1, 0.9],
+      ],
+    });
     expect((await db().blobs.get('snap-1-photo'))?.blob.type).toBe('image/png');
     expect(await getPrintScale(p.id)).toBe(0.97);
+  });
+
+  it('full backup (M7 part 3): the spots, the scan bin, batch, pieces set aside and to check, and answers come back', async () => {
+    const p = await makeBusyProject();
+    const before = {
+      project: await getProject(p.id),
+      pieces: await db().pieces.toArray(),
+      placements: await db().settings.get(placementKey(p.id)),
+      bin: await db().settings.get(scanBinKey(p.id)),
+    };
+    const file = await exportBackup(p.id);
+    expect((await readBackup(file)).manifest.version).toBe(2);
+    await deleteProject(p.id);
+    expect(await db().settings.get(placementKey(p.id))).toBeUndefined();
+    await importBackup(file);
+    expect({ ...(await getProject(p.id)), updatedAt: 0 }).toEqual({ ...before.project, updatedAt: 0 });
+    expect(await db().pieces.toArray()).toEqual(before.pieces);
+    expect(await db().settings.get(placementKey(p.id))).toEqual(before.placements);
+    expect(await db().settings.get(scanBinKey(p.id))).toEqual(before.bin);
+  });
+
+  it('full backup imported as a copy: the spots, the bin and the pieces to check follow the new ids', async () => {
+    const p = await makeBusyProject();
+    const copy = (await importBackup(await exportBackup(p.id))).project;
+    const pieces = await db().pieces.where('projectId').equals(copy.id).toArray();
+    const byOld = (old: string) => pieces.find((q) => q.status === (old === 'piece-1' ? 'table' : old === 'piece-2' ? 'aside' : 'pending'))!.id;
+    const pend = pieces.find((q) => q.status === 'pending')!;
+    expect(pend.maybe).toEqual([byOld('piece-1'), byOld('piece-2')]);
+    const placements = (await db().settings.get(placementKey(copy.id)))!.value as { boxKey: string; byPiece: Record<string, unknown> };
+    expect(Object.keys(placements.byPiece)).toEqual([byOld('piece-1')]);
+    expect(placements.boxKey.startsWith(copy.box!.rectifiedBlobId)).toBe(true);
+    const bin = (await db().settings.get(scanBinKey(copy.id)))!.value as { pieces: PieceRow[]; snaps: SnapRow[] };
+    expect(bin.pieces[0]!.id).not.toBe('bin-1');
+    expect(bin.pieces[0]!.projectId).toBe(copy.id);
+    expect(bin.snaps[0]!.pieceIds).toEqual([bin.pieces[0]!.id]);
+    expect(bin.pieces[0]!.thumbBlobId).toBe(projectBlobId(copy.id, 'thumb-bin-1'));
+    expect(await blobBytes(bin.pieces[0]!.thumbBlobId!)).toEqual(bytes(7));
+    expect(copy.pairAnswers![0]!.a).toBe(byOld('piece-1'));
+    // The original is untouched.
+    expect(Object.keys(((await db().settings.get(placementKey(p.id)))!.value as { byPiece: object }).byPiece)).toEqual(['piece-1']);
+  });
+
+  it('a version 1 backup (before M7) still imports', async () => {
+    const p = await makeFullProject();
+    const files = unzipSync(new Uint8Array(await (await exportBackup(p.id)).arrayBuffer()));
+    const m = JSON.parse(new TextDecoder().decode(files['backup.json']));
+    m.version = 1;
+    m.settings = { printScale: 0.97 };
+    files['backup.json'] = strToU8(JSON.stringify(m));
+    await deleteProject(p.id);
+    const r = await importBackup(zipSync(files));
+    expect(r.pieces).toBe(1);
+    expect(await db().settings.get(placementKey(p.id))).toBeUndefined();
   });
 
   it('imports as a copy (new ids, links kept) when the puzzle is already here', async () => {

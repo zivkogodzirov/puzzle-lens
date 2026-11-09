@@ -68,6 +68,8 @@ export function normalizeProject(row: Partial<Project> & { id: string }): Projec
     answers: Array.isArray(row.answers) ? row.answers : [],
     pairAnswers: Array.isArray(row.pairAnswers) ? row.pairAnswers : [],
     batch: row.batch && Number.isFinite(row.batch.n) && Number.isFinite(row.batch.startedAt) ? row.batch : null,
+    lastBackup: row.lastBackup && Number.isFinite(row.lastBackup.at) ? row.lastBackup : null,
+    backupSnoozedUntil: Number.isFinite(row.backupSnoozedUntil) ? row.backupSnoozedUntil : null,
   };
 }
 
