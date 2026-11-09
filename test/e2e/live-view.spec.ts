@@ -109,6 +109,65 @@ test.describe('live view of the table', () => {
     await expect(page.getByTestId('live-status')).toContainText('4 not where they were', { timeout: 60_000 });
     await page.screenshot({ path: test.info().outputPath('live-view-gone.png') });
 
+    // Which pieces join (M6): with a box picture and every piece's spot known (pieces in scan order
+    // across the 8 × 6 grid), pieces next to each other on the box get a line between them.
+    await page.getByTestId('live-table-close').click();
+    await page.evaluate(async (pid) => {
+      const req = indexedDB.open('puzzle-lens');
+      const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
+      const c = Object.assign(document.createElement('canvas'), { width: 80, height: 60 });
+      const blob = await new Promise<Blob>((res) => c.toBlob((b) => res(b!), 'image/jpeg'));
+      const pieces = await new Promise<Array<{ id: string; patch?: { ts: number } | null }>>((res) => {
+        const r = dbh.transaction('pieces').objectStore('pieces').getAll();
+        r.onsuccess = () => res((r.result as Array<{ id: string; projectId: string; patch?: { ts: number } | null }>).filter((q) => q.projectId === pid));
+      });
+      const project = await new Promise<Record<string, unknown>>((res) => {
+        const r = dbh.transaction('projects').objectStore('projects').get(pid);
+        r.onsuccess = () => res(r.result as Record<string, unknown>);
+      });
+      const byPiece: Record<string, unknown> = {};
+      pieces.forEach((q, i) => {
+        if (i >= 48) return;
+        byPiece[q.id] = { ts: q.patch?.ts ?? 0, placement: { top: [{ col: i % 8, row: Math.floor(i / 8), rot: 0, score: 1, p: 0.95 }], verdict: 'strong' } };
+      });
+      await new Promise<void>((res) => {
+        const tx = dbh.transaction(['projects', 'blobs', 'settings'], 'readwrite');
+        tx.objectStore('blobs').put({ id: 'e2e-live:box', ts: 1, kind: 'box', blob });
+        tx.objectStore('projects').put({
+          ...project,
+          updatedAt: Date.now(),
+          box: {
+            photoBlobId: 'e2e-live:box',
+            rectifiedBlobId: 'e2e-live:box',
+            corners: [
+              [0, 0],
+              [80, 0],
+              [80, 60],
+              [0, 60],
+            ],
+            photoWidth: 80,
+            photoHeight: 60,
+            width: 80,
+            height: 60,
+          },
+        });
+        tx.objectStore('settings').put({
+          key: `placement:${pid}`,
+          value: { boxKey: 'e2e-live:box|0,0;80,0;80,60;0,60|8x6', colour: null, open: null, byPiece },
+        });
+        tx.oncomplete = () => res();
+      });
+      dbh.close();
+    }, id);
+    await page.reload();
+    await page.evaluate((url) => ((window as unknown as { __fakeScene?: string }).__fakeScene = url), moved);
+    await expect(page.getByTestId('matches-toggle')).toContainText('Which pieces join (');
+    await page.getByTestId('live-toggle').click();
+    await expect(page.getByTestId('live-status')).toHaveAttribute('data-kind', 'good', { timeout: 60_000 });
+    await expect.poll(async () => Number(await overlay.getAttribute('data-lines')), { timeout: 20_000 }).toBeGreaterThanOrEqual(4);
+    await expect(page.getByTestId('live-table')).toContainText('Lines join pieces that fit together');
+    await page.screenshot({ path: test.info().outputPath('live-view-lines.png') });
+
     // Closing turns the camera off.
     await page.getByTestId('live-table-close').click();
     await expect(page.getByTestId('live-table')).toHaveCount(0);
@@ -123,8 +182,8 @@ test.describe('what to test', () => {
     await expect(page.getByTestId('test-tab-new')).toBeVisible();
     await page.getByTestId('test-tab').click();
     const sheet = page.getByTestId('test-sheet');
-    await expect(sheet.locator('h2').first()).toContainText('M5');
-    await expect(sheet).toContainText('Live view of my table');
+    await expect(sheet.locator('h2').first()).toContainText('M6');
+    await expect(sheet).toContainText('Which pieces join');
     await expect(sheet).not.toContainText('{version}');
     const ticks = sheet.getByTestId('test-tick');
     expect(await ticks.count()).toBeGreaterThanOrEqual(5);

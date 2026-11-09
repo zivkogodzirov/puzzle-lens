@@ -108,6 +108,27 @@ export interface Project {
   trays?: TraySetup | null;
   /** Fits / Doesn't fit answers (M5 part 2), oldest first (src/project/answers.ts). */
   answers?: SpotAnswer[];
+  /** Pairs the owner joined, or said don't join (M6), oldest first (src/project/answers.ts). */
+  pairAnswers?: PairAnswer[];
+}
+
+/**
+ * One answer about two pieces (M6): the owner tried B on A's right (dir 1) or below it (dir 2), as
+ * on the box picture.
+ */
+export interface PairAnswer {
+  a: string;
+  b: string;
+  dir: 1 | 2;
+  fits: boolean;
+  at: number;
+  /** What the app said then: the pair's chance, and whether a closed 2 × 2 square confirmed it. */
+  p: number;
+  confirmed: boolean;
+  /** Where the answer was given. */
+  from: 'matches' | 'piece' | 'live';
+  /** Taken back (a mistake): left out everywhere. */
+  undone?: boolean;
 }
 
 export type Verdict = 'strong' | 'likely' | 'several';

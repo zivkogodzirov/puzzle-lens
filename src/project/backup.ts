@@ -209,6 +209,7 @@ function remapIds(m: BackupManifest): BackupManifest {
     openSpots: m.project.openSpots ? { ...m.project.openSpots, thumbBlobId: blob(m.project.openSpots.thumbBlobId)! } : null,
     // Fits / Doesn't fit answers follow their pieces' new ids.
     answers: (m.project.answers ?? []).map((a) => ({ ...a, pieceId: pieceIds.get(a.pieceId) ?? a.pieceId })),
+    pairAnswers: (m.project.pairAnswers ?? []).map((a) => ({ ...a, a: pieceIds.get(a.a) ?? a.a, b: pieceIds.get(a.b) ?? a.b })),
   };
   return {
     ...m,

@@ -66,6 +66,7 @@ export function normalizeProject(row: Partial<Project> & { id: string }): Projec
         ? { count: row.trays.count, colours: Array.isArray(row.trays.colours) && row.trays.colours.length ? row.trays.colours : null }
         : null,
     answers: Array.isArray(row.answers) ? row.answers : [],
+    pairAnswers: Array.isArray(row.pairAnswers) ? row.pairAnswers : [],
   };
 }
 

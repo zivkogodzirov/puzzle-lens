@@ -579,6 +579,32 @@ I'll tell you the result in plain English before starting M6.
 
 **Cost:** about 4M tab–blank side pairs at 1000 pieces before pruning; with length, type and box-prior pruning it is a few hundred per side. It runs incrementally in a worker as pieces arrive.
 
+**The go/no-go, as run (M6, 2026-11-09; test/unit/cv-real-pairs.test.ts):**
+- Instead of a new 7 × 7 block: the owner's 21 loose pieces (IMG_9276) whose true spots among the 21 holes of IMG_9280 are known from M4. 24 true joins, 48 sides ranked against every candidate side of the other pieces (about 36 each). Each piece's turn at its true spot: the picture's best turn, made consistent with its true neighbours' knobs and the flat top edge.
+- **Shape only** (sideDistance, tab against blank): true partner first **0 of 48**, top-3 4, **median rank 19**.
+- **Colours along the seam** (8 segments of a strip 2 px inside the printed core, Lab medians, one side against the other reversed): first **4 of 48** (8 %), top-3 10, median rank 9; with shape added 5 of 48, median 10. A 4 px strip was worse (2 of 48).
+- **No-go** (bar: median ≤ 3 and first ≥ 50 %). The extra-sharp retry needs close-ups of the owner's puzzle, which isn't at hand; M6 is **box-led**.
+
+**Built (M6, box-led; src/project/pairs.ts):**
+1. **Partners from the placements.** For piece A's side facing e on the box picture: P(B) = Σ over A's spots c of p_A(c) · q_B(c + e), with q_B a spot's chances shared out when they add up to more than one. What's left is "partner not scanned yet"; spots off the picture are the edge, filled spots "joins the puzzle", and the rest of A's own chance "not sure". A pair's chance is the same sum, once per join.
+2. **Shape:** facing sides read clearly (≥ 0.6, × 0.6 when the read isn't trusted) that can't join (two knobs out, two knobs in, a flat side) rule the pair out **on the whole picture only**. Among empty spots the placement already weighs knob fit with neighbours, and on the owner's pieces the turns there were sometimes misread: the veto hid true pairs (first 33 → 36 of 48 without it). On the whole picture it helps (val48 first 88.0 → 90.2 %, pairs at ≥ 50 % right 97.2 → 98.8 %).
+3. **Squares of 4:** four likely pairs agreeing on the four pieces' spots ("✓ square"). In box-led matching the loop adds little independent evidence (each piece's spot comes from the box picture either way), so a square is only built from pairs that are each very likely (PAIRS.blockMinP).
+4. **Health** (candidates within 2× of the best, per side): reported by the tests.
+5. **Chances shown as computed.** Isotonic fits on val48 + val300 said the computed chances are too modest (whole picture: pairs at 70–80 % joined 99 %; empty spots: 30–40 % → 68 %), but on the owner's pieces they are about right or a little high (≥ 64 %: 15 of 15; 30–50 %: 3 of 7; 20–30 %: 1 of 6). With the synthetic lift, real pairs shown at ≥ 50 % would have been right 18 of 22. Real placements are less sure than synthetic ones, so the lift is not applied (PAIR_CALIBRATION is the identity); M8 fits it from the owner's answers.
+6. **Shape as a tie-breaker** (a candidate whose knob meets the side's counting × 2 among pieces claiming the same spot): no gain (val48 90.2 → 90.0 % / 93.5 → 93.4 %; real 36 → 36 of 48; × 4: real 35). Not kept.
+7. **Squares** only from pairs ≥ 50 % on the whole picture and ≥ 70 % among empty spots (PAIRS.blockMinP): squares from ≥ 50 % among empty spots were right 96.3 % on val300.
+8. **Measured** (test/unit/cv-pair-accuracy.test.ts, end to end from rendered photos; whole picture / empty spots = every scanned piece's cell + 20 % unscanned):
+
+| Set | True partner first (sides whose partner was scanned) | Pairs ≥ 50 %: right, joins found | Squares' pairs right | Health |
+|---|---|---|---|---|
+| test48 (held back) | 88.5 % (95 % from 86.7 %) / 95.3 % (from 94.0 %) | 98.3 %, 72.5 % / 99.5 %, 88.8 % | 99.5 % of 380 / 99.5 % of 441 | 1.22 / 1.07 |
+| test300 (held back) | 83.3 % (from 82.1 %) / 86.0 % (from 84.9 %) | 99.7 %, 37.8 % / 98.9 %, 62.6 % | 100 % of 362 / 100 % of 492 | 1.47 / 1.62 |
+| val48 (tuning) | 90.2 % / 93.5 % | 98.8 % / 99.5 % | 99.5 % / 99.6 % | 1.15 / 1.07 |
+| val300 (tuning) | 74.6 % / 77.4 % | 98.3 % / 96.3 % | 98.7 % / (≥ 50 %: 96.3 %) | 1.55 / 1.83 |
+| Owner's 21 pieces, among the 21 holes | 75 % (36 of 48) | 15 of 15, 15 of 24 joins | 10 of 10 (3 squares) | 1.16 |
+
+Median rank 1 everywhere. The PLAN §7 bars (first ≥ 85 % at 48 pieces, ≥ 75 % at 300; squares ≥ 98 %) are met on the held-back sets; the 1000-piece tier is not measured yet. On the whole picture of a 300-piece batch, pairs rarely reach 70 % (each piece's chance there is lower).
+
 ---
 
 ## 12. On-phone AI models

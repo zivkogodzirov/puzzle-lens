@@ -107,7 +107,9 @@ describe('import', () => {
   });
 
   it('imports as a copy (new ids, links kept) when the puzzle is already here', async () => {
-    const p = await makeFullProject();
+    const p0 = await makeFullProject();
+    // A pair answer (M6) between the piece and one that's gone: it follows the piece's new id.
+    const p = await updateProject(p0.id, { pairAnswers: [{ a: 'piece-1', b: 'gone', dir: 1, fits: true, at: 1, p: 0.9, confirmed: false, from: 'matches' }] });
     const file = await exportBackup(p.id);
     const result = await importBackup(file);
     expect(result.copied).toBe(true);
@@ -127,6 +129,7 @@ describe('import', () => {
     expect(await blobBytes(pieces[0]!.thumbBlobId!)).toEqual(bytes(3));
     expect(await blobBytes(snaps[0]!.blobId!)).toEqual(bytes(4));
     expect(await getPrintScale(copy.id)).toBe(0.97);
+    expect(copy.pairAnswers).toEqual([{ a: pieces[0]!.id, b: 'gone', dir: 1, fits: true, at: 1, p: 0.9, confirmed: false, from: 'matches' }]);
     // Deleting the copy leaves the original whole.
     await deleteProject(copy.id);
     expect(await blobBytes(p.box!.photoBlobId)).not.toBeNull();

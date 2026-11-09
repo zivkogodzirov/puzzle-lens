@@ -33,6 +33,18 @@ const STALE_MS = 600;
 
 type RefState = { kind: 'loading' } | { kind: 'none' } | { kind: 'ready'; features: number; photos: number } | { kind: 'error'; message: string };
 
+/** A line between two pieces that join (M6). */
+export interface MatchLine {
+  a: string;
+  b: string;
+  /** Shown at the middle ("95 %", "✓"). */
+  label: string;
+  confirmed: boolean;
+}
+
+const LINE_COLOUR = '#ffffff';
+const LINE_OK_COLOUR = '#3ccf7a';
+
 interface Drawn {
   id: string;
   poly: Vec2[];
@@ -59,6 +71,7 @@ export function LiveTable({
   onPick,
   find = [],
   answer,
+  lines = [],
   title,
   legend,
   onClose,
@@ -75,6 +88,8 @@ export function LiveTable({
   find?: string[];
   /** Fits / Doesn't fit (M5 part 2): the spot to ask about for a piece (words), and what to do with the answer. */
   answer?: { labelOf: (p: PieceRow) => string | null; onAnswer: (p: PieceRow, fits: boolean) => void };
+  /** Lines between pieces that join (M6): ✓ for a pair confirmed by a square of 4. */
+  lines?: MatchLine[];
   title: string;
   legend?: ComponentChildren;
   onClose: () => void;
@@ -96,8 +111,8 @@ export function LiveTable({
   const drawn = useRef<Drawn[]>([]);
   const tappedRef = useRef<string | null>(null);
   tappedRef.current = tapped;
-  const cur = useRef({ pieces, colourOf, labelOf, targets });
-  cur.current = { pieces, colourOf, labelOf, targets };
+  const cur = useRef({ pieces, colourOf, labelOf, targets, lines });
+  cur.current = { pieces, colourOf, labelOf, targets, lines };
   const stream = cameraStream.value;
   const state = cameraState.value;
   const live = state === 'live';
@@ -271,7 +286,8 @@ export function LiveTable({
         const q = applyH(H, [x, y]);
         return frameToElement(q[0], q[1], frame, vid, el, f.rotation);
       };
-      const { pieces: list, colourOf: col, labelOf: lab, targets: tg } = cur.current;
+      const { pieces: list, colourOf: col, labelOf: lab, targets: tg, lines: joins } = cur.current;
+      const centres = new Map<string, Vec2>();
       const want = new Set(tg);
       const out: Drawn[] = [];
       const labels: Array<{ at: Vec2; text: string; colour: string }> = [];
@@ -283,6 +299,7 @@ export function LiveTable({
         const poly: Vec2[] = [];
         for (let i = 0; i < o.length; i += step) poly.push(toEl(p.table.x + o[i]!, p.table.y + o[i + 1]!));
         const centre = toEl(p.table.x, p.table.y);
+        centres.set(p.id, centre);
         const size = Math.max(...poly.map((q) => Math.hypot(q[0] - centre[0], q[1] - centre[1])));
         const onScreen = poly.some((q) => q[0] >= 0 && q[1] >= 0 && q[0] <= w && q[1] <= h);
         if (want.has(p.id)) pulses.push({ at: centre, r: size, colour: col(p), id: p.id });
@@ -310,6 +327,27 @@ export function LiveTable({
         ctx.globalAlpha = 1;
         const text = isGone ? 'moved?' : lab?.(p);
         if (text && size > 14) labels.push({ at: centre, text, colour: c });
+      }
+      // Pieces that join (M6): a line between their centres, its label at the middle.
+      let nLines = 0;
+      for (const j of joins) {
+        const p = centres.get(j.a);
+        const q = centres.get(j.b);
+        if (!p || !q) continue;
+        nLines++;
+        const c = j.confirmed ? LINE_OK_COLOUR : LINE_COLOUR;
+        ctx.beginPath();
+        ctx.moveTo(p[0], p[1]);
+        ctx.lineTo(q[0], q[1]);
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+        ctx.lineWidth = 6;
+        ctx.stroke();
+        ctx.strokeStyle = c;
+        ctx.lineWidth = 3;
+        ctx.setLineDash(j.confirmed ? [] : [9, 6]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (j.label) labels.push({ at: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], text: j.label, colour: c });
       }
       ctx.font = '700 13px -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
@@ -365,6 +403,7 @@ export function LiveTable({
       if (dbg.__liveDebug) dbg.__liveOverlay = { t: now, predicted: predictor.enabled, centres: Object.fromEntries(out.map((d) => [d.id, d.centre])) };
       // For the automated tests: how many pieces are drawn, and where the first one is.
       canvas.dataset.drawn = String(out.length);
+      canvas.dataset.lines = String(nLines);
       canvas.dataset.first = out.length ? `${Math.round(out[0]!.centre[0])},${Math.round(out[0]!.centre[1])}` : '';
     };
     raf = requestAnimationFrame(draw);

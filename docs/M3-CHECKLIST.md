@@ -32,7 +32,9 @@ On the scan screen, tap **🖼 Choose a photo** and pick a photo from your libra
 - The finished check needs the seams visible: a sharp overview from straight above. Bright patches of print that look like the table are checked for texture, but a very plain light area could be mistaken for a gap.
 - Shape-only solving (your back-side idea) is **not** in this step: see the go/no-go below.
 
-## Shape-only go/no-go (when you have time)
+## Shape-only go/no-go (done in M6, no longer needed)
+**Done 2026-11-09 with your 21 pieces whose spots are known (24 true joins):** shape alone found the true neighbour first for none of 48 sides, so M6 matches pieces using the box picture. The steps below aren't needed any more.
+
 1. Put together a block of about **7 × 7 pieces**, photograph it from above (overview + close-ups).
 2. Break it up, spread the 49 pieces (face down is fine) and scan them (overview + close-ups).
 3. Send me the backup. I measure how often shape alone finds each piece's true neighbour on **your** pieces.

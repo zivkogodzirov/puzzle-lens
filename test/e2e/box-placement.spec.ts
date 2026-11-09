@@ -78,8 +78,9 @@ async function seed(
   page: import('@playwright/test').Page,
   open: { gaps: Array<[number, number]>; thumb: string } | null,
   cache: { key: string; value: unknown } | null = null,
+  pieceIds: string[] = ids,
 ): Promise<void> {
-  const patches = ids.map((pid, i) => ({ id: pid, b64: patchFor(pid, i % 4) }));
+  const patches = pieceIds.map((pid, i) => ({ id: pid, b64: patchFor(pid, i % 4) }));
   await gotoScreen(page, '');
   const seeded = await page.evaluate(
     async ([box, ps, w, h, spots, cacheRow]) => {
@@ -384,4 +385,57 @@ test('pieces to check (M5 part 3): "same piece" merges it into the known one, "a
   await page.getByTestId('pending-new').click();
   await expect(page.getByTestId('pending-panel')).toHaveCount(0);
   await expect(thumbs).toHaveCount(7);
+});
+
+test('which pieces join (M6): a square of 4 first, then a pair; They fit / Don’t fit with Undo; partners on the piece; Accuracy', async ({ page }) => {
+  // A 2 × 2 block (columns 4–5, rows 3–4), a pair side by side (columns 7–8, row 6) and one piece alone.
+  await seed(page, null, null, ['r2c3', 'r2c4', 'r3c3', 'r3c4', 'r5c6', 'r5c7', 'r0c0']);
+  await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
+  await expect(page.getByTestId('matches-toggle')).toContainText('Which pieces join (5)');
+  await page.getByTestId('matches-toggle').click();
+  // What next: the square, its four spots marked on the box picture.
+  const next = page.getByTestId('match-next');
+  await expect(next).toContainText('A square of 4 ✓');
+  await expect(next).toContainText('columns 4–5, rows 3–4');
+  await expect(next.getByTestId('match-block-box').locator('rect.spot-best')).toHaveCount(4);
+  // Its four pairs and the other pair are listed, the square's marked ✓.
+  await expect(page.getByTestId('match-pair')).toHaveCount(5);
+  await expect(page.getByTestId('match-confirmed')).toHaveCount(4);
+  await page.getByTestId('matches').screenshot({ path: test.info().outputPath('matches.png') });
+  // All 4 fit: joined, and the pair is next.
+  await next.getByTestId('match-block-fits').click();
+  await expect(page.getByTestId('match-note')).toContainText('the 4 pieces are joined');
+  await expect(page.getByTestId('match-joined')).toContainText('4 pairs joined');
+  await expect(page.getByTestId('match-next')).toContainText('These two join');
+  await expect(page.getByTestId('match-next')).toContainText('side by side');
+  await expect(page.getByTestId('match-next')).toContainText('Column 7–8, row 6');
+  await expect(page.getByTestId('matches-toggle')).toContainText('Which pieces join (1)');
+  // Don't fit: not suggested again; Undo brings it back.
+  await page.getByTestId('match-next').getByTestId('match-not').click();
+  await expect(page.getByTestId('match-note')).toContainText('isn’t suggested again');
+  await expect(page.getByTestId('match-none')).toBeVisible();
+  await page.getByTestId('match-undo').click();
+  await expect(page.getByTestId('match-next')).toContainText('These two join');
+  await page.getByTestId('match-next').getByTestId('match-fits').click();
+  await expect(page.getByTestId('match-joined')).toContainText('5 pairs joined');
+  // Taking one back.
+  await page.getByTestId('match-joined').click();
+  await expect(page.getByTestId('match-joined-row')).toHaveCount(5);
+  await page.getByTestId('match-unjoin').first().click();
+  await expect(page.getByTestId('match-joined')).toContainText('4 pairs joined');
+  // A piece's partners: r2c3 (the square's top left; first in id order) has r2c4 on its right and r3c3 below it.
+  await page.getByTestId('matches-toggle').click();
+  await page.locator('[data-testid="catalog"] .thumb-btn').nth(1).click();
+  await expect(page.getByTestId('piece-partners')).toBeVisible();
+  await expect(page.getByTestId('piece-partner')).toHaveCount(2);
+  await expect(page.getByTestId('piece-partners')).toContainText('on its right');
+  await expect(page.getByTestId('piece-partners')).toContainText('below it');
+  await expect(page.getByTestId('piece-partners')).toContainText('Partner not scanned yet on 2 sides');
+  await page.getByTestId('piece-spots').screenshot({ path: test.info().outputPath('partners.png') });
+  // Accuracy: 5 pairs tried and kept (the "don't fit" and the taken-back one are left out), 4 from the square.
+  await page.getByTestId('accuracy-link').click();
+  await expect(page.getByTestId('acc-pairs')).toContainText('4 pairs tried');
+  await expect(page.getByTestId('acc-pairs-square')).toContainText('3 of 3');
+  await expect(page.getByTestId('acc-pairs-all')).toContainText('4 of 4');
+  await page.screenshot({ path: test.info().outputPath('accuracy-pairs.png'), fullPage: true });
 });

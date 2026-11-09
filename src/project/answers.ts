@@ -211,7 +211,7 @@ export async function undoFits(projectId: string, pieceId: string): Promise<Proj
 
 /**
  * Removes something that isn't a puzzle piece (a label, a patch of table) from the catalog; its
- * answers are marked undone so they don't count on the Accuracy page.
+ * answers (spots and pairs) are marked undone so they don't count on the Accuracy page.
  */
 export async function removeNotAPiece(projectId: string, pieceId: string): Promise<Project> {
   const d = db();
@@ -219,7 +219,8 @@ export async function removeNotAPiece(projectId: string, pieceId: string): Promi
     const project = await d.projects.get(projectId);
     if (!project) throw new Error('This puzzle is no longer on this iPhone.');
     const answers = (project.answers ?? []).map((a) => (a.pieceId === pieceId && !a.undone ? { ...a, undone: true } : a));
-    const next: Project = { ...project, answers, updatedAt: Math.max(Date.now(), project.updatedAt + 1) };
+    const pairAnswers = (project.pairAnswers ?? []).map((a) => ((a.a === pieceId || a.b === pieceId) && !a.undone ? { ...a, undone: true } : a));
+    const next: Project = { ...project, answers, pairAnswers, updatedAt: Math.max(Date.now(), project.updatedAt + 1) };
     await d.projects.put(next);
     await d.pieces.delete(pieceId);
     return next;

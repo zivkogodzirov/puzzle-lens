@@ -30,7 +30,10 @@ import {
   type PieceState,
 } from '../../project/progress';
 import { FillSpot } from '../components/FillSpot';
-import { LiveTable } from '../components/LiveTable';
+import { LiveTable, type MatchLine } from '../components/LiveTable';
+import { matchList, MatchesPanel } from '../components/Matches';
+import { pairKey, pairModel, type SidePartners } from '../../project/pairs';
+import { answerPair, pairAnswerView, undoPairAnswer } from '../../project/pairAnswers';
 import { answerSpot, answerView, clearNotHere, placedPieces, removeNotAPiece, undoFits } from '../../project/answers';
 import { resolvePending } from '../../project/pending';
 import { TableContrast } from '../components/TableContrast';
@@ -594,6 +597,9 @@ function Catalog({
   const [selected, setSelected] = useState<string | null>(null);
   const [justPlaced, setJustPlaced] = useState<{ id: string; col: number; row: number } | null>(null);
   const [inPuzzleOpen, setInPuzzleOpen] = useState(false);
+  const [matchesOpen, setMatchesOpen] = useState(false);
+  /** Pieces to point out in the live view, with lines between those that join (M6). */
+  const [findLive, setFindLive] = useState<{ ids: string[]; lines: MatchLine[] } | null>(null);
   const boxUrl = useBlobUrl(project.box?.rectifiedBlobId, boxVersion(project.box));
   const placeKey = placeKeyOf(project);
   useEffect(() => {
@@ -642,6 +648,30 @@ function Catalog({
   const shownPlaces = useMemo(() => shownPlacements(places, allRows.filter(unplacedStatus), answersCtx), [places, allRows, answersCtx]);
   const openCells = places?.open?.cells.length ? places.open.cells.filter(([c, r]) => !answersCtx.view.taken.has(`${c},${r}`)) : null;
   const inPuzzle = allRows.filter((r) => r.status === 'placed').length;
+  // Which pieces join (M6): from the placements, minus the owner's "don't fit" pairs.
+  const pairView = useMemo(() => pairAnswerView(project), [project.pairAnswers]);
+  const pairs = useMemo(() => {
+    if (!project.grid) return null;
+    const filled = new Set<string>(answersCtx.view.taken.keys());
+    for (const r of allRows) if (r.status === 'placed' && r.placedAt) filled.add(`${r.placedAt.col},${r.placedAt.row}`);
+    const model = pairModel({
+      shown: shownPlaces,
+      rows: allRows.filter(unplacedStatus),
+      grid: project.grid,
+      open: places?.open?.cells.length ? new Set(places.open.cells.map(([c, r]) => `${c},${r}`)) : null,
+      filled,
+      not: pairView.not,
+    });
+    return { model, list: matchList(model, pairView, new Set(rows.map((r) => r.id))) };
+  }, [shownPlaces, allRows, rows, project.grid, places, answersCtx, pairView]);
+  // On the live view: the few most likely pairs (more get hard to follow across the table).
+  const matchLines: MatchLine[] = (pairs?.list.pairs ?? [])
+    .filter((s) => s.p >= 0.5)
+    .slice(0, LIVE_LINES)
+    .map((s) => {
+      const ok = pairs!.list.confirmed.has(pairKey(s.a, s.b, s.dir));
+      return { a: s.a, b: s.b, label: ok ? '✓' : `${pct(s.p)} %`, confirmed: ok };
+    });
   const answer = (piece: PieceRow, spot: { col: number; row: number; rot: 0 | 1 | 2 | 3 }, fits: boolean, from: 'piece' | 'fill' | 'live') => {
     void answerSpot(projectId, piece, spot, fits, shownPlaces.get(piece.id) ?? null, from)
       .then((next) => {
@@ -713,15 +743,30 @@ function Catalog({
             setTimeout(() => document.querySelector('[data-testid="piece-spots"]')?.scrollIntoView({ block: 'center' }), 50);
           }}
           title="Live view"
+          lines={matchLines}
           legend={
             <>
               <span class="state-dot" style={{ background: STATE_COLOUR.placed }} />
               spot known <span class="state-dot" style={{ background: STATE_COLOUR.shape }} />
               shape read <span class="state-dot" style={{ background: STATE_COLOUR.found }} />
-              found. Hold the phone about as high as for your scan. Tap a piece.
+              found.{matchLines.length > 0 ? ' Lines join pieces that fit together (✓ = square of 4).' : ''} Hold the phone about as high as for your scan. Tap
+              a piece.
             </>
           }
           onClose={() => setLiveOpen(false)}
+        />
+      )}
+      {findLive && (
+        <LiveTable
+          projectId={projectId}
+          pieces={rows}
+          colourOf={(p) => (findLive.ids.includes(p.id) ? '#3ccf7a' : STATE_COLOUR[states.get(p.id) ?? 'found'])}
+          infoOf={infoOf}
+          find={findLive.ids}
+          lines={findLive.lines}
+          title={findLive.ids.length > 2 ? 'Find the 4 pieces' : 'Find the 2 pieces'}
+          legend={<>The pulsing pieces join: the line shows which goes with which. An arrow at the edge shows the way when one is out of view.</>}
+          onClose={() => setFindLive(null)}
         />
       )}
       {tableOpen && (
@@ -769,6 +814,49 @@ function Catalog({
             pieces={unplaced}
             onAnswer={(p, spot, fits) => answer(p, spot, fits, 'fill')}
             filled={new Set(answersCtx.view.taken.keys())}
+          />
+        )}
+      </>
+    ) : null;
+  // Which pieces join (M6).
+  const matchesBlock =
+    pairs && project.grid ? (
+      <>
+        <button
+          class={`btn btn-block ${matchesOpen ? 'btn-on' : ''}`}
+          aria-expanded={matchesOpen}
+          data-testid="matches-toggle"
+          onClick={() => setMatchesOpen(!matchesOpen)}
+        >
+          🧩 Which pieces join{pairs.list.pairs.length ? ` (${pairs.list.pairs.length})` : ''}
+        </button>
+        {matchesOpen && (
+          <MatchesPanel
+            project={project}
+            boxUrl={boxUrl}
+            list={pairs.list}
+            pieces={allRows}
+            joined={[...pairView.joined].map(([key, a]) => ({ key, a: a.a, b: a.b }))}
+            onFind={(ids, ps) =>
+              setFindLive({
+                ids,
+                lines: ps.map(([a, b]) => ({ a, b, label: '', confirmed: ids.length > 2 })),
+              })
+            }
+            onAnswer={async (ss, fits, confirmed) => {
+              let next = project;
+              for (const sp of ss) next = await answerPair(projectId, sp, fits, confirmed, 'matches');
+              logInfo(
+                'pairs',
+                `${fits ? 'They fit' : "Don't fit"}: ${ss.length} pair${ss.length === 1 ? '' : 's'} (${ss.map((sp) => pct(sp.p)).join(', ')} %${confirmed ? ', square ✓' : ''})`,
+              );
+              onProject(next);
+            }}
+            onUndo={async (keys) => {
+              let next = project;
+              for (const k of keys) next = await undoPairAnswer(projectId, k);
+              onProject(next);
+            }}
           />
         )}
       </>
@@ -910,7 +998,7 @@ function Catalog({
           </button>
         </div>
       )}
-      {(project.answers?.length ?? 0) > 0 && (
+      {(project.answers?.length ?? 0) + (project.pairAnswers?.length ?? 0) > 0 && (
         <a class="btn btn-small" href={`#/accuracy/${encodeURIComponent(projectId)}`} data-testid="accuracy-link">
           📊 How often is the app right?
         </a>
@@ -952,6 +1040,7 @@ function Catalog({
       {project.box && !placing && <BoxFitNotice project={project} shown={shownPlaces} onProject={onProject} />}
       {tableBlock}
       {fillBlock}
+      {matchesBlock}
       {traysBlock}
       <div class="catalog-grid" data-testid="catalog">
         {shown.slice(0, SHOW_MAX).map((r) => (
@@ -981,6 +1070,8 @@ function Catalog({
             const b = bestSpot(p);
             if (b) answer(p, b, fits, 'piece');
           }}
+          partners={pairs?.model.sides.get(selected) ?? null}
+          pieceById={(pid) => allRows.find((r) => r.id === pid)}
           ruledOut={answersCtx.view.notHere.get(selected)?.size ?? 0}
           onClearRuledOut={() =>
             void clearNotHere(projectId, selected)
@@ -1235,9 +1326,14 @@ function PieceSpots({
   onClearRuledOut,
   onRemove,
   onClose,
+  partners = null,
+  pieceById,
 }: {
   piece: PieceRow;
   choice: SpotChoice | null;
+  /** Which pieces may join its four sides (M6), as it lies on the box picture. */
+  partners?: SidePartners[] | null;
+  pieceById?: (id: string) => PieceRow | undefined;
   /** Fits / Doesn't fit at the first spot shown (M5 part 2). */
   onAnswer?: (fits: boolean) => void;
   /** Spots the owner said it doesn't fit, and a way to take those answers back. */
@@ -1357,6 +1453,7 @@ function PieceSpots({
             ))}
         </svg>
       )}
+      {partners && pieceById && fits && <PiecePartners partners={partners} pieceById={pieceById} />}
       {onRemove && (
         <p class="small muted" data-testid="spot-remove-row">
           {sureRemove ? (
@@ -1379,6 +1476,50 @@ function PieceSpots({
     </div>
   );
 }
+
+const SIDE_NAMES = ['above it', 'on its right', 'below it', 'on its left'] as const;
+
+/** The pieces that may join a piece's sides (M6), most likely first, and what's left. */
+function PiecePartners({ partners, pieceById }: { partners: SidePartners[]; pieceById: (id: string) => PieceRow | undefined }) {
+  const found = partners
+    .map((s, e) => ({ e, best: s.partners[0], s }))
+    .filter((x) => x.best && x.best.p >= 0.2)
+    .sort((x, y) => y.best!.p - x.best!.p);
+  const notYet = partners.filter((s) => s.notScanned >= 0.5).length;
+  const edge = partners.filter((s) => s.edge >= 0.5).length;
+  const done = partners.filter((s) => s.inPuzzle >= 0.5).length;
+  const sides = (n: number) => (n === 1 ? '1 side' : `${n} sides`);
+  const rest = [
+    notYet ? `partner not scanned yet on ${sides(notYet)}` : '',
+    done ? `next to the done part on ${sides(done)}` : '',
+    edge ? `${sides(edge)} on the puzzle's edge` : '',
+  ].filter(Boolean);
+  if (!found.length && !rest.length) return null;
+  return (
+    <div class="piece-partners" data-testid="piece-partners">
+      <p class="small">
+        <strong>Joins</strong> (as on the box picture):
+      </p>
+      {found.map(({ e, best, s }) => (
+        <div class="row small" key={e} data-testid="piece-partner">
+          <PartnerThumb piece={pieceById(best!.id)} />
+          <span class="grow">
+            {SIDE_NAMES[e]} · {pct(best!.p)} %{s.partners[1] && s.partners[1].p >= 0.2 ? ` (or another piece, ${pct(s.partners[1].p)} %)` : ''}
+          </span>
+        </div>
+      ))}
+      {rest.length > 0 && <p class="muted small">{rest.join(' · ').replace(/^./, (ch) => ch.toUpperCase())}.</p>}
+    </div>
+  );
+}
+
+function PartnerThumb({ piece }: { piece: PieceRow | undefined }) {
+  const url = useBlobUrl(piece?.thumbBlobId, piece?.updatedAt);
+  return url ? <img src={url} class="match-thumb" alt="Its partner" /> : <span class="match-thumb catalog-empty" />;
+}
+
+/** Lines between pieces that join, at most, in the live view. */
+const LIVE_LINES = 6;
 
 /** Pieces can be scanned once set-up is finished (marker-free) or the markers are measured. */
 function canScan(p: Project): boolean {
