@@ -204,6 +204,8 @@ export interface PieceRow {
   patch?: PiecePatchInfo | null;
   /** With status 'tray': the tray's letter (A–L). */
   tray?: string | null;
+  /** With status 'pending' (M5 part 3): known pieces this sighting may be (it may have been moved). */
+  maybe?: string[] | null;
   /** With status 'placed' (M5 part 2): where it went in, and where it came from (to take it out again). */
   placedAt?: { col: number; row: number; rot: 0 | 1 | 2 | 3; at: number; from: 'table' | 'tray'; tray: string | null } | null;
 }
@@ -224,6 +226,8 @@ export interface PiecePatchInfo {
    * lamp's light there, used to even out colours for trays. Absent on pieces scanned before M4 part 4b.
    */
   light?: [number, number, number];
+  /** Its printed picture as a small colour grid, for re-identification (M5 part 3, src/cv/fingerprint.ts). */
+  fp?: number[];
 }
 
 export type SnapKind = 'overview' | 'detail' | 'empty-table' | 'marker-map' | 'box';

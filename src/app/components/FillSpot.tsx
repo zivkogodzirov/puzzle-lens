@@ -106,7 +106,7 @@ export function FillSpot({
   );
   const best = cands.find((c) => c.chosen) ?? null;
   const others = cands.filter((c) => c !== best);
-  const onTable = cands.map((c) => byId.get(c.id)!).filter((p) => p.status === 'table');
+  const onTable = cands.map((c) => byId.get(c.id)!).filter((p) => p.status === 'table' || p.status === 'pending');
   const rotAt = (id: string): 0 | 1 | 2 | 3 => shown.get(id)?.placement.top.find((t) => sel && t.col === sel[0] && t.row === sel[1])?.rot ?? 0;
   const answer =
     onAnswer && sel ? (c: SpotCandidate, fits: boolean) => onAnswer(byId.get(c.id)!, { col: sel[0], row: sel[1], rot: rotAt(c.id) }, fits) : undefined;

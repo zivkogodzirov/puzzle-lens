@@ -19,6 +19,7 @@ import { setupFromPhoto, toGray } from '../cv/tableSetup';
 import { ensureRgba, scanPixels, tableFromPixels } from '../cv/scanPhoto';
 import { scanMarkerless } from '../cv/scanMarkerless';
 import { findCoin } from '../cv/coin';
+import { readPiece } from '../cv/readPiece';
 import { readShape, READ_OK } from '../cv/shapeRead';
 import { buildBoxGrid, extractPatch, patchStats, placePiece, spotStats, PATCH_SIZE, type BoxGrid, type ColourMatch } from '../cv/placement';
 import { tableAround } from '../cv/colourGroups';
@@ -383,26 +384,18 @@ const api: ReaderApi = {
       // Box placement (M4): each clean piece straightened by the corners its shape reading finds.
       const ppmHere = r.pxPerMm ?? 4;
       const patches: FreeScanReply['patches'] = r.pieces.map((p) => {
-        if (p.flags.cut || p.flags.clump) return null;
-        const rd = readShape(
-          p.outlineImg.map((v) => v / ppmHere),
-          null,
-        );
-        if (!rd) return null;
-        const patch = extractPatch(
-          rgba,
-          rd.corners.map(([x, y]) => [x * ppmHere, y * ppmHere] as [number, number]),
-          p.outlineImg,
-        );
-        return patch
+        const rp = readPiece(rgba, p, ppmHere);
+        return rp
           ? {
-              rgba: patch.rgba,
-              flats: rd.sides.map((sd) => sd.kind === 'flat'),
-              sure: Boolean(rd.kind) && rd.quality >= READ_OK,
-              sides: rd.sides.map((sd) => (sd.kind === 'unsure' ? 'u' : sd.kind[0])).join(''),
-              sideConf: rd.sides.map((sd) => Math.round(sd.conf * 100) / 100),
+              rgba: rp.patch.rgba,
+              flats: rp.flats,
+              sure: rp.sure,
+              sides: rp.sides,
+              sideConf: rp.sideConf,
               // The table's colour right around the piece: evens out the lamp for colour groups (trays).
               light: tableAround(rgba, p.outlineImg, ppmHere)?.map((v) => Math.round(v)) ?? null,
+              // Its printed picture, for re-identification (M5 part 3).
+              fp: rp.fp,
             }
           : null;
       });

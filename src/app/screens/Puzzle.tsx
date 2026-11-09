@@ -32,6 +32,7 @@ import {
 import { FillSpot } from '../components/FillSpot';
 import { LiveTable } from '../components/LiveTable';
 import { answerSpot, answerView, clearNotHere, placedPieces, removeNotAPiece, undoFits } from '../../project/answers';
+import { resolvePending } from '../../project/pending';
 import { TableContrast } from '../components/TableContrast';
 import { BoxFitNotice } from '../components/BoxFitNotice';
 import type { Groups } from '../../project/groups';
@@ -111,6 +112,7 @@ export function PuzzleScreen() {
   const [missingN, setMissingN] = useState(0);
   const [trayN, setTrayN] = useState(0);
   const [tableN, setTableN] = useState(0);
+  const [pendingN, setPendingN] = useState(0);
   const [scanAction, setScanAction] = useState<'none' | 'confirm-delete' | 'confirm-restore' | 'busy'>('none');
   const [scanNote, setScanNote] = useState<string | null>(null);
   const mounted = useRef(true);
@@ -141,6 +143,7 @@ export function PuzzleScreen() {
           setMissingN(c.missing);
           setTrayN(c.tray);
           setTableN(c.table);
+          setPendingN(c.pending);
           setBin(await scanBinSummary(p.id));
         }
       })
@@ -243,6 +246,7 @@ export function PuzzleScreen() {
     setMissingN(c.missing);
     setTrayN(c.tray);
     setTableN(c.table);
+    setPendingN(c.pending);
     setBin(b);
   };
 
@@ -393,7 +397,7 @@ export function PuzzleScreen() {
           </button>
           <Catalog
             projectId={p.id}
-            version={`${pieces}|${trayN}|${tableN}`}
+            version={`${pieces}|${trayN}|${tableN}|${pendingN}`}
             markers={p.tracking === 'markers'}
             grid={p.grid}
             pitch={p.piecePitch}
@@ -596,7 +600,8 @@ function Catalog({
     let live = true;
     void (async () => {
       const everything = await db().pieces.where('projectId').equals(projectId).toArray();
-      const ps = everything.filter((q) => q.status === 'table');
+      // Pieces to check (M5 part 3) are on the table too.
+      const ps = everything.filter((q) => q.status === 'table' || q.status === 'pending');
       if (!live) return;
       setRows(ps);
       setAllRows(everything);
@@ -871,6 +876,15 @@ function Catalog({
             ))}
         </div>
       )}
+      {allRows.some((r) => r.status === 'pending') && (
+        <PendingPanel
+          projectId={projectId}
+          rows={allRows}
+          onDone={() => {
+            onPiecesChanged();
+          }}
+        />
+      )}
       {justPlaced && (
         <div class="notice notice-good row" role="status" data-testid="placed-note" style={{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span class="grow">
@@ -991,6 +1005,65 @@ function Catalog({
   );
 }
 
+/**
+ * Pieces to check (M5 part 3): a rescan saw these where no known piece was, and each may be a piece
+ * moved since. The owner says which ("same piece") or that it's a new one.
+ */
+function PendingPanel({ projectId, rows, onDone }: { projectId: string; rows: PieceRow[]; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const pending = rows.filter((r) => r.status === 'pending');
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const settle = (id: string, into: string | null) =>
+    void resolvePending(projectId, id, into)
+      .then(() => {
+        logInfo('pending', into ? 'A piece to check was the same as a known piece' : 'A piece to check is a new piece');
+        onDone();
+      })
+      .catch((err) => logError('pending', 'Could not settle the piece', err));
+  return (
+    <div class="notice notice-warn" data-testid="pending-panel">
+      <div class="row" style={{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <span class="grow">
+          <strong>{pending.length === 1 ? '1 piece to check' : `${pending.length} pieces to check`}</strong>: a rescan saw{' '}
+          {pending.length === 1 ? 'it' : 'them'} where no known piece was. Each may be a piece you moved, or a new one.
+        </span>
+        <button class="btn btn-small" data-testid="pending-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? 'Hide' : 'Check them'}
+        </button>
+      </div>
+      {open &&
+        pending.map((p) => (
+          <div class="pending-row" key={p.id} data-testid="pending-row">
+            <PendingThumb piece={p} label="Seen now" />
+            <span class="small">Same piece as:</span>
+            {(p.maybe ?? [])
+              .map((id) => byId.get(id))
+              .filter((c): c is PieceRow => Boolean(c))
+              .map((c) => (
+                <button key={c.id} class="btn btn-small pending-choice" data-testid="pending-same" onClick={() => settle(p.id, c.id)}>
+                  <PendingThumb piece={c} label={c.status === 'missing' ? 'Missing' : 'Known'} />
+                  This one
+                </button>
+              ))}
+            <button class="btn btn-small" data-testid="pending-new" onClick={() => settle(p.id, null)}>
+              A different piece
+            </button>
+          </div>
+        ))}
+    </div>
+  );
+}
+
+function PendingThumb({ piece, label }: { piece: PieceRow; label: string }) {
+  const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
+  return (
+    <span class="pending-thumb">
+      {url ? <img src={url} alt={label} /> : <span class="catalog-empty" />}
+      <span class="tiny muted">{label}</span>
+    </span>
+  );
+}
+
 /** A piece in the puzzle (M5 part 2), with a way to take it out again. */
 function InPuzzleRow({ piece, onTakeOut }: { piece: PieceRow; onTakeOut: () => void }) {
   const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
@@ -1047,6 +1120,11 @@ function PieceThumb({
     <button class="thumb-btn" onClick={onSelect} data-group={group} data-place={place?.verdict ?? 'none'} aria-label={`${title}: show where it goes`}>
       {url ? <img src={url} class={cls} alt={title} title={title} loading="lazy" /> : <div class={`catalog-empty ${cls}`} title={title} />}
       {place && place.verdict !== 'several' && <span class={`place-dot place-${place.verdict}`} />}
+      {piece.status === 'pending' && (
+        <span class="pending-tag" title="To check: may be a piece you moved" data-testid="pending-tag">
+          ?
+        </span>
+      )}
       {side && (
         <span class="side-tag" title={SIDE_WORDS[side]} data-testid="side-tag">
           {SIDE_ARROW[side]}

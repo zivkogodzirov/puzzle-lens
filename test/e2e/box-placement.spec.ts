@@ -343,3 +343,45 @@ test('Fits / Doesn’t fit (M5 part 2): ruled-out spots, a piece into the puzzle
   await expect(page.getByTestId('acc-all')).toContainText('2 of 2');
   await page.screenshot({ path: test.info().outputPath('accuracy.png'), fullPage: true });
 });
+
+test('pieces to check (M5 part 3): "same piece" merges it into the known one, "a different piece" keeps it', async ({ page }) => {
+  await seed(page, null);
+  await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
+  // Two sightings a rescan couldn't place: each may be r1c2 or r2c5.
+  await page.evaluate(async () => {
+    const req = indexedDB.open('puzzle-lens');
+    const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
+    const get = (id: string) =>
+      new Promise<Record<string, unknown>>((res) => {
+        const r = dbh.transaction('pieces').objectStore('pieces').get(id);
+        r.onsuccess = () => res(r.result);
+      });
+    const base = await get('r1c2');
+    await new Promise<void>((res) => {
+      const tx = dbh.transaction('pieces', 'readwrite');
+      const st = tx.objectStore('pieces');
+      for (const [id, x] of [
+        ['seen-1', 400],
+        ['seen-2', 450],
+      ] as const)
+        st.put({ ...base, id, status: 'pending', maybe: ['r1c2', 'r2c5'], patch: null, table: { ...(base.table as object), x } });
+      tx.oncomplete = () => res();
+    });
+    dbh.close();
+  });
+  await page.reload();
+  await expect(page.getByTestId('pending-panel')).toContainText('2 pieces to check', { timeout: 30_000 });
+  await expect(page.getByTestId('pending-tag')).toHaveCount(2);
+  const thumbs = page.locator('[data-testid="catalog"] .thumb-btn');
+  await expect(thumbs).toHaveCount(8);
+  await page.getByTestId('pending-toggle').click();
+  await expect(page.getByTestId('pending-row')).toHaveCount(2);
+  await page.getByTestId('pending-panel').screenshot({ path: test.info().outputPath('pending.png') });
+  // The first is r1c2, moved: merged (7 pieces left); the second is a new piece.
+  await page.getByTestId('pending-row').nth(0).getByTestId('pending-same').nth(0).click();
+  await expect(thumbs).toHaveCount(7);
+  await expect(page.getByTestId('pending-panel')).toContainText('1 piece to check');
+  await page.getByTestId('pending-new').click();
+  await expect(page.getByTestId('pending-panel')).toHaveCount(0);
+  await expect(thumbs).toHaveCount(7);
+});

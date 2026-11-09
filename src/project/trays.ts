@@ -32,7 +32,7 @@ export async function moveToTray(projectId: string, ids: string[], tray: string,
     if (!project) throw new Error('This puzzle is no longer on this iPhone.');
     const now = Date.now();
     const want = new Set(ids);
-    const moving = all.filter((p) => want.has(p.id) && p.status === 'table');
+    const moving = all.filter((p) => want.has(p.id) && (p.status === 'table' || p.status === 'pending'));
     await d.pieces.bulkPut(moving.map((p) => ({ ...p, status: 'tray' as const, tray, updatedAt: now })));
     const fixed = fixedColours(project, all);
     if (!fixed && moving.length) {

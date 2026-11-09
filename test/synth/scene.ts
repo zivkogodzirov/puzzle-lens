@@ -234,7 +234,21 @@ export async function renderScene(opts: SceneOptions): Promise<SynthScene> {
     faceDownShare: layout.faceDownShare ?? 0.02,
     keepOut,
     seed: opts.seed,
-  }).concat(asmPlaced);
+  })
+    .map((p) => {
+      const m = opts.moves?.[p.id];
+      if (!m) return p;
+      const a = ((m.dAngleDeg ?? 0) * Math.PI) / 180;
+      const [cx, cy] = p.centreMm;
+      const outlineMm = p.outlineMm.map((v, i, o) => {
+        const x = (i % 2 ? o[i - 1]! : v) - cx;
+        const y = (i % 2 ? v : o[i + 1]!) - cy;
+        return i % 2 ? cy + m.dyMm + x * Math.sin(a) + y * Math.cos(a) : cx + m.dxMm + x * Math.cos(a) - y * Math.sin(a);
+      });
+      return { ...p, centreMm: [cx + m.dxMm, cy + m.dyMm] as [number, number], angleDeg: p.angleDeg + (m.dAngleDeg ?? 0), outlineMm };
+    })
+    .filter((p) => !opts.hidden?.includes(p.id))
+    .concat(asmPlaced);
   lap('layout');
 
   // ---- Table-space canvas -------------------------------------------------------------------

@@ -12,6 +12,7 @@
  * come back if found at that spot again). Full fingerprints for lookalikes come in M5.
  */
 import type { PieceFlags, PiecePatchInfo, PieceRow, Vec2 } from './types';
+import { fingerprintDistance } from '../cv/fingerprint';
 
 /** What the reader reports for each piece in a photo (src/cv/pieceFinder.ts FoundPiece, plus a thumbnail). */
 export interface FoundForCatalog {
@@ -25,7 +26,7 @@ export interface FoundForCatalog {
   flags: PieceFlags;
   thumb?: Blob | null;
   /** The piece straightened for box placement (M4). */
-  patch?: { blob: Blob; flats: boolean[]; sure: boolean; sides?: string; sideConf?: number[]; light?: number[] | null } | null;
+  patch?: { blob: Blob; flats: boolean[]; sure: boolean; sides?: string; sideConf?: number[]; light?: number[] | null; fp?: number[] | null } | null;
 }
 
 export interface MergePlan {
@@ -42,6 +43,15 @@ export interface MergePlan {
   patches: Array<{ id: string; blob: Blob }>;
   /** Found pieces left out (cut by the photo edge and not known yet). */
   skipped: number;
+  /**
+   * M5 part 3: sightings that may be pieces moved since (unsure which) are added as 'pending' with
+   * the pieces they may be (PieceRow.maybe), to be settled by a later scan or by the owner. When a
+   * scan settles one, the pending row is merged into the known piece: `merged` (from → into), and
+   * the pending row is removed.
+   */
+  pending: number;
+  merged: Array<{ from: string; into: string }>;
+  removed: string[];
 }
 
 /** Two sightings are the same piece when their centres are this close (share of the piece's size)… */
@@ -59,6 +69,37 @@ export const MOVED_SHAPE_MM = 0.6;
 export const MOVED_AREA = 0.2;
 export const MOVED_DELTA_E = 12;
 export const MOVED_MARGIN = 1.35;
+/**
+ * M5 part 3: a sighting whose outline overlaps a known piece's by at least this share (of the
+ * smaller of the two) at about the same place is that piece, whatever its size: a pale or shadowed
+ * piece found only partly, or with glare or a shadow added, is still the same piece (the 30 % area
+ * rule alone made duplicates: 5 of 6 on val48, and the owner's IMG_9274 / IMG_9276 rescans).
+ */
+export const SAME_PIECE_OVERLAP = 0.6;
+/**
+ * Moved pieces with fingerprints (M5 part 3): the cost of a sighting × a known piece is the
+ * fingerprint distance (src/cv/fingerprint.ts, ΔE-like; same piece median ≈ 3, p90 ≈ 10–13 on
+ * synthetic and the owner's photos) plus MOVED_SHAPE_WEIGHT × the outline-radius distance (mm).
+ * A pair counts up to MOVED_FP_COST, and only when the next choice on either side costs at least
+ * MOVED_MARGIN × it + MOVED_MARGIN_ABS. Area and colour gates are looser than without fingerprints
+ * (light changes and partial reads).
+ */
+export const MOVED_FP_COST = 14;
+export const MOVED_FP_COST_FREE = 24;
+/**
+ * Position match refused when both the printed pictures (fingerprint distance) and the outlines
+ * (outline-radius distance, mm) differ by more than this. Measured on val48 rescans: right
+ * same-spot matches fingerprint p95 20, outline p90 0.8 mm; wrong ones either look alike (no
+ * threshold separates them) or differ in both (≈ 23 and 1.5 mm).
+ */
+export const SAME_PIECE_FP_VETO = 20;
+export const SAME_PIECE_SHAPE_VETO = 1.1;
+export const MOVED_SHAPE_WEIGHT = 6;
+export const MOVED_MARGIN_ABS = 3;
+export const MOVED_AREA_FP = 0.35;
+export const MOVED_DELTA_E_FP = 20;
+/** A fragment (an unmatched blob lying this much inside a piece already matched in this photo) is part of it. */
+export const FRAGMENT_OVERLAP = 0.5;
 /** A piece is marked missing only by a photo with at least this × its best pixels per mm. */
 export const MISSING_MIN_SHARPNESS = 0.85;
 /** A known spot counts as in view when at least this × the piece's size from the view's edge. */
@@ -127,6 +168,74 @@ function insideBy(poly: Vec2[], p: Vec2): number {
   return inside ? dmin : -dmin;
 }
 
+/** Area of a polygon (flat x, y). */
+function polyArea(o: number[]): number {
+  let a = 0;
+  const n = o.length / 2;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    a += o[2 * i]! * o[2 * j + 1]! - o[2 * j]! * o[2 * i + 1]!;
+  }
+  return Math.abs(a / 2);
+}
+
+function inPoly(o: number[], x: number, y: number): boolean {
+  let c = false;
+  const n = o.length / 2;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = o[2 * i]!;
+    const yi = o[2 * i + 1]!;
+    const xj = o[2 * j]!;
+    const yj = o[2 * j + 1]!;
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+
+function bounds(o: number[]): [number, number, number, number] {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (let i = 0; i < o.length; i += 2) {
+    x0 = Math.min(x0, o[i]!);
+    x1 = Math.max(x1, o[i]!);
+    y0 = Math.min(y0, o[i + 1]!);
+    y1 = Math.max(y1, o[i + 1]!);
+  }
+  return [x0, y0, x1, y1];
+}
+
+/**
+ * How much two outlines (absolute mm, flat) overlap: the shared area ÷ the smaller outline's area
+ * (0–1), counted on a 0.5 mm grid.
+ */
+export function outlineOverlap(a: number[], b: number[]): number {
+  if (a.length < 6 || b.length < 6) return 0;
+  const [ax0, ay0, ax1, ay1] = bounds(a);
+  const [bx0, by0, bx1, by1] = bounds(b);
+  const x0 = Math.max(ax0, bx0);
+  const y0 = Math.max(ay0, by0);
+  const x1 = Math.min(ax1, bx1);
+  const y1 = Math.min(ay1, by1);
+  if (x1 <= x0 || y1 <= y0) return 0;
+  const step = 0.5;
+  let both = 0;
+  for (let y = y0 + step / 2; y < y1; y += step) for (let x = x0 + step / 2; x < x1; x += step) if (inPoly(a, x, y) && inPoly(b, x, y)) both++;
+  const smaller = Math.min(polyArea(a), polyArea(b));
+  return smaller > 0 ? Math.min(1, (both * step * step) / smaller) : 0;
+}
+
+/** A known piece's outline in table mm (absolute). */
+function absoluteOutline(p: PieceRow): number[] {
+  const out = new Array<number>(p.outlineMm.length);
+  for (let i = 0; i < p.outlineMm.length; i += 2) {
+    out[i] = p.outlineMm[i]! + p.table.x;
+    out[i + 1] = p.outlineMm[i + 1]! + p.table.y;
+  }
+  return out;
+}
+
 function relativeOutline(outlineMm: number[], c: Vec2): number[] {
   const out = new Array<number>(outlineMm.length);
   for (let i = 0; i < outlineMm.length; i += 2) {
@@ -176,9 +285,21 @@ export function planMerge(
       info.sideConf = f.patch.sideConf ?? [1, 1, 1, 1];
     }
     if (f.patch.light?.length === 3) info.light = f.patch.light as [number, number, number];
+    if (f.patch.fp?.length) info.fp = f.patch.fp;
     return info;
   };
   let skipped = 0;
+  /**
+   * Another piece put down on a known piece's spot: both printed pictures read, and very different
+   * (beyond any same-piece pair seen in testing), so it is not that piece (M5 part 3).
+   */
+  const vetoed = (f: FoundForCatalog, p: PieceRow): boolean => {
+    const a = f.patch?.fp;
+    const b = p.patch?.fp;
+    if (!a?.length || !b?.length || f.flags.weak || p.flags.weak) return false;
+    if (fingerprintDistance(a, b, f.patch?.sides, p.patch?.sides).d <= SAME_PIECE_FP_VETO) return false;
+    return shapeDistance(shapeSignature(relativeOutline(f.outlineMm, f.centreMm)), shapeSignature(p.outlineMm)) > SAME_PIECE_SHAPE_VETO;
+  };
   /** Found pieces matched to nobody by position (index into found), to try as moved pieces. */
   const unmatched: number[] = [];
   /** Found pieces matched to a known piece by position. */
@@ -196,13 +317,33 @@ export function planMerge(
       if (d > SAME_PIECE_DIST * size || d >= bestD) continue;
       const areaDiff = Math.abs(p.areaMm2 - f.areaMm2) / Math.max(p.areaMm2, f.areaMm2, 1);
       if (areaDiff > SAME_PIECE_AREA && !f.flags.cut) continue;
+      if (vetoed(f, p)) continue;
       best = p;
       bestD = d;
+    }
+    // Not found by position and size: the same place with a different size (found partly, or with
+    // a shadow or glare added) is still that piece when the outlines overlap well (M5 part 3).
+    if (!best && !f.flags.clump) {
+      let bestO = SAME_PIECE_OVERLAP;
+      for (const p of onTable) {
+        if (taken.has(p.id)) continue;
+        const reach = 0.5 * Math.max(size, p.sizeMm[0], p.sizeMm[1]);
+        if (Math.hypot(p.table.x - f.centreMm[0], p.table.y - f.centreMm[1]) > reach) continue;
+        const o = outlineOverlap(absoluteOutline(p), f.outlineMm);
+        if (o >= bestO && !vetoed(f, p)) {
+          bestO = o;
+          best = p;
+        }
+      }
     }
     if (best) {
       taken.add(best.id);
       matched.add(i);
-      const sharper = ctx.pxPerMm > best.bestPxPerMm * 1.15 && !f.flags.cut && !f.flags.clump;
+      // A sharper photo replaces the outline, but never a whole piece by a part of it (a pale edge
+      // missed, a "weak" read), while a fuller read replaces a partial one.
+      const partial = (f.flags.weak && !best.flags.weak) || f.areaMm2 < 0.75 * best.areaMm2;
+      const fuller = Boolean(best.flags.weak) && !f.flags.weak && f.areaMm2 > best.areaMm2;
+      const sharper = (ctx.pxPerMm > best.bestPxPerMm * 1.15 || fuller) && !f.flags.cut && !f.flags.clump && !partial;
       const next: PieceRow = {
         ...best,
         updatedAt: ctx.now,
@@ -214,7 +355,7 @@ export function planMerge(
           snapId: ctx.snapId,
         },
         seen: best.seen + 1,
-        status: 'table',
+        status: best.status === 'pending' ? 'pending' : 'table',
       };
       if (sharper) {
         next.outlineMm = relativeOutline(f.outlineMm, f.centreMm);
@@ -260,34 +401,101 @@ export function planMerge(
       if (!covered) left.push(p);
     }
   }
-  const candidates = [...left, ...existing.filter((p) => p.status === 'missing' && !taken.has(p.id))];
+  // Who may have moved here (M5 part 3): pieces whose spot is in view and now empty, pieces already
+  // missing, and pieces whose spot is out of this photo's view (they may have been moved into it).
+  // A piece whose spot is in view and still covered by something is not a candidate.
+  const leftIds = new Set(left.map((p) => p.id));
+  const outOfView = (p: PieceRow): boolean => {
+    if (!ctx.view || ctx.view.length < 3) return false;
+    return insideBy(ctx.view, [p.table.x, p.table.y]) < VIEW_INSET * Math.max(p.sizeMm[0], p.sizeMm[1], 1);
+  };
+  // With fingerprints on both sides, any piece not found at its spot may be the one (its spot may
+  // look covered by a neighbour, or by another piece put down nearby); the fingerprint and the
+  // clear-margin rule decide.
+  const candidates = existing.filter((p) => !taken.has(p.id) && (p.status === 'table' || p.status === 'pending' || p.status === 'missing'));
+  const free = (p: PieceRow) => leftIds.has(p.id) || p.status === 'missing' || outOfView(p);
   const sigs = new Map(candidates.map((p) => [p.id, shapeSignature(p.outlineMm)]));
   const newOnes: number[] = [];
+  const matchedRows = new Map(updates.map((u) => [u.id, u]));
+  /** Sightings to compare with the candidates (index into found) and their outline signatures. */
+  const toMatch: Array<{ i: number; sig: Float32Array }> = [];
   for (const i of unmatched) {
     const f = found[i]!;
+    // Touching pieces already known (their centres inside the blob): those pieces, still there.
+    if (f.flags.clump) {
+      const inside = onTable.filter((p) => !taken.has(p.id) && inPoly(f.outlineMm, p.table.x, p.table.y));
+      if (inside.length) {
+        for (const p of inside) {
+          taken.add(p.id);
+          updates.push({
+            ...p,
+            updatedAt: ctx.now,
+            status: p.status === 'pending' ? 'pending' : 'table',
+            table: { ...p.table, lastSeen: ctx.now, snapId: ctx.snapId },
+            seen: p.seen + 1,
+          });
+        }
+        continue;
+      }
+    }
+    // A fragment of a piece already matched in this photo (a piece found in two parts).
+    const fArea = Math.max(1, f.areaMm2);
+    if (
+      [...matchedRows.values()].some(
+        (p) =>
+          Math.hypot(p.table.x - f.centreMm[0], p.table.y - f.centreMm[1]) < Math.max(p.sizeMm[0], p.sizeMm[1], 1) &&
+          (outlineOverlap(absoluteOutline(p), f.outlineMm) * Math.min(fArea, p.areaMm2)) / fArea >= FRAGMENT_OVERLAP,
+      )
+    ) {
+      skipped++;
+      continue;
+    }
     if (f.flags.clump || !candidates.length) {
       newOnes.push(i);
       continue;
     }
-    const fs = shapeSignature(relativeOutline(f.outlineMm, f.centreMm));
-    let best: PieceRow | null = null;
-    let bestD = Infinity;
-    let second = Infinity;
+    toMatch.push({ i, sig: shapeSignature(relativeOutline(f.outlineMm, f.centreMm)) });
+  }
+  // Every sighting × candidate that could be the same piece, with a cost (lower = more alike):
+  // the printed picture when both have a fingerprint, the outline shape always.
+  const pairs: Array<{ i: number; p: PieceRow; cost: number }> = [];
+  for (const { i, sig } of toMatch) {
+    const f = found[i]!;
     for (const p of candidates) {
-      if (taken.has(p.id)) continue;
-      if (Math.abs(p.areaMm2 - f.areaMm2) / Math.max(p.areaMm2, f.areaMm2, 1) > MOVED_AREA) continue;
-      if (deltaE(p.colour.meanLab, f.meanLab) > MOVED_DELTA_E) continue;
-      const d = shapeDistance(fs, sigs.get(p.id)!);
-      if (d < bestD) {
-        second = bestD;
-        bestD = d;
-        best = p;
-      } else if (d < second) second = d;
+      const areaDiff = Math.abs(p.areaMm2 - f.areaMm2) / Math.max(p.areaMm2, f.areaMm2, 1);
+      const shapeD = shapeDistance(sig, sigs.get(p.id)!);
+      const fpA = f.patch?.fp;
+      const fpB = p.patch?.fp;
+      let cost: number;
+      if (fpA?.length && fpB?.length) {
+        if (areaDiff > MOVED_AREA_FP || deltaE(p.colour.meanLab, f.meanLab) > MOVED_DELTA_E_FP) continue;
+        cost = fingerprintDistance(fpA, fpB, f.patch?.sides, p.patch?.sides).d + MOVED_SHAPE_WEIGHT * shapeD;
+        // A piece whose spot is free (empty in view, missing, or out of view) may differ more (a
+        // corner read differently changes the straightened picture); one whose spot still looks
+        // covered only when the picture agrees well.
+        if (cost > (free(p) ? MOVED_FP_COST_FREE : MOVED_FP_COST)) continue;
+      } else {
+        // Without fingerprints (pieces scanned before M5 part 3): the outline alone, and only among
+        // pieces that left a spot in view or are missing.
+        if (!leftIds.has(p.id) && p.status !== 'missing') continue;
+        if (areaDiff > MOVED_AREA || deltaE(p.colour.meanLab, f.meanLab) > MOVED_DELTA_E || shapeD > MOVED_SHAPE_MM) continue;
+        cost = (shapeD / MOVED_SHAPE_MM) * MOVED_FP_COST;
+      }
+      pairs.push({ i, p, cost });
     }
-    if (!best || bestD > MOVED_SHAPE_MM || second < MOVED_MARGIN * bestD) {
-      newOnes.push(i);
-      continue;
-    }
+  }
+  // Most certain first; a pair counts only when clearly better than either side's next choice.
+  pairs.sort((a, b) => a.cost - b.cost);
+  const done = new Set<number>();
+  for (const pr of pairs) {
+    if (done.has(pr.i) || taken.has(pr.p.id)) continue;
+    const nextF = pairs.find((q) => q.i === pr.i && q.p !== pr.p && !taken.has(q.p.id));
+    const nextP = pairs.find((q) => q.p === pr.p && q.i !== pr.i && !done.has(q.i));
+    const clear = (q: { cost: number } | undefined) => !q || q.cost >= MOVED_MARGIN * pr.cost + MOVED_MARGIN_ABS;
+    if (!clear(nextF) || !clear(nextP)) continue;
+    done.add(pr.i);
+    const f = found[pr.i]!;
+    const best = pr.p;
     taken.add(best.id);
     moved++;
     const sharper = ctx.pxPerMm > best.bestPxPerMm * 1.15 && !f.flags.weak;
@@ -315,6 +523,75 @@ export function planMerge(
     next.patch = takePatch(f, best.id, best.patch);
     updates.push(next);
   }
+  // Unsure: a sighting that may be one of these known pieces, but not clearly one of them.
+  const pendingOf = new Map<number, string[]>();
+  for (const { i } of toMatch) {
+    if (done.has(i)) continue;
+    const maybe = pairs.filter((q) => q.i === i && !taken.has(q.p.id)).slice(0, 3);
+    if (maybe.length)
+      pendingOf.set(
+        i,
+        maybe.map((q) => q.p.id),
+      );
+    newOnes.push(i);
+  }
+
+  // Pending rows seen again in this photo: settled when the evidence is clear now.
+  const merged: MergePlan['merged'] = [];
+  const removed: string[] = [];
+  const byId = new Map(existing.map((p) => [p.id, p]));
+  for (let k = 0; k < updates.length; k++) {
+    const u = updates[k]!;
+    if (u.status !== 'pending' || u.table.lastSeen !== ctx.now) continue;
+    // A candidate seen elsewhere in this photo is not this piece.
+    const rest = (u.maybe ?? [])
+      .map((id) => byId.get(id))
+      .filter((c): c is PieceRow => Boolean(c && !taken.has(c.id) && c.status !== 'placed' && c.status !== 'tray'));
+    if (!rest.length) {
+      updates[k] = { ...u, status: 'table', maybe: null };
+      continue;
+    }
+    const sig = shapeSignature(u.outlineMm);
+    const costs = rest
+      .map((c) => ({
+        c,
+        cost:
+          u.patch?.fp && c.patch?.fp
+            ? fingerprintDistance(u.patch.fp, c.patch.fp, u.patch.sides, c.patch.sides).d + MOVED_SHAPE_WEIGHT * shapeDistance(sig, shapeSignature(c.outlineMm))
+            : Infinity,
+      }))
+      .sort((a, b) => a.cost - b.cost);
+    const top = costs[0]!;
+    const second = costs[1];
+    const limit = leftIds.has(top.c.id) || top.c.status === 'missing' ? MOVED_FP_COST_FREE : MOVED_FP_COST;
+    const isClear = top.cost <= limit && (!second || second.cost >= MOVED_MARGIN * top.cost + MOVED_MARGIN_ABS);
+    if (!isClear) {
+      updates[k] = { ...u, maybe: rest.map((c) => c.id) };
+      continue;
+    }
+    // The known piece takes this sighting (the newest); the pending row goes.
+    const c = top.c;
+    taken.add(c.id);
+    moved++;
+    merged.push({ from: u.id, into: c.id });
+    removed.push(u.id);
+    updates[k] = {
+      ...c,
+      updatedAt: ctx.now,
+      status: 'table',
+      maybe: null,
+      table: { ...u.table },
+      outlineMm: u.outlineMm,
+      areaMm2: u.areaMm2,
+      sizeMm: u.sizeMm,
+      colour: u.colour,
+      flags: u.flags,
+      bestPxPerMm: Math.max(u.bestPxPerMm, c.bestPxPerMm),
+      thumbBlobId: u.thumbBlobId ?? c.thumbBlobId,
+      patch: u.patch ?? c.patch,
+      seen: c.seen + u.seen,
+    };
+  }
   for (const p of left) {
     if (taken.has(p.id)) continue;
     // Only a clear piece in a photo at least about as sharp as its best one: a pale piece, or a
@@ -324,9 +601,12 @@ export function planMerge(
     updates.push({ ...p, status: 'missing', updatedAt: ctx.now });
   }
 
+  let pending = 0;
   for (const i of newOnes) {
     const f = found[i]!;
     const id = ctx.newId();
+    const maybe = pendingOf.get(i) ?? null;
+    if (maybe) pending++;
     const thumbBlobId = f.thumb ? ctx.thumbId(id) : null;
     if (f.thumb && thumbBlobId) thumbs.push({ id: thumbBlobId, blob: f.thumb });
     added.push({
@@ -334,7 +614,8 @@ export function planMerge(
       projectId: ctx.projectId,
       createdAt: ctx.now,
       updatedAt: ctx.now,
-      status: 'table',
+      status: maybe ? 'pending' : 'table',
+      ...(maybe ? { maybe } : {}),
       table: { x: f.centreMm[0], y: f.centreMm[1], angleDeg: f.angleDeg, lastSeen: ctx.now, snapId: ctx.snapId },
       outlineMm: relativeOutline(f.outlineMm, f.centreMm),
       areaMm2: f.areaMm2,
@@ -347,7 +628,7 @@ export function planMerge(
       patch: takePatch(f, id, null) ?? null,
     });
   }
-  return { updates, added, thumbs, patches, skipped, moved, missing };
+  return { updates, added, thumbs, patches, skipped, moved, missing, pending, merged, removed };
 }
 
 /**

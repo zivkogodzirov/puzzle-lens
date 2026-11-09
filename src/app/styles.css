@@ -994,3 +994,11 @@ pre.logbox {
 .in-puzzle-list { display: flex; flex-direction: column; gap: 6px; }
 .in-puzzle-row { gap: 10px; align-items: center; }
 .link-btn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
+
+/* ---------- Pieces to check (M5 part 3) ---------- */
+.pending-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.pending-thumb { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
+.pending-thumb img, .pending-thumb .catalog-empty { width: 56px; height: 56px; object-fit: contain; border-radius: 8px; background: #fff; }
+.pending-choice { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; min-height: auto; padding: 6px; }
+.pending-tag { position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%; background: var(--warn); color: #000; font-weight: 800; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+.tiny { font-size: 11px; }

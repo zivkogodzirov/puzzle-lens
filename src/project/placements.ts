@@ -53,7 +53,7 @@ export async function readPlacements(projectId: string): Promise<PlacementCache 
 }
 
 /** Pieces still to be put in the puzzle: on the table, or sorted into a tray. */
-export const unplacedStatus = (p: Pick<PieceRow, 'status'>): boolean => p.status === 'table' || p.status === 'tray';
+export const unplacedStatus = (p: Pick<PieceRow, 'status'>): boolean => p.status === 'table' || p.status === 'tray' || p.status === 'pending';
 
 /** Pieces whose placement is missing or older than their patch (or all, among empty spots, until the colour match is known). */
 export function stalePieces(cache: PlacementCache | null, placeKey: string, pieces: PieceRow[]): PieceRow[] {

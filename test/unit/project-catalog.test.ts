@@ -283,3 +283,92 @@ describe('moved pieces (owner report 2026-11-08: a piece moved a little counted 
     }
   });
 });
+
+describe('re-identification (M5 part 3)', () => {
+  /** A fingerprint: 4 × 4 colour cells + 8 × 8 brightness pattern, from a seed (different seeds = different pictures). */
+  const fp = (seed: number): number[] => {
+    let a = (seed * 2654435761) >>> 0;
+    const r = () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = Math.imul(a ^ (a >>> 15), a | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return (((t ^ (t >>> 14)) >>> 0) / 4294967296) * 2 - 1;
+    };
+    return [...Array.from({ length: 48 }, () => Math.round(r() * 300) / 10), ...Array.from({ length: 64 }, () => Math.round(r() * 20) / 10)];
+  };
+  const withFp = (x: number, y: number, seed: number, extra: Partial<FoundForCatalog> = {}) =>
+    found(x, y, { ...extra, patch: { blob: new Blob([]), flats: [false, false, false, false], sure: true, fp: fp(seed) } });
+  const view: Vec2[] = [
+    [0, 0],
+    [400, 0],
+    [400, 300],
+    [0, 300],
+  ];
+
+  it('a piece found only partly (a pale edge missed) at its spot is that piece, not a new one', () => {
+    const cat = apply([], planMerge([], [found(100, 100)], ctx(4, 1)));
+    // Only the left half found: 50 % of the area, overlapping the known outline.
+    const half = found(94, 100, { outlineMm: [82, 88, 106, 88, 106, 112, 82, 112], areaMm2: 200, sizeMm: [24, 24], flags: { weak: true } });
+    const plan = planMerge(cat, [half], { ...ctx(4, 2), view });
+    expect(plan.added).toHaveLength(0);
+    expect(plan.updates[0]!.id).toBe(cat[0]!.id);
+    // A part never replaces the whole outline.
+    expect(plan.updates[0]!.areaMm2).toBe(400);
+  });
+
+  it('touching pieces already known are those pieces; a fragment of a matched piece is not a new piece', () => {
+    const cat = apply([], planMerge([], [found(100, 100), found(126, 100)], ctx(4, 1)));
+    const clump = found(113, 100, { outlineMm: [88, 88, 138, 88, 138, 112, 88, 112], areaMm2: 1200, sizeMm: [50, 24], flags: { clump: true } });
+    const plan = planMerge(cat, [clump], { ...ctx(4, 2), view });
+    expect(plan.added).toHaveLength(0);
+    expect(plan.updates.map((u) => u.id).sort()).toEqual(cat.map((c) => c.id).sort());
+    const frag = found(108, 100, { outlineMm: [104, 92, 112, 92, 112, 108, 104, 108], areaMm2: 128, sizeMm: [8, 16] });
+    const plan2 = planMerge(cat, [found(100, 100), frag, found(126, 100)], { ...ctx(4, 3), view });
+    expect(plan2.added).toHaveLength(0);
+  });
+
+  it('with fingerprints: a piece moved into view from outside it is recognised', () => {
+    // Known pieces at x = 100 and 600 (the second is outside the next photo's view).
+    const cat = apply([], planMerge([], [withFp(100, 100, 1), withFp(600, 100, 2)], ctx(4, 1)));
+    // Piece 2 now lies at (250, 200), inside the view; piece 1 is still there.
+    const plan = planMerge(cat, [withFp(100, 100, 1), withFp(250, 200, 2)], { ...ctx(4, 2), view });
+    expect(plan.added).toHaveLength(0);
+    expect(plan.moved).toBe(1);
+    expect(plan.updates.find((u) => u.table.x === 250)!.id).toBe(cat.find((c) => c.table.x === 600)!.id);
+  });
+
+  it('unsure which piece it is: kept as a piece to check, then settled by a later scan', () => {
+    // Two look-alike pieces out of view; one shows up in view: it may be either.
+    const cat = apply([], planMerge([], [withFp(100, 100, 1), withFp(600, 100, 7), withFp(700, 100, 7)], ctx(4, 1)));
+    const plan = planMerge(cat, [withFp(100, 100, 1), withFp(250, 200, 7)], { ...ctx(4, 2), view });
+    expect(plan.pending).toBe(1);
+    const p = plan.added[0]!;
+    expect(p.status).toBe('pending');
+    expect(p.maybe!.sort()).toEqual(
+      cat
+        .filter((c) => c.table.x >= 600)
+        .map((c) => c.id)
+        .sort(),
+    );
+    const cat2 = apply(cat, plan);
+    // A later wide photo sees the one at 600 still there: the piece to check is the one from 700.
+    const wide: Vec2[] = [
+      [0, 0],
+      [800, 0],
+      [800, 300],
+      [0, 300],
+    ];
+    const plan2 = planMerge(cat2, [withFp(100, 100, 1), withFp(250, 200, 7), withFp(600, 100, 7)], { ...ctx(4, 3), view: wide });
+    expect(plan2.merged).toEqual([{ from: p.id, into: cat.find((c) => c.table.x === 700)!.id }]);
+    expect(plan2.removed).toEqual([p.id]);
+    expect(plan2.added).toHaveLength(0);
+  });
+
+  it('another piece put down on a known piece’s spot: very different picture and outline, not merged', () => {
+    const cat = apply([], planMerge([], [withFp(100, 100, 1)], ctx(4, 1)));
+    // Same place, a different picture and a much bigger, different outline.
+    const other = withFp(100, 100, 9, { outlineMm: [86, 82, 114, 82, 114, 118, 86, 118, 80, 100], areaMm2: 460 });
+    const plan = planMerge(cat, [other], { ...ctx(4, 2), view });
+    expect(plan.updates.filter((u) => u.status === 'table' && u.table.lastSeen === 2)).toHaveLength(0);
+  });
+});

@@ -197,12 +197,15 @@ export async function deleteBlob(id: string): Promise<void> {
 }
 
 /** Pieces catalogued for a puzzle: on the table now, put into trays, in the puzzle (M5 part 2), and no longer seen at their spot (missing). */
-export async function countPiecesByStatus(projectId: string): Promise<{ table: number; missing: number; tray: number; placed: number; all: number }> {
+export async function countPiecesByStatus(
+  projectId: string,
+): Promise<{ table: number; missing: number; tray: number; placed: number; pending: number; all: number }> {
   const rows = await db().pieces.where('projectId').equals(projectId).toArray();
   const missing = rows.filter((p) => p.status === 'missing').length;
   const tray = rows.filter((p) => p.status === 'tray').length;
   const placed = rows.filter((p) => p.status === 'placed').length;
-  return { table: rows.length - missing - tray - placed, missing, tray, placed, all: rows.length };
+  const pending = rows.filter((p) => p.status === 'pending').length;
+  return { table: rows.length - missing - tray - placed, missing, tray, placed, pending, all: rows.length };
 }
 
 /** Number of pieces catalogued for a puzzle. */

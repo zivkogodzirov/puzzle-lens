@@ -1,4 +1,4 @@
-# M5 checklist for your iPhone: live view, Fits / Doesn't fit, and re-identification
+# M5 checklist for your iPhone: live view, Fits / Doesn't fit, and rescans
 
 The steps for the newest part are also inside the app: tap the small **🧪 Test** tab on the right edge of any screen.
 
@@ -55,3 +55,15 @@ Set-up as in Part 1 ("Get ready"): your leftover pieces scanned, with their spot
 ### Please tell me (part 2)
 - A screenshot of the 📊 page after you've answered for your pieces.
 - Any piece the app called **Strong** that didn't fit (a screenshot of the piece's spot helps).
+
+## Part 3: rescans that don't count pieces twice (M5 part 3)
+Set-up as in Part 1 ("Get ready"): your leftover pieces scanned.
+
+1. With your pieces scanned (as above), take another **overview photo** from a different place (Scan pieces). The note should say **"Found N pieces (0 new)"** (the coin and other things on the table aren't pieces).
+2. Move **3 pieces** by hand to other places on the table (turn one of them round), then take another overview photo. The note should say **"3 pieces were moved: recognised, not counted again"**, or some of them become **pieces to check**.
+3. If the puzzle page shows **"Pieces to check"**: tap **Check them**. Each row shows the piece as seen now and the pieces it may be: tap **This one** under the right one (or **A different piece**). The **?** goes away.
+4. Take **2 pieces** off the table and photograph again: the note says **"2 pieces are no longer where they were"**. Put them back somewhere else and photograph again: they're recognised (not new).
+5. With the coin next to the pieces, take two more photos: the coin never shows up as a piece.
+
+### Please tell me (part 3)
+- After moving pieces, did any piece show up twice under Pieces? A screenshot of the note after each photo helps.

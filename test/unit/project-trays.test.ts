@@ -69,7 +69,7 @@ describe('trays', () => {
     const all = await db().pieces.toArray();
     expect(all.filter((p) => p.status === 'tray').map((p) => p.tray)).toEqual(['A', 'A', 'A']);
     expect(trayCounts(all)).toEqual(new Map([['A', 3]]));
-    expect(await countPiecesByStatus(project.id)).toEqual({ table: 2, missing: 0, tray: 3, placed: 0, all: 5 });
+    expect(await countPiecesByStatus(project.id)).toEqual({ table: 2, missing: 0, tray: 3, placed: 0, pending: 0, all: 5 });
     const p1 = (await getProject(project.id))!;
     expect(fixedColours(p1, all)).toEqual(g0.groups.map((g) => g.lab));
 

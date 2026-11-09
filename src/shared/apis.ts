@@ -47,6 +47,8 @@ export interface PatchForCatalog {
   sideConf: number[];
   /** The table's colour (sRGB 0–255) right around the piece in this photo, or null (colour groups, M4). */
   light?: number[] | null;
+  /** Its printed picture as a small colour grid (src/cv/fingerprint.ts), for re-identification (M5 part 3). */
+  fp?: number[] | null;
 }
 
 /** The empty spots of a nearly finished puzzle as found in a photo of it (see Project.openSpots). */

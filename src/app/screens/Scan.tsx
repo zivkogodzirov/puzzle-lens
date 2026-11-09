@@ -62,7 +62,7 @@ function pxPerMmOf(imgToTable: number[], width: number, height: number): number 
 /** The area to cover with close-ups: inside the markers, or (marker-free) around the pieces found. */
 function scanArea(project: Project, pieces: PieceRow[]): Area | null {
   if (project.tracking === 'markers') return project.markerMap ? sortingArea(project.markerMap) : null;
-  const on = pieces.filter((p) => p.status === 'table');
+  const on = pieces.filter((p) => p.status === 'table' || p.status === 'pending');
   if (!on.length) return null;
   // 2nd–98th percentile, so one misplaced piece can't stretch the area; at most 1.5 m a side.
   const q = (v: number[], f: number) => v.slice().sort((a, b) => a - b)[Math.min(v.length - 1, Math.max(0, Math.round(f * (v.length - 1))))]!;
@@ -252,7 +252,9 @@ export function ScanScreen() {
             zoom,
             kind,
             table: null,
-            findCoin: kind === 'overview' && Boolean(coinType) && project.scaleSource !== 'coin',
+            // Looked for in every photo once a coin is chosen, so it is never taken for a piece (it was
+            // only looked for until it had measured the scale: later scans added it as a piece, M5 part 3).
+            findCoin: Boolean(coinType),
             pieceCount: project.pieceCount || undefined,
             grid: project.grid ? { cols: project.grid.cols, rows: project.grid.rows } : null,
           }),
@@ -447,6 +449,7 @@ export function ScanScreen() {
                   sides: pt.sides,
                   sideConf: pt.sideConf,
                   light: pt.light ?? null,
+                  fp: pt.fp ?? null,
                 }
               : null,
           };
@@ -481,7 +484,7 @@ export function ScanScreen() {
         imgToTable: r.imgToTable,
         quality: r.quality,
         blobId: null,
-        pieceIds: [...plan.added, ...plan.updates.filter((p) => p.status === 'table')].map((p) => p.id),
+        pieceIds: [...plan.added, ...plan.updates.filter((p) => p.status === 'table' || p.status === 'pending')].map((p) => p.id),
       };
       // The full photo is kept for the latest KEEP_FULL_PHOTOS scans (they travel in backups, so the
       // owner can send real scans for checking); older ones are dropped to save space.
@@ -506,6 +509,8 @@ export function ScanScreen() {
           meta: { kind },
         });
         await db().pieces.bulkPut([...plan.updates, ...plan.added]);
+        // Pieces to check that this photo settled: merged into the known piece (M5 part 3).
+        if (plan.removed.length) await db().pieces.bulkDelete(plan.removed);
         await db().snaps.put(snap);
       });
       await pruneFullPhotos(project.id);
@@ -523,6 +528,10 @@ export function ScanScreen() {
       const lines0: string[] = [];
       if (plan.moved || plan.missing) logInfo('scan', `Moved pieces recognised: ${plan.moved}; no longer at their spot: ${plan.missing}`);
       if (plan.moved) lines0.push(`${plan.moved === 1 ? '1 piece was' : `${plan.moved} pieces were`} moved: recognised, not counted again.`);
+      if (plan.pending)
+        lines0.push(
+          `${plan.pending === 1 ? '1 piece' : `${plan.pending} pieces`} may be ${plan.pending === 1 ? 'one' : 'ones'} you moved: check ${plan.pending === 1 ? 'it' : 'them'} on the puzzle page ("Pieces to check"), or take a close-up.`,
+        );
       if (plan.missing)
         lines0.push(
           `${plan.missing === 1 ? '1 piece is' : `${plan.missing} pieces are`} no longer where ${plan.missing === 1 ? 'it was' : 'they were'} (taken away, or moved out of view).`,
@@ -557,7 +566,7 @@ export function ScanScreen() {
     }
   };
 
-  const onTable = pieces.filter((p) => p.status === 'table');
+  const onTable = pieces.filter((p) => p.status === 'table' || p.status === 'pending');
   const covered = coverage ? Math.round(coverage.share() * 100) : 0;
 
   return (

@@ -1,18 +1,27 @@
-# M5, parts 1 and 2: the live view, and Fits / Doesn't fit
+# M5, parts 1–3: the live view, Fits / Doesn't fit, and rescans that don't count pieces twice
 
-**New in part 2:** wherever the app suggests a spot, you can now answer **✓ Fits** or **✗ Doesn't fit** after trying the piece there: on a piece's spot, in 🎯 Fill this spot, and in the 📷 live view. The app learns from it:
-- **Fits:** the piece goes into the puzzle in the app (it leaves your table list), its hole counts as filled, and its knobs tell the holes next to it what they need.
-- **Doesn't fit:** that spot is ruled out for the piece, and its next best spot shows.
-- **📊 How often is the app right?** (on the puzzle page once you've answered, and in Settings) shows how often its first choice was right, separately for Strong, Likely and "Several spots look alike".
-- **I tested both parts myself with your photos** (details in the changelog): the live view found your table in all your loose-piece photos (outlines within about half a millimetre), and a simulated you placed all 19 real pieces into your 21 holes, 18 on the first try. Fixed on the way: photos taken very close now scan properly; after "doesn't fit" everywhere a piece is offered the other empty holes; "Not a puzzle piece? Remove it"; and "✓ N in the puzzle" lists the pieces with **Take it out**.
+**New in part 3:** scanning again never counts a piece twice, even after you moved pieces around:
+- A piece found only partly (a pale edge, a shadow), or two pieces touching, is recognised as the piece(s) already known.
+- **A piece you moved** (even turned round, or moved out of the photo and back in) is recognised by its **printed picture**: each piece's picture is now kept as a small "fingerprint".
+- **When the app isn't sure** which known piece a moved one is, it doesn't guess: the piece gets a yellow **?** and the puzzle page says **"Pieces to check"**. A later scan usually settles it; otherwise tap **Check them** and pick the same piece (or "A different piece").
+- **The coin** is never counted as a piece any more (before, later scans added it once it had measured the size).
 
-**Still to check from part 1:** **📷 Live view of my table** (puzzle page, under Pieces) outlines your scanned pieces on the live camera picture: **green** = spot known (labelled e.g. 26·1 = column 26, row 1), **blue** = shape read, **grey** = found. No markers needed.
+**Also new (parts 1 and 2, still to check):** the 📷 live view of your table, and ✓ Fits / ✗ Doesn't fit with the 📊 Accuracy page (details below).
 
-Allow about 25 minutes for both parts. These steps are for version **{version}** (Settings shows the version).
+**I tested part 3 myself with your photos:** rescanning your 21 pieces from four places, in three orders, added no piece twice and marked nothing as moved or missing. With three of your real pieces moved digitally (one turned upside down, one a quarter turn), all three were recognised.
+
+Allow about 35 minutes for all three parts. These steps are for version **{version}** (Settings shows the version).
 
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## Part 3: rescans and moved pieces
+1. With your pieces scanned (as above), take another **overview photo** from a different place (Scan pieces). The note should say **"Found N pieces (0 new)"** (the coin and other things on the table aren't pieces).
+2. Move **3 pieces** by hand to other places on the table (turn one of them round), then take another overview photo. The note should say **"3 pieces were moved: recognised, not counted again"**, or some of them become **pieces to check**.
+3. If the puzzle page shows **"Pieces to check"**: tap **Check them**. Each row shows the piece as seen now and the pieces it may be: tap **This one** under the right one (or **A different piece**). The **?** goes away.
+4. Take **2 pieces** off the table and photograph again: the note says **"2 pieces are no longer where they were"**. Put them back somewhere else and photograph again: they're recognised (not new).
+5. With the coin next to the pieces, take two more photos: the coin never shows up as a piece.
 
 ## Part 1: the live view
 1. Under Pieces tap **📷 Live view of my table**. Allow the camera if asked.
@@ -44,6 +53,7 @@ Allow about 25 minutes for both parts. These steps are for version **{version}**
 - Your answers are kept with the puzzle, and in backups.
 
 ## Please tell me
+- Part 3: after moving pieces, did any piece show up twice under Pieces? A screenshot of the note after each photo helps.
 - Live view: did the outlines sit on the right pieces? Does it feel smooth (the small number after "Tracking", e.g. **15/s**, is how many times per second it finds the table)? A short screen recording helps if outlines drift or jump.
 - A screenshot of the 📊 page after you've answered for your pieces.
 - Any piece the app called **Strong** that didn't fit (a screenshot of the piece's spot helps).

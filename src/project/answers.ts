@@ -170,11 +170,11 @@ export async function answerSpot(
     await d.projects.put(next);
     if (fits) {
       const row = await d.pieces.get(piece.id);
-      if (row && (row.status === 'table' || row.status === 'tray'))
+      if (row && (row.status === 'table' || row.status === 'tray' || row.status === 'pending'))
         await d.pieces.put({
           ...row,
           status: 'placed',
-          placedAt: { col: spot.col, row: spot.row, rot: spot.rot, at: now, from: row.status, tray: row.tray ?? null },
+          placedAt: { col: spot.col, row: spot.row, rot: spot.rot, at: now, from: row.status === 'tray' ? 'tray' : 'table', tray: row.tray ?? null },
           updatedAt: now,
         });
     }

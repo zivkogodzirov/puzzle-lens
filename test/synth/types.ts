@@ -157,6 +157,13 @@ export interface SceneOptions {
   exposure?: number;
   /** Piece thickness in mm (default 2.1). */
   thicknessMm?: number;
+  /**
+   * Pieces moved by hand after the layout (re-identification tests, M5 part 3): shifted by
+   * (dxMm, dyMm) and turned by dAngleDeg about their centre. They may end up touching others.
+   */
+  moves?: Record<string, { dxMm: number; dyMm: number; dAngleDeg?: number }>;
+  /** Pieces taken off the table after the layout (the others stay exactly where they were). */
+  hidden?: string[];
 }
 
 export interface TruthPiece {
