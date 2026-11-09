@@ -602,7 +602,7 @@ function Catalog({
   }, [projectId, version, placeKey]);
   const shownPlaces = useMemo(() => shownPlacements(places, allRows.filter(unplacedStatus)), [places, allRows]);
   // Trays by colour (M4): read only when the owner opens it.
-  const { groups: colourGroups } = useColourGroups(traysOpen, project, allRows);
+  const { groups: colourGroups, uneven } = useColourGroups(traysOpen, project, allRows);
   const cell: [number, number] | null = pitch ? [pitch.wMm, pitch.hMm] : null;
   const groups = useMemo(() => new Map(rows.map((r) => [r.id, pieceGroup(r, cell)])), [rows, cell?.[0], cell?.[1]]);
   const traysBlock = (
@@ -621,6 +621,7 @@ function Catalog({
           all={allRows}
           table={rows}
           groups={colourGroups}
+          uneven={uneven}
           selected={trayGroup}
           onSelect={setTrayGroup}
           onChanged={(np) => (np ? onProject(np) : onPiecesChanged())}

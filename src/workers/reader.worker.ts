@@ -21,6 +21,7 @@ import { scanMarkerless } from '../cv/scanMarkerless';
 import { findCoin } from '../cv/coin';
 import { readShape, READ_OK } from '../cv/shapeRead';
 import { buildBoxGrid, extractPatch, patchStats, placePiece, spotStats, PATCH_SIZE, type BoxGrid, type ColourMatch } from '../cv/placement';
+import { tableAround } from '../cv/colourGroups';
 import { orientSpots, SPOT_THUMB_CELL, straightenQuad } from '../cv/openSpots';
 import { puzzleQuad, readAssembledGrid, SEAM_OK, type AssembledGrid } from '../cv/assembledGrid';
 import type { FreeScanOptions, FreeScanReply, OpenSpotsInput, PieceToPlace, PlaceReply, ScanOptions, ScanReply, TableSetupReply } from '../shared/apis';
@@ -400,6 +401,8 @@ const api: ReaderApi = {
               sure: Boolean(rd.kind) && rd.quality >= READ_OK,
               sides: rd.sides.map((sd) => (sd.kind === 'unsure' ? 'u' : sd.kind[0])).join(''),
               sideConf: rd.sides.map((sd) => Math.round(sd.conf * 100) / 100),
+              // The table's colour right around the piece: evens out the lamp for colour groups (trays).
+              light: tableAround(rgba, p.outlineImg, ppmHere)?.map((v) => Math.round(v)) ?? null,
             }
           : null;
       });

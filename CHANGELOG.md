@@ -4,6 +4,12 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M4 (part 4b): colour groups no longer fooled by the lamp (2026-11-09; tested in the app on the Mac, not yet on your iPhone)
+- **What you saw** (your screenshot IMG_9299, 3 trays): the dark pieces split over trays A and B, and tray C mixed the wall pieces with copper and brown ones. **Why:** your lamp lights the table unevenly. A wall piece in the darker part of the photo read as a dark piece, and wall pieces near the lamp read lighter and greyer, so their measured colours spread out.
+- **Fixed:** the app now measures the table right around each piece and evens out each piece's colours to the same light before grouping. Lightness also counts a little less than colour, because shine changes it most.
+- **Your current pieces don't need scanning again:** the light is measured from the saved photo they were scanned from (if a piece's photo is no longer kept, the page says so; scanning again fixes it). New scans measure it straight away.
+- **On your 21 pieces, in the app:** with 3 trays, all 7 dark pieces are in one tray, the wall pieces in another, and the bottle's label and table patch in the third (the one copper piece still goes with the wall: 3 trays aren't enough for it). With 4 trays: very dark, dark reddish, wall, and the two non-pieces. With 6, the copper piece gets its own tray. No group mixes dark and wall pieces any more.
+
 ### M4 (part 4): sort your pieces into trays by colour (2026-11-09; tested in the app on the Mac, not yet on your iPhone)
 - **Why colour and not zones of the box picture:** before building zones I measured them on your real photos. The right zone (out of 6) came out only **60 %** of the time for spots cut from your finished-puzzle photo, and for about **8 of 19** of your loose pieces (computer-made puzzles: 91 %). That would put many pieces in the wrong tray. The small AI picture model I then tried was no help either: even on spots cut from the box picture itself it found the right spot only 22 % of the time, and on your real spots almost never. It isn't added to the app.
 - **🎨 Sort into trays by colour** (puzzle page, under Pieces): your pieces grouped by their main colour, one group per tray (default 6; 2 to 12 with − and +). Each piece shows its group's letter; "+B" means it also has a lot of B's colour.

@@ -180,6 +180,11 @@ export interface PiecePatchInfo {
    */
   sides?: string;
   sideConf?: number[];
+  /**
+   * The table's colour (sRGB 0–255) right around the piece in the photo the patch came from: the
+   * lamp's light there, used to even out colours for trays. Absent on pieces scanned before M4 part 4b.
+   */
+  light?: [number, number, number];
 }
 
 export type SnapKind = 'overview' | 'detail' | 'empty-table' | 'marker-map' | 'box';

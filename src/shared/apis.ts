@@ -45,6 +45,8 @@ export interface PatchForCatalog {
   /** Each side's shape ('t' knob out, 'b' knob in, 'f' flat, 'u' not sure) and how sure (0–1). */
   sides: string;
   sideConf: number[];
+  /** The table's colour (sRGB 0–255) right around the piece in this photo, or null (colour groups, M4). */
+  light?: number[] | null;
 }
 
 /** The empty spots of a nearly finished puzzle as found in a photo of it (see Project.openSpots). */

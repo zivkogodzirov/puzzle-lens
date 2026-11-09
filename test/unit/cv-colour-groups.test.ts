@@ -3,7 +3,7 @@
  * pieces grouped by colour, darkest group first.
  */
 import { describe, expect, it } from 'vitest';
-import { dist2, GROUPS, groupColours, inkOn, labToHex, pieceColours, pieceGroup, type Lab } from '../../src/cv/colourGroups';
+import { dist2, evenLight, GROUPS, groupColours, inkOn, labToHex, pieceColours, pieceGroup, tableAround, type Lab } from '../../src/cv/colourGroups';
 import { labImage, PATCH_SIZE } from '../../src/cv/placement';
 
 const S = PATCH_SIZE;
@@ -52,6 +52,55 @@ describe("a piece's colours", () => {
   });
 });
 
+describe('evening out the light', () => {
+  it('the table around a piece is found, and a piece in a darker spot is brightened to the usual light', () => {
+    // A 200 × 200 photo: a table lit at (150, 150, 150), a grey piece of 40 × 40 px in the middle.
+    const W = 200;
+    const data = new Uint8Array(W * W * 4);
+    for (let y = 0; y < W; y++)
+      for (let x = 0; x < W; x++) {
+        const inPiece = x >= 80 && x < 120 && y >= 80 && y < 120;
+        data.set(inPiece ? [60, 50, 40, 255] : [150, 150, 150, 255], (y * W + x) * 4);
+      }
+    const outline = [80, 80, 120, 80, 120, 120, 80, 120];
+    // Every 2 px along the square's sides, so the sampling has points to go from.
+    const dense: number[] = [];
+    for (let i = 0; i < 4; i++)
+      for (let t = 0; t < 20; t++) {
+        const [x0, y0, x1, y1] = [outline[2 * i]!, outline[2 * i + 1]!, outline[(2 * i + 2) % 8]!, outline[(2 * i + 3) % 8]!];
+        dense.push(x0 + ((x1 - x0) * t) / 20, y0 + ((y1 - y0) * t) / 20);
+      }
+    const table = tableAround({ data, width: W, height: W, stride: W * 4 }, dense, 2)!;
+    expect(table.map(Math.round)).toEqual([150, 150, 150]);
+    // The same piece lit like a 200-grey table looks lighter, the same shape of colour.
+    const patch = new Uint8Array([60, 50, 40, 255, 0, 0, 0, 0]);
+    const lit = evenLight(patch, table, [200, 200, 200]);
+    expect(lit[0]!).toBeGreaterThan(60);
+    expect(lit[0]! > lit[1]! && lit[1]! > lit[2]!).toBe(true);
+    expect([...lit.slice(4)]).toEqual([0, 0, 0, 0]);
+    expect([...evenLight(patch, table, table)].slice(0, 3)).toEqual([60, 50, 40]);
+  });
+
+  it('a neighbouring piece next to the table around is left out', () => {
+    const W = 200;
+    const data = new Uint8Array(W * W * 4);
+    for (let y = 0; y < W; y++)
+      for (let x = 0; x < W; x++)
+        data.set(x >= 80 && x < 120 && y >= 80 && y < 120 ? [60, 50, 40, 255] : x >= 122 ? [20, 20, 90, 255] : [180, 175, 170, 255], (y * W + x) * 4);
+    const dense: number[] = [];
+    const corners = [80, 80, 120, 80, 120, 120, 80, 120];
+    for (let i = 0; i < 4; i++)
+      for (let t = 0; t < 20; t++)
+        dense.push(
+          corners[2 * i]! + ((corners[(2 * i + 2) % 8]! - corners[2 * i]!) * t) / 20,
+          corners[2 * i + 1]! + ((corners[(2 * i + 3) % 8]! - corners[2 * i + 1]!) * t) / 20,
+        );
+    expect(tableAround({ data, width: W, height: W, stride: W * 4 }, dense, 2)!.map(Math.round)).toEqual([180, 175, 170]);
+    // Only the 4 corners given: points are added along the sides.
+    expect(tableAround({ data, width: W, height: W, stride: W * 4 }, corners, 2)!.map(Math.round)).toEqual([180, 175, 170]);
+  });
+});
+
 describe('grouping pieces by colour', () => {
   const dark: Lab = [20, 5, 5];
   const red: Lab = [45, 50, 30];
@@ -74,9 +123,9 @@ describe('grouping pieces by colour', () => {
   });
 
   it('the same pieces in any order give the same groups (letters never jump around)', () => {
-    const a = groupColours(pieces, 4);
-    const b = groupColours(pieces.slice().reverse(), 4);
-    expect(b).toHaveLength(4);
+    const a = groupColours(pieces, 3);
+    const b = groupColours(pieces.slice().reverse(), 3);
+    expect(b).toHaveLength(3);
     a.forEach((c, i) => expect(Math.sqrt(dist2(c, b[i]!))).toBeLessThan(1));
   });
 

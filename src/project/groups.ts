@@ -1,36 +1,146 @@
 /**
  * Colour groups of a puzzle's pieces (trays by colour, M4): each piece's colours read from its
- * straightened patch (cached), and the groups (fixed while pieces are in trays). The maths is in
- * src/cv/colourGroups.ts.
+ * straightened patch, evened out for the light where it lay (the table's colour around it, from the
+ * scan, or for pieces scanned before that from their saved photo), and the groups (fixed while
+ * pieces are in trays). The maths is in src/cv/colourGroups.ts.
  */
-import { GROUP_LETTERS, groupColours, labToHex, inkOn, pieceColours, pieceGroup, type Lab, type PieceColours } from '../cv/colourGroups';
+import {
+  evenLight,
+  GROUP_LETTERS,
+  groupColours,
+  labToHex,
+  inkOn,
+  pieceColours,
+  pieceGroup,
+  tableAround,
+  type Lab,
+  type PieceColours,
+} from '../cv/colourGroups';
+import { db } from '../db/db';
+import { applyH, invertH } from '../geo/homography';
 import { getBlob } from './store';
 import { fixedColours, trayCountOf } from './trays';
-import type { PieceRow, Project } from './types';
+import type { PieceRow, Project, SnapRow } from './types';
+import { logWarn } from '../log/logger';
 
-/** Read colours per patch (blob id + time), so reopening the page is instant. */
-const readCache = new Map<string, PieceColours | null>();
+type Rgb = [number, number, number];
 
-/** Each piece's colours: from its patch, or (scanned before M4) from its mean colour. */
-export async function loadPieceColours(pieces: PieceRow[]): Promise<Map<string, PieceColours>> {
-  const out = new Map<string, PieceColours>();
+/** Patches read (raw RGBA) and table colours measured from saved photos, per patch (blob id + time). */
+const patchCache = new Map<string, Uint8Array | null>();
+const photoLightCache = new Map<string, Rgb | null>();
+/** Colours per patch, light and reference light. */
+const colourCache = new Map<string, PieceColours | null>();
+
+const keyOf = (p: PieceRow) => `${p.patch!.blobId}|${p.patch!.ts}`;
+const pause = () => new Promise((r) => setTimeout(r, 0));
+
+/** Longest side a saved photo is decoded at to measure the table around pieces (plenty at 2–4 mm out). */
+const PHOTO_SIDE = 2000;
+
+/**
+ * The table's colour around pieces scanned before it was measured during the scan, from the photo
+ * their patch came from (the scan photo taken at the patch's time), when that photo is still kept.
+ */
+async function lightsFromPhotos(pieces: PieceRow[]): Promise<void> {
+  const need = pieces.filter((p) => p.patch && !p.patch.light && !photoLightCache.has(keyOf(p)));
+  if (!need.length) return;
+  const snaps = new Map<number, SnapRow>();
+  for (const s of await db().snaps.where('projectId').equals(need[0]!.projectId).toArray()) if (s.blobId && s.imgToTable) snaps.set(s.ts, s);
+  const bySnap = new Map<SnapRow, PieceRow[]>();
+  for (const p of need) {
+    const s = snaps.get(p.patch!.ts);
+    if (!s) {
+      photoLightCache.set(keyOf(p), null);
+      continue;
+    }
+    bySnap.set(s, [...(bySnap.get(s) ?? []), p]);
+  }
+  for (const [s, ps] of bySnap) {
+    try {
+      const blob = await getBlob(s.blobId!);
+      const H = invertH(s.imgToTable!);
+      if (!blob || !H) throw new Error('photo missing');
+      const bmp = await createImageBitmap(blob);
+      const k = Math.min(1, PHOTO_SIDE / Math.max(bmp.width, bmp.height));
+      const w = Math.round(bmp.width * k);
+      const h = Math.round(bmp.height * k);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+      ctx.drawImage(bmp, 0, 0, w, h);
+      bmp.close?.();
+      const img = ctx.getImageData(0, 0, w, h);
+      canvas.width = canvas.height = 1;
+      // Table mm → this decoded picture's px (the snap's size may differ from the stored photo's).
+      const kx = w / s.width;
+      const ky = h / s.height;
+      const toPx = (x: number, y: number): [number, number] => {
+        const q = applyH(H, [x, y]);
+        return [q[0] * kx, q[1] * ky];
+      };
+      for (const p of ps) {
+        const c = toPx(p.table.x, p.table.y);
+        const e = toPx(p.table.x + 10, p.table.y);
+        const pxPerMm = Math.hypot(e[0] - c[0], e[1] - c[1]) / 10;
+        const outline: number[] = [];
+        for (let i = 0; i + 1 < p.outlineMm.length; i += 2) outline.push(...toPx(p.table.x + p.outlineMm[i]!, p.table.y + p.outlineMm[i + 1]!));
+        photoLightCache.set(keyOf(p), tableAround({ data: img.data, width: w, height: h, stride: w * 4 }, outline, pxPerMm));
+      }
+    } catch (err) {
+      logWarn('trays', 'A saved photo could not be read to even out the light', err);
+      for (const p of ps) photoLightCache.set(keyOf(p), null);
+    }
+    await pause();
+  }
+}
+
+/** The light around a piece (sRGB), or null when unknown. */
+function lightOf(p: PieceRow): Rgb | null {
+  if (!p.patch) return null;
+  return p.patch.light ?? photoLightCache.get(keyOf(p)) ?? null;
+}
+
+/** Colours of the pieces, and how many couldn't be evened out for the light (no measurement). */
+export interface PieceColourSet {
+  colours: Map<string, PieceColours>;
+  uneven: number;
+}
+
+/**
+ * Each piece's colours: from its patch, evened out to the typical light of all the pieces' photos
+ * (the median table colour), or, for pieces scanned before M4 (no patch), their mean colour.
+ */
+export async function loadPieceColours(pieces: PieceRow[]): Promise<PieceColourSet> {
+  await lightsFromPhotos(pieces);
+  const lights = pieces.map(lightOf).filter((l): l is Rgb => Boolean(l));
+  // Rounded so a few more pieces don't change it (and the groups) every time.
+  const median = (c: number) => lights.map((l) => l[c] as number).sort((a, b) => a - b)[lights.length >> 1]!;
+  const ref = lights.length ? ([0, 1, 2].map((c) => Math.round(median(c) / 4) * 4) as Rgb) : null;
+  const colours = new Map<string, PieceColours>();
+  let uneven = 0;
   let done = 0;
   for (const p of pieces) {
     let pc: PieceColours | null = null;
     if (p.patch) {
-      const key = `${p.patch.blobId}|${p.patch.ts}`;
-      if (!readCache.has(key)) {
+      const key = keyOf(p);
+      if (!patchCache.has(key)) {
         const b = await getBlob(p.patch.blobId);
-        readCache.set(key, b ? pieceColours(new Uint8Array(await b.arrayBuffer())) : null);
+        patchCache.set(key, b ? new Uint8Array(await b.arrayBuffer()) : null);
         // Keep the screen responsive on a big catalog.
-        if (++done % 40 === 0) await new Promise((r) => setTimeout(r, 0));
+        if (++done % 40 === 0) await pause();
       }
-      pc = readCache.get(key) ?? null;
+      const rgba = patchCache.get(key);
+      const light = lightOf(p);
+      if (!light) uneven++;
+      const ck = `${key}|${light?.join(',') ?? '-'}|${ref?.join(',') ?? '-'}`;
+      if (!colourCache.has(ck)) colourCache.set(ck, rgba ? pieceColours(light && ref ? evenLight(rgba, light, ref) : rgba) : null);
+      pc = colourCache.get(ck) ?? null;
     }
     pc ??= { main: p.colour.meanLab, mainShare: 1, second: null, secondShare: 0 };
-    out.set(p.id, pc);
+    colours.set(p.id, pc);
   }
-  return out;
+  return { colours, uneven };
 }
 
 export interface Group {

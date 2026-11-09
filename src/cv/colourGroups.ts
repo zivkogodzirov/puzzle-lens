@@ -20,9 +20,10 @@ export const GROUPS = {
   default: 6,
   /**
    * Lightness counts this much against colour (a, b) in colour distances: shine and shading change a
-   * piece's lightness across its face far more than its hue.
+   * piece's lightness across its face far more than its hue. 0.4 kept the owner's 11 wall pieces in
+   * one group at 4 and 6 trays with the light evened out (0.6 split them in two, 0.3 at 6 trays).
    */
-  lWeight: 0.6,
+  lWeight: 0.4,
   /** Two colours of one piece closer than this (weighted ΔE) are one colour. */
   sameColour: 8,
   /** A piece's second colour covering at least this share is mentioned ("also B"). */
@@ -196,3 +197,81 @@ export function inkOn(lab: ArrayLike<number>): '#000' | '#fff' {
 }
 
 export const GROUP_LETTERS = 'ABCDEFGHIJKL';
+
+/** sRGB 0–255 → linear 0–1. */
+function toLinear(v: number): number {
+  const s = v / 255;
+  return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+}
+function toSrgb(v: number): number {
+  const s = v <= 0.0031308 ? 12.92 * v : 1.055 * Math.max(0, v) ** (1 / 2.4) - 0.055;
+  return Math.max(0, Math.min(255, 255 * s));
+}
+
+/**
+ * The table's colour right around a piece in its photo (sRGB 0–255): samples 2–4 mm outside the
+ * outline, along each outline point's outward direction, keeping those close to their median (a
+ * neighbouring piece or a shadow is dropped). Null when too few samples fall on the table.
+ */
+export function tableAround(
+  photo: { data: ArrayLike<number>; width: number; height: number; stride: number },
+  outline0: ArrayLike<number>,
+  pxPerMm: number,
+): [number, number, number] | null {
+  // A sparse outline (few corners) gets points along its sides, about every millimetre.
+  let outline: ArrayLike<number> = outline0;
+  const n0 = outline0.length / 2;
+  if (n0 < 3) return null;
+  if (n0 < 60) {
+    const dense: number[] = [];
+    for (let i = 0; i < n0; i++) {
+      const [x0, y0, x1, y1] = [outline0[2 * i]!, outline0[2 * i + 1]!, outline0[(2 * i + 2) % (2 * n0)]!, outline0[(2 * i + 3) % (2 * n0)]!];
+      const parts = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / Math.max(1, pxPerMm)));
+      for (let t = 0; t < parts; t++) dense.push(x0 + ((x1 - x0) * t) / parts, y0 + ((y1 - y0) * t) / parts);
+    }
+    outline = dense;
+  }
+  const n = outline.length / 2;
+  if (n < 8) return null;
+  // Outward = left or right of the walking direction, by the outline's orientation (signed area).
+  let area = 0;
+  for (let i = 0, j = n - 1; i < n; j = i++) area += outline[2 * j]! * outline[2 * i + 1]! - outline[2 * i]! * outline[2 * j + 1]!;
+  const sign = area > 0 ? 1 : -1;
+  const step = Math.max(1, Math.floor(n / 120));
+  const samples: number[][] = [];
+  for (let i = 0; i < n; i += step) {
+    const a = (i - 1 + n) % n;
+    const b = (i + 1) % n;
+    const tx = outline[2 * b]! - outline[2 * a]!;
+    const ty = outline[2 * b + 1]! - outline[2 * a + 1]!;
+    const len = Math.hypot(tx, ty);
+    if (!len) continue;
+    // With y down, (ty, −tx) points outward for a positive (clockwise on screen) area.
+    const nx = (sign * ty) / len;
+    const ny = (-sign * tx) / len;
+    for (const mm of [2, 3, 4]) {
+      const x = Math.round(outline[2 * i]! + nx * mm * pxPerMm);
+      const y = Math.round(outline[2 * i + 1]! + ny * mm * pxPerMm);
+      if (x < 0 || y < 0 || x >= photo.width || y >= photo.height) continue;
+      const k = y * photo.stride + x * 4;
+      samples.push([photo.data[k]!, photo.data[k + 1]!, photo.data[k + 2]!]);
+    }
+  }
+  if (samples.length < 30) return null;
+  const med = [0, 1, 2].map((c) => samples.map((s) => s[c]!).sort((p, q) => p - q)[samples.length >> 1]!);
+  const keep = samples.filter((s) => Math.abs(s[0]! - med[0]!) + Math.abs(s[1]! - med[1]!) + Math.abs(s[2]! - med[2]!) < 45);
+  if (keep.length < 20) return null;
+  return [0, 1, 2].map((c) => keep.reduce((acc, s) => acc + s[c]!, 0) / keep.length) as [number, number, number];
+}
+
+/**
+ * A patch's colours as if lit like `ref` (sRGB 0–255): each channel scaled by ref / table in linear
+ * light (von Kries), where `table` is the table's colour around the piece in its photo. Evens out a
+ * lamp's light falling unevenly across the table, and photos' different colour casts.
+ */
+export function evenLight(rgba: Uint8Array, table: ArrayLike<number>, ref: ArrayLike<number>): Uint8Array {
+  const gain = [0, 1, 2].map((c) => toLinear(ref[c]!) / Math.max(1e-4, toLinear(table[c]!)));
+  const out = new Uint8Array(rgba);
+  for (let i = 0; i < out.length; i += 4) if (out[i + 3]) for (let c = 0; c < 3; c++) out[i + c] = toSrgb(toLinear(rgba[i + c]!) * gain[c]!);
+  return out;
+}

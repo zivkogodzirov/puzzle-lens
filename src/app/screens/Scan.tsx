@@ -446,6 +446,7 @@ export function ScanScreen() {
                   sure: pt.sure,
                   sides: pt.sides,
                   sideConf: pt.sideConf,
+                  light: pt.light ?? null,
                 }
               : null,
           };

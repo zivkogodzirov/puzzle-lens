@@ -25,7 +25,7 @@ export interface FoundForCatalog {
   flags: PieceFlags;
   thumb?: Blob | null;
   /** The piece straightened for box placement (M4). */
-  patch?: { blob: Blob; flats: boolean[]; sure: boolean; sides?: string; sideConf?: number[] } | null;
+  patch?: { blob: Blob; flats: boolean[]; sure: boolean; sides?: string; sideConf?: number[]; light?: number[] | null } | null;
 }
 
 export interface MergePlan {
@@ -175,6 +175,7 @@ export function planMerge(
       info.sides = f.patch.sides;
       info.sideConf = f.patch.sideConf ?? [1, 1, 1, 1];
     }
+    if (f.patch.light?.length === 3) info.light = f.patch.light as [number, number, number];
     return info;
   };
   let skipped = 0;

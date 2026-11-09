@@ -56,7 +56,8 @@ test('pieces are grouped by colour, light up on the photo, go into a tray and ba
           id: 's1',
           projectId: 'e2e-trays',
           kind: 'overview',
-          ts: 1,
+          // The patches' time: their light is measured from this photo (pieces scanned before it was measured during scans).
+          ts: 5,
           width: 600,
           height: 400,
           zoom: 1,
@@ -114,6 +115,7 @@ test('pieces are grouped by colour, light up on the photo, go into a tray and ba
   await page.getByTestId('trays-toggle').click();
   await expect(page.getByTestId('tray-groups').locator('button')).toHaveCount(3);
   await expect(page.getByTestId('tray-group-A')).toContainText('A 3');
+  await expect(page.getByTestId('tray-uneven')).toHaveCount(0);
   await expect(page.getByTestId('tray-count-value')).toHaveText('6');
   await expect(page.getByTestId('tray-few-colours')).toContainText('Only 3 different colours');
   await page.getByTestId('tray-group-A').click();

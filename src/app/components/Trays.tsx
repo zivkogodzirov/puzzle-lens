@@ -14,21 +14,28 @@ import { getBlob, updateProject } from '../../project/store';
 import type { PieceRow, Project, SnapRow } from '../../project/types';
 import { logError, logInfo } from '../../log/logger';
 
-/** The colour groups of a puzzle's pieces (null while reading the pieces' colours). */
-export function useColourGroups(enabled: boolean, project: Project, pieces: PieceRow[]): { groups: Groups | null; colours: Map<string, PieceColours> | null } {
-  const [colours, setColours] = useState<Map<string, PieceColours> | null>(null);
+/**
+ * The colour groups of a puzzle's pieces (null while reading the pieces' colours), and how many
+ * pieces' colours couldn't be evened out for the light (no measurement of the table around them).
+ */
+export function useColourGroups(
+  enabled: boolean,
+  project: Project,
+  pieces: PieceRow[],
+): { groups: Groups | null; colours: Map<string, PieceColours> | null; uneven: number } {
+  const [read, setRead] = useState<{ colours: Map<string, PieceColours>; uneven: number } | null>(null);
   useEffect(() => {
     if (!enabled) return;
     let live = true;
     loadPieceColours(pieces)
-      .then((m) => live && setColours(m))
+      .then((m) => live && setRead(m))
       .catch((err) => logError('trays', 'Piece colours could not be read', err));
     return () => {
       live = false;
     };
   }, [enabled, pieces]);
-  const groups = useMemo(() => (colours ? makeGroups(project, pieces, colours) : null), [colours, project.trays, pieces]);
-  return { groups, colours };
+  const groups = useMemo(() => (read ? makeGroups(project, pieces, read.colours) : null), [read, project.trays, pieces]);
+  return { groups, colours: read?.colours ?? null, uneven: read?.uneven ?? 0 };
 }
 
 export function TraysPanel({
@@ -36,6 +43,7 @@ export function TraysPanel({
   all,
   table,
   groups,
+  uneven = 0,
   selected,
   onSelect,
   onChanged,
@@ -44,6 +52,8 @@ export function TraysPanel({
   all: PieceRow[];
   table: PieceRow[];
   groups: Groups | null;
+  /** Pieces whose colours couldn't be evened out for the light. */
+  uneven?: number;
   selected: number | null;
   onSelect: (g: number | null) => void;
   /** After pieces moved or the puzzle changed (reload pieces and puzzle). */
@@ -144,6 +154,12 @@ export function TraysPanel({
             </button>
           ))}
         </div>
+      )}
+      {groups && uneven > 0 && (
+        <p class="muted small" data-testid="tray-uneven">
+          {uneven} {uneven === 1 ? 'piece was' : 'pieces were'} scanned without measuring the light around {uneven === 1 ? 'it' : 'them'} (and the photo is no
+          longer kept), so a lamp can put {uneven === 1 ? 'it' : 'them'} in the wrong group. Scanning again fixes that.
+        </p>
       )}
       {note && (
         <div class="notice notice-good small" role="status" data-testid="tray-note">
