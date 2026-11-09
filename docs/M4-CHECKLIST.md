@@ -51,6 +51,8 @@ With most of the puzzle done, the app now uses your photo of the puzzle with its
 6. Tap the pieces from the **top-right corner** (the plain wall ones): their green squares should now be spread over the 10 corner holes, each where its knobs fit.
 
 ## Part H: trays by colour (parts 4 and 4b)
+✅ Checked on your iPhone 2026-11-09: with 3 trays, the dark and wall pieces are in separate trays.
+
 Part 4b (after your screenshot): colours are now evened out for the lamp. Your pieces don't need scanning again.
 
 1. Update the app (Part A). Settings should show the version I sent you.
