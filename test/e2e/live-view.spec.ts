@@ -13,6 +13,7 @@ const W = 4032;
 const H = 3024;
 let overview = '';
 let moved = '';
+let fourGone = '';
 let visible = 0;
 
 test.beforeAll(async () => {
@@ -29,6 +30,10 @@ test.beforeAll(async () => {
   const m = await renderScene({ ...base, camera: { x: 440, y: 290, heightMm: 640, tiltDeg: 4, tiltDirDeg: 60, yawDeg: 20, imageSize: [W, H] } });
   overview = `data:image/jpeg;base64,${o.jpeg.toString('base64')}`;
   moved = `data:image/jpeg;base64,${m.jpeg.toString('base64')}`;
+  // The same view with four pieces taken off the table (M5 part 4: the live view notices).
+  const ids = o.truth.pieces.filter((p) => !p.faceDown && p.visibleShare > 0.99).map((p) => p.id);
+  const g = await renderScene({ ...base, hidden: [ids[3]!, ids[10]!, ids[20]!, ids[30]!] });
+  fourGone = `data:image/jpeg;base64,${g.jpeg.toString('base64')}`;
   visible = o.truth.pieces.filter((p) => !p.faceDown && p.visibleShare > 0.99).length;
 });
 
@@ -96,6 +101,13 @@ test.describe('live view of the table', () => {
     await page.getByRole('button', { name: 'Close' }).first().click();
     await expect(page.getByTestId('live-finding')).toBeVisible();
     await page.screenshot({ path: test.info().outputPath('live-view-find.png') });
+
+    // Four pieces taken away: their outlines turn dashed ("moved?") and the top line says so.
+    await page.getByTestId('live-table-close').click();
+    await page.evaluate((url) => ((window as unknown as { __fakeScene?: string }).__fakeScene = url), fourGone);
+    await page.getByTestId('live-toggle').click();
+    await expect(page.getByTestId('live-status')).toContainText('4 not where they were', { timeout: 60_000 });
+    await page.screenshot({ path: test.info().outputPath('live-view-gone.png') });
 
     // Closing turns the camera off.
     await page.getByTestId('live-table-close').click();

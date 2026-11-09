@@ -1,4 +1,4 @@
-# M5 checklist for your iPhone: live view, Fits / Doesn't fit, and rescans
+# M5 checklist for your iPhone: live view, Fits / Doesn't fit, rescans, and a smoother live view
 
 The steps for the newest part are also inside the app: tap the small **🧪 Test** tab on the right edge of any screen.
 
@@ -67,3 +67,14 @@ Set-up as in Part 1 ("Get ready"): your leftover pieces scanned.
 
 ### Please tell me (part 3)
 - After moving pieces, did any piece show up twice under Pieces? A screenshot of the note after each photo helps.
+
+## Part 4: a smoother live view, and Quick scans (M5 part 4)
+Set-up as in Part 1 ("Get ready"): your leftover pieces scanned.
+
+1. Open **📷 Live view of my table** and move the phone steadily across the table: the outlines should keep up with the pieces instead of trailing behind.
+2. Hold the phone still: the outlines should sit calmly on the pieces (no jitter).
+3. With the live view open, take **2 pieces** off the table: within a second or two their outlines turn **red and dashed** ("moved?" on bigger pieces), and the top line says **"2 not where they were: scan again to update"**. Put them back where they were: the outlines turn normal again.
+4. Open **Settings → Scan mode** and choose **Quick**. Scan your pieces: after one overview photo the note says **"Quick scan done"** and the camera stays on overviews. Set it back to **Full** afterwards (or keep Quick if you like it).
+
+### Please tell me (part 4)
+- Does the live view keep up when you move the phone? Did the red dashed "moved?" outlines appear for pieces you took away, and only for those?

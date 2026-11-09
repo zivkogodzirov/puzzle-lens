@@ -155,13 +155,18 @@ const api: TrackerApi = {
     core?.setTableMap(map, zoom);
   },
 
-  async setAnchor(refs: AnchorPhoto[] | null): Promise<{ features: number; photos: number; ms: number; error?: string }> {
+  async setAnchor(
+    refs: AnchorPhoto[] | null,
+    pieces: Array<{ id: string; outline: number[] }> = [],
+  ): Promise<{ features: number; photos: number; ms: number; error?: string }> {
     const t0 = performance.now();
     if (!(await coreReadyP) || !core) return { features: 0, photos: 0, ms: 0, error: 'The image engine is not ready' };
     if (!refs?.length) {
       core.setAnchor(null);
       return { features: 0, photos: 0, ms: 0 };
     }
+    // Pass over camera frames meanwhile: decoding the photos is what the live view waits for.
+    core.paused = true;
     try {
       const pics = [];
       for (const r of refs) {
@@ -180,11 +185,13 @@ const api: TrackerApi = {
           bmp.close();
         }
       }
-      const features = core.setAnchor(pics);
+      const features = core.setAnchor(pics, pieces);
       return { features, photos: pics.length, ms: performance.now() - t0 };
     } catch (err) {
       core.setAnchor(null);
       return { features: 0, photos: 0, ms: performance.now() - t0, error: String((err as Error)?.message ?? err) };
+    } finally {
+      if (core) core.paused = false;
     }
   },
 

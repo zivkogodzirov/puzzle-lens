@@ -18,7 +18,13 @@ import { getBlob } from '../../project/store';
 import type { PieceRow, Vec2 } from '../../project/types';
 import type { AnchorPhoto } from '../../shared/apis';
 import { trackerWorker } from '../workers';
+import { OverlayPredictor } from '../livePredict';
 import { logInfo, logWarn } from '../../log/logger';
+
+/** A piece is shown as gone from its spot after this many of the last GONE_CHECKS presence checks. */
+const GONE_OF = 3;
+const GONE_CHECKS = 4;
+const GONE_COLOUR = '#ff6b6b';
 
 /** Overview photos used to find the table (newest first). */
 const MAX_REF_PHOTOS = 3;
@@ -79,10 +85,13 @@ export function LiveTable({
   const [tapped, setTapped] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [targets, setTargets] = useState<string[]>(find);
-  const [status, setStatus] = useState<{ kind: 'looking' | 'good' | 'weak' | 'lost'; inView: number; perSec: number }>({
+  /** Pieces that looked gone from their spot in at least GONE_OF of the last GONE_CHECKS checks (M5 part 4). */
+  const gone = useRef(new Set<string>());
+  const [status, setStatus] = useState<{ kind: 'looking' | 'good' | 'weak' | 'lost'; inView: number; perSec: number; gone: number }>({
     kind: 'looking',
     inView: 0,
     perSec: 0,
+    gone: 0,
   });
   const drawn = useRef<Drawn[]>([]);
   const tappedRef = useRef<string | null>(null);
@@ -115,7 +124,9 @@ export function LiveTable({
         const tw = trackerWorker();
         void tw.api.setTableMap(null, 1);
         void tw.api.setPieceStats(false);
-        const r = await tw.api.setAnchor(photos);
+        // The known pieces' outlines (table mm), for the check that they are still at their spots.
+        const outlines = cur.current.pieces.map((p) => ({ id: p.id, outline: p.outlineMm.map((v, i) => v + (i % 2 ? p.table.y : p.table.x)) }));
+        const r = await tw.api.setAnchor(photos, outlines);
         if (gone) return;
         if (r.error || !r.features) {
           logWarn('live', 'Live view: the scan photos could not be prepared', r);
@@ -165,6 +176,7 @@ export function LiveTable({
     let found = 0;
     let lastFixAt = 0;
     let lastFix: { quality: 'good' | 'weak' } | null = null;
+    const checks = new Map<string, boolean[]>();
     const unsub = latestFrame.subscribe((f) => {
       if (!f || f.anchor === undefined) return;
       seen++;
@@ -174,6 +186,23 @@ export function LiveTable({
         fixes.push(t);
         lastFixAt = t;
         lastFix = f.anchor;
+        // Gone from its spot: several checks in a row, so one odd frame (a hand, glare) doesn't count.
+        const pr = f.anchor.presence;
+        if (pr) {
+          for (const [ids, isGone] of [
+            [pr.gone, true],
+            [pr.there, false],
+          ] as const)
+            for (const id of ids) {
+              const h = checks.get(id) ?? [];
+              h.push(isGone);
+              if (h.length > GONE_CHECKS) h.shift();
+              checks.set(id, h);
+              const n = h.filter(Boolean).length;
+              if (n >= GONE_OF && h[h.length - 1]) gone.current.add(id);
+              else if (!isGone) gone.current.delete(id);
+            }
+        }
       }
       while (fixes.length && t - fixes[0]! > 2000) fixes.shift();
     });
@@ -185,6 +214,7 @@ export function LiveTable({
         kind: fresh ? (lastFix!.quality === 'good' ? 'good' : 'weak') : seen ? 'lost' : 'looking',
         inView,
         perSec: fixes.length / 2,
+        gone: gone.current.size,
       });
     }, 250);
     return () => {
@@ -194,9 +224,11 @@ export function LiveTable({
     };
   }, []);
 
-  // Outlines on the live picture, every screen refresh.
+  // Outlines on the live picture, every screen refresh, where the table is predicted to be now (M5 part 4).
   useEffect(() => {
     let raf = 0;
+    const predictor = new OverlayPredictor();
+    const dbg = window as unknown as { __liveDebug?: boolean; __livePredict?: boolean; __liveOverlay?: unknown };
     const draw = () => {
       raf = requestAnimationFrame(draw);
       const canvas = canvasRef.current;
@@ -218,9 +250,20 @@ export function LiveTable({
       if (!f?.anchor || now - latestFrameAt > STALE_MS) {
         drawn.current = [];
         canvas.dataset.drawn = '0';
+        predictor.reset();
         return;
       }
-      const H = f.anchor.tableToImg;
+      predictor.enabled = dbg.__livePredict !== false;
+      predictor.push({
+        frame: f.frameIndex,
+        t: f.timestampUs / 1000,
+        arrive: latestFrameAt,
+        proc: f.timings.total ?? 0,
+        H: f.anchor.tableToImg,
+        width: f.width,
+        height: f.height,
+      });
+      const H = predictor.at(now) ?? f.anchor.tableToImg;
       const frame = { width: f.width, height: f.height };
       const vid = { width: video.videoWidth, height: video.videoHeight };
       const el = { width: w, height: h };
@@ -248,17 +291,24 @@ export function LiveTable({
         ctx.beginPath();
         poly.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])));
         ctx.closePath();
-        const c = col(p);
+        const isGone = gone.current.has(p.id);
+        const c = isGone ? GONE_COLOUR : col(p);
         const dim = want.size > 0 && !want.has(p.id);
-        ctx.fillStyle = c;
-        ctx.globalAlpha = dim ? 0.08 : 0.18;
-        ctx.fill();
+        // Gone from its spot, or tracking unsure: dashed and hollow (PLAN §5 "red/hollow uncertain").
+        const dashed = isGone || f.anchor.quality === 'weak';
+        ctx.setLineDash(dashed ? [7, 5] : []);
+        if (!dashed) {
+          ctx.fillStyle = c;
+          ctx.globalAlpha = dim ? 0.08 : 0.18;
+          ctx.fill();
+        }
         ctx.globalAlpha = dim ? 0.5 : 1;
         ctx.strokeStyle = c;
         ctx.lineWidth = p.id === tappedRef.current ? 4 : 2.5;
         ctx.stroke();
+        ctx.setLineDash([]);
         ctx.globalAlpha = 1;
-        const text = lab?.(p);
+        const text = isGone ? 'moved?' : lab?.(p);
         if (text && size > 14) labels.push({ at: centre, text, colour: c });
       }
       ctx.font = '700 13px -apple-system, system-ui, sans-serif';
@@ -312,6 +362,7 @@ export function LiveTable({
         }
       }
       drawn.current = out;
+      if (dbg.__liveDebug) dbg.__liveOverlay = { t: now, predicted: predictor.enabled, centres: Object.fromEntries(out.map((d) => [d.id, d.centre])) };
       // For the automated tests: how many pieces are drawn, and where the first one is.
       canvas.dataset.drawn = String(out.length);
       canvas.dataset.first = out.length ? `${Math.round(out[0]!.centre[0])},${Math.round(out[0]!.centre[1])}` : '';
@@ -345,7 +396,8 @@ export function LiveTable({
       : refs.kind !== 'ready'
         ? null
         : status.kind === 'good'
-          ? `Tracking ✓ · ${status.inView} piece${status.inView === 1 ? '' : 's'} in view`
+          ? `Tracking ✓ · ${status.inView} piece${status.inView === 1 ? '' : 's'} in view` +
+            (status.gone ? ` · ${status.gone} not where ${status.gone === 1 ? 'it was' : 'they were'}: scan again to update` : '')
           : status.kind === 'weak'
             ? `Tracking (hold steady) · ${status.inView} in view`
             : status.kind === 'lost'

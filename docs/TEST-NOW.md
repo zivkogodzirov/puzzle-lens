@@ -1,4 +1,10 @@
-# M5, parts 1–3: the live view, Fits / Doesn't fit, and rescans that don't count pieces twice
+# M5, parts 1–4: the live view, Fits / Doesn't fit, rescans, and a smoother live view
+
+**New in part 4:**
+- **The live view keeps up when you move the phone.** It now predicts where the table is in the picture being shown, instead of where it was a moment ago, and calms the small jitter when you hold still. Tested with your photo IMG_9275 and a simulated camera moving steadily: the outlines trailed by about 1.4 mm before, now about 0.3 mm.
+- **It notices pieces that are no longer there.** Take a piece away (or move it) while the live view is open: after a second its outline turns **red and dashed** ("moved?") and the top line says **"N not where they were: scan again to update"**. Tested with your IMG_9276 with three pieces moved: exactly those three were noticed, none in the original photo. Pale pieces that hardly stand out on your table are left alone rather than wrongly called gone.
+- **Unsure tracking** (few points recognised) shows the outlines **dashed** too.
+- **Settings → Scan mode:** **Full** (an overview, then close-ups, as before) or **Quick** (one overview photo; the camera stays on overviews).
 
 **New in part 3:** scanning again never counts a piece twice, even after you moved pieces around:
 - A piece found only partly (a pale edge, a shadow), or two pieces touching, is recognised as the piece(s) already known.
@@ -10,11 +16,17 @@
 
 **I tested part 3 myself with your photos:** rescanning your 21 pieces from four places, in three orders, added no piece twice and marked nothing as moved or missing. With three of your real pieces moved digitally (one turned upside down, one a quarter turn), all three were recognised.
 
-Allow about 35 minutes for all three parts. These steps are for version **{version}** (Settings shows the version).
+Allow about 45 minutes for all four parts. These steps are for version **{version}** (Settings shows the version).
 
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## Part 4: a smoother live view, and Quick scans
+1. Open **📷 Live view of my table** and move the phone steadily across the table: the outlines should keep up with the pieces instead of trailing behind.
+2. Hold the phone still: the outlines should sit calmly on the pieces (no jitter).
+3. With the live view open, take **2 pieces** off the table: within a second or two their outlines turn **red and dashed** ("moved?" on bigger pieces), and the top line says **"2 not where they were: scan again to update"**. Put them back where they were: the outlines turn normal again.
+4. Open **Settings → Scan mode** and choose **Quick**. Scan your pieces: after one overview photo the note says **"Quick scan done"** and the camera stays on overviews. Set it back to **Full** afterwards (or keep Quick if you like it).
 
 ## Part 3: rescans and moved pieces
 1. With your pieces scanned (as above), take another **overview photo** from a different place (Scan pieces). The note should say **"Found N pieces (0 new)"** (the coin and other things on the table aren't pieces).
@@ -53,6 +65,7 @@ Allow about 35 minutes for all three parts. These steps are for version **{versi
 - Your answers are kept with the puzzle, and in backups.
 
 ## Please tell me
+- Part 4: does the live view keep up when you move the phone? Did the red dashed "moved?" outlines appear for pieces you took away, and only for those?
 - Part 3: after moving pieces, did any piece show up twice under Pieces? A screenshot of the note after each photo helps.
 - Live view: did the outlines sit on the right pieces? Does it feel smooth (the small number after "Tracking", e.g. **15/s**, is how many times per second it finds the table)? A short screen recording helps if outlines drift or jump.
 - A screenshot of the 📊 page after you've answered for your pieces.

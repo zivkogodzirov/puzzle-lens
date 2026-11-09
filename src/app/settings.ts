@@ -21,6 +21,12 @@ export interface Settings {
    * src/camera/snapMethod.ts); empty = automatic (try the photo pipeline, then the full-size live picture).
    */
   snapMethod: string;
+  /**
+   * Scan mode (PLAN §5 Settings, M5 part 4): 'full' = an overview, then close-ups (2×) for the
+   * shapes; 'quick' = one overview photo (pieces found, coloured and placed; corner and edge marks
+   * provisional), no switch to close-ups.
+   */
+  scanMode: 'full' | 'quick';
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -30,13 +36,12 @@ export const DEFAULT_SETTINGS: Settings = {
   showHud: true,
   cameraDeviceId: '',
   snapMethod: '',
+  scanMode: 'full',
 };
 
 type SettingSignals = { [K in keyof Settings]: Signal<Settings[K]> };
 
-export const settings: SettingSignals = Object.fromEntries(
-  Object.entries(DEFAULT_SETTINGS).map(([k, v]) => [k, signal(v)]),
-) as unknown as SettingSignals;
+export const settings: SettingSignals = Object.fromEntries(Object.entries(DEFAULT_SETTINGS).map(([k, v]) => [k, signal(v)])) as unknown as SettingSignals;
 
 let loaded = false;
 
@@ -60,7 +65,10 @@ export async function loadSettings(): Promise<void> {
         first = false;
         return;
       }
-      if (loaded) void db().settings.put({ key, value }).catch(() => {});
+      if (loaded)
+        void db()
+          .settings.put({ key, value })
+          .catch(() => {});
     });
   }
 }

@@ -4,6 +4,9 @@ import { scanMarkerless } from '../../src/cv/scanMarkerless';
 import { readPiece } from '../../src/cv/readPiece';
 import { applyH, invertH } from '../../src/geo/homography';
 import { planMerge } from '../../src/project/catalog';
+import { ANCHOR, TableAnchor, upscaleH } from '../../src/cv/anchor';
+import { judgePresence, pieceContrast } from '../../src/cv/presence';
+import { mulH } from '../../src/geo/homography';
 import type { PieceRow, Vec2 } from '../../src/project/types';
 import type { PixelBuffer } from '../../src/cv/frameAnalyser';
 import { getCv, type Cv } from '../helpers/cv';
@@ -167,6 +170,43 @@ describe('re-identification on the owner’s photos (M5 part 3)', () => {
       }).length;
       expect(recognised).toBe(3);
       expect(plan.missing).toBe(0);
+
+      // The live view (M5 part 4): seen through the camera, exactly the 3 old spots look empty.
+      const small = (img: PixelBuffer, maxSide: number) => {
+        const k = maxSide / Math.max(img.width, img.height);
+        const w = Math.round(img.width * k);
+        const h = Math.round(img.height * k);
+        const rgba = resizeBuffer(cv, img, 4, w, h, cv.INTER_AREA);
+        const m = new cv.Mat(h, w, cv.CV_8UC4);
+        m.data.set(rgba.data);
+        const g = new cv.Mat();
+        cv.cvtColor(m, g, cv.COLOR_RGBA2GRAY);
+        m.delete();
+        return { rgba, g, scale: img.width / w };
+      };
+      const ref = small(a, ANCHOR.refMaxSide);
+      (ref.g as { delete(): void }).delete();
+      const outlines = cat.map((c) => ({ id: c.id, outline: c.outlineMm.map((v, k2) => v + (k2 % 2 ? c.table.y : c.table.x)) }));
+      const anchor = new TableAnchor(cv);
+      anchor.setReferences([{ pixels: ref.rgba, channels: 4, imgToTable: mulH(r0.imgToCatalog!, upscaleH(ref.scale)) }], outlines);
+      const goneIn = (img: PixelBuffer): string[] => {
+        const live = small(img, 960);
+        anchor.reset();
+        const fix = anchor.track(live.g)!;
+        const gimg = {
+          data: Uint8Array.from(live.g.data as Uint8Array),
+          width: live.g.cols as number,
+          height: live.g.rows as number,
+          stride: live.g.cols as number,
+        };
+        (live.g as { delete(): void }).delete();
+        expect(fix).not.toBeNull();
+        const base = (anchor as unknown as { base: Map<string, number> }).base;
+        return outlines.filter((p) => judgePresence(pieceContrast(gimg, fix.tableToImg, p, fix.pxPerMm), base.get(p.id)) === 'gone').map((p) => p.id);
+      };
+      expect(goneIn(b).sort()).toEqual([...movedIds].sort());
+      expect(goneIn(a)).toEqual([]);
+      anchor.dispose();
       console.log(
         `moved recognised ${plan.moved} (the 3 moved rows updated at a new place: ${
           movedRows.filter((u) => {

@@ -4,6 +4,13 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M5 (part 4): a smoother live view that notices moved pieces; Quick scans (2026-11-09; tested on the Mac with your photos, not yet on your iPhone)
+- **The live view keeps up when you move the phone.** The outlines used to be drawn where the table was in the last analysed frame, so they trailed behind while you moved. They're now put where the table is predicted to be in the picture being shown (from the last two positions), and calmed when you hold still. Measured with a simulated camera panning steadily: over a computer-made table, 1.0 → 0.1 screen px behind (median); over your photo IMG_9275, 2.5 → 0.5 px (about 1.4 → 0.3 mm on the table).
+- **It notices pieces that are no longer at their spot.** Every few frames each known piece in view is compared with the table right around it, against how much it stood out in your scan photo. A piece that looks gone in 3 of 4 checks gets a **red dashed** outline ("moved?"), and the top line says how many and to scan again. Your IMG_9276 with three pieces moved: exactly those three; your other photos: none. Pale pieces that hardly stand out on your table are never called gone.
+- **Unsure tracking** (few points recognised) shows dashed, hollow outlines.
+- **Settings → Scan mode: Full or Quick.** Quick takes one overview photo and stays on overviews (shapes read less surely); Full adds close-ups as before.
+- Fixed while testing: in a browser that stamps every camera frame with the same time, the new prediction would have frozen the outlines; frames are now told apart by their number. The tracker also skips camera frames while the live view prepares your scan photos.
+
 ### M5 (part 3): rescans that don't count pieces twice (2026-11-09; tested on the Mac with your photos, not yet on your iPhone)
 - **Scanning again no longer adds a piece twice when nothing moved.** The duplicates came from a piece found only partly in one photo (a pale edge or a shadow), two touching pieces counted as a new one, and **your coin**: after it had measured the size, later scans counted it as a piece. All three fixed. Your four photos of the same 21 pieces, rescanned in three orders: nothing added twice, nothing marked moved or missing.
 - **Moved pieces are recognised by their printed picture.** Each piece now keeps a small "fingerprint" of its picture. A piece you moved, even turned round or moved out of the photo and back in, is matched to the known piece. Your IMG_9276 with three pieces moved digitally (one upside down, one a quarter turn): all three recognised.

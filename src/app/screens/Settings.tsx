@@ -78,6 +78,20 @@ export function SettingsScreen() {
       </div>
       <p class="muted small">Automatic uses the main back camera, which keeps sizes steady. Applies the next time the camera starts.</p>
 
+      <h2>Scan mode</h2>
+      <Segmented<'full' | 'quick'>
+        value={settings.scanMode.value}
+        options={[
+          ['full', 'Full (overview + close-ups)'],
+          ['quick', 'Quick (one overview photo)'],
+        ]}
+        onChange={(v) => (settings.scanMode.value = v)}
+      />
+      <p class="muted small">
+        Quick finds, colours and places the pieces from one photo; their shapes (corner, edge) are read less surely. Full adds close-ups (2×) for the shapes.
+        You can always switch to close-ups on the scan screen.
+      </p>
+
       <h2>Live tracking speed</h2>
       <Segmented<30 | 15>
         value={settings.trackingFps.value}

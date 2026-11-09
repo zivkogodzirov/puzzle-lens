@@ -15,7 +15,14 @@ let visible = 0;
 
 test.beforeAll(async () => {
   const puzzle = generatePuzzle({ cols: 8, rows: 6, cellMm: [17.8, 19.4], seed: 12 });
-  const base: SceneOptions = { puzzle, seed: 44, markers: [], layout: { areaMm: [600, 450], originMm: [100, 80] }, camera: { x: 400, y: 305, heightMm: 680, tiltDeg: 1, imageSize: [W, H] }, light: { dirDeg: 200 } };
+  const base: SceneOptions = {
+    puzzle,
+    seed: 44,
+    markers: [],
+    layout: { areaMm: [600, 450], originMm: [100, 80] },
+    camera: { x: 400, y: 305, heightMm: 680, tiltDeg: 1, imageSize: [W, H] },
+    light: { dirDeg: 200 },
+  };
   const o = await renderScene(base);
   const c = await renderScene({ ...base, camera: { x: 280, y: 220, heightMm: 620, tiltDeg: 2, tiltDirDeg: 40, zoom: 2, imageSize: [W, H] } });
   overview = `data:image/jpeg;base64,${o.jpeg.toString('base64')}`;
@@ -38,7 +45,20 @@ test.describe('scan pieces without markers', () => {
       const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
       await new Promise<void>((res) => {
         const tx = dbh.transaction('projects', 'readwrite');
-        tx.objectStore('projects').put({ id: pid, name: 'No markers', createdAt: 1, updatedAt: 2, pieceCount: 48, grid: { cols: 8, rows: 6, source: 'suggested' }, box: null, markerMap: null, tableModel: null, piecePitch: null, setupStep: 6, tracking: 'pieces' });
+        tx.objectStore('projects').put({
+          id: pid,
+          name: 'No markers',
+          createdAt: 1,
+          updatedAt: 2,
+          pieceCount: 48,
+          grid: { cols: 8, rows: 6, source: 'suggested' },
+          box: null,
+          markerMap: null,
+          tableModel: null,
+          piecePitch: null,
+          setupStep: 6,
+          tracking: 'pieces',
+        });
         tx.oncomplete = () => res();
       });
       dbh.close();
@@ -74,5 +94,51 @@ test.describe('scan pieces without markers', () => {
     expect(n2).toBeLessThanOrEqual(n + 2);
     expect(Number((await page.getByTestId('scan-coverage').innerText()).match(/\d+/)![0])).toBeGreaterThan(0);
     await page.screenshot({ path: test.info().outputPath('free-after-closeup.png') });
+  });
+});
+
+test.describe('scan mode (M5 part 4)', () => {
+  test.use({ fakeCameraOptions: { width: W, height: H, fps: 8 }, persistentStorage: true });
+  test.setTimeout(240_000);
+
+  test('Quick: one overview photo, and the camera stays on overviews', async ({ page }) => {
+    await page.addInitScript((url) => {
+      (window as unknown as { __fakeScene?: string }).__fakeScene = url;
+    }, overview);
+    await gotoScreen(page, '');
+    const id = 'e2e-quick';
+    await page.evaluate(async (pid) => {
+      const req = indexedDB.open('puzzle-lens');
+      const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
+      await new Promise<void>((res) => {
+        const tx = dbh.transaction(['projects', 'settings'], 'readwrite');
+        tx.objectStore('projects').put({
+          id: pid,
+          name: 'Quick',
+          createdAt: 1,
+          updatedAt: 2,
+          pieceCount: 48,
+          grid: { cols: 8, rows: 6, source: 'suggested' },
+          box: null,
+          markerMap: null,
+          tableModel: null,
+          piecePitch: null,
+          setupStep: 6,
+          tracking: 'pieces',
+        });
+        tx.objectStore('settings').put({ key: 'scanMode', value: 'quick' });
+        tx.oncomplete = () => res();
+      });
+      dbh.close();
+    }, id);
+    await page.reload();
+    await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}`), id);
+    await page.getByTestId('scan-pieces').click();
+    await expect(page.getByTestId('table-camera')).toHaveAttribute('data-mode', 'overview');
+    await page.getByTestId('allow-tilt').click();
+    await expect(page.getByTestId('snap')).toBeEnabled({ timeout: 60_000 });
+    await page.getByTestId('snap').click();
+    await expect(page.getByTestId('scan-note')).toContainText('Quick scan done', { timeout: 150_000 });
+    await expect(page.getByTestId('table-camera')).toHaveAttribute('data-mode', 'overview');
   });
 });

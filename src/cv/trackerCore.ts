@@ -11,6 +11,7 @@ import type { MarkerMap } from '../project/types';
 import { cvErrorMessage, wasmBytes, type Cv } from './loadCv';
 import { upscaleCoord, type FrameAnalyser, type FrameAnalysis } from './frameAnalyser';
 import { scaleFix, TableAnchor, type AnchorReference } from './anchor';
+import type { PresencePiece } from './presence';
 import { cvCounters } from './scope';
 import type { ReadFrame } from '../shared/frameRead';
 import type { FrameInfo, FrameSource, TrackerFrameResult, WorkerError, WorkerMemory } from '../shared/types';
@@ -84,6 +85,8 @@ export class TrackerCore {
   /** Median ms per frame for each way once chosen (for the HUD, Device check and reports). */
   bigChoice: { path: 'direct' | 'gpu'; directMs: number | null; gpuMs: number | null } | null = null;
   private tableMap: MarkerMap | null = null;
+  /** While the live view prepares its reference photos, frames are passed over (they'd only slow it down). */
+  paused = false;
   private zoom = 1;
 
   constructor(
@@ -108,7 +111,7 @@ export class TrackerCore {
    * (the puzzle's overview photos). Null or [] switches it off. Returns the features kept.
    * Markers are not looked for while it is on.
    */
-  setAnchor(refs: AnchorReference[] | null): number {
+  setAnchor(refs: AnchorReference[] | null, pieces: PresencePiece[] = []): number {
     if (!refs?.length) {
       this.analyser.anchor?.dispose();
       this.analyser.anchor = null;
@@ -116,7 +119,7 @@ export class TrackerCore {
       return 0;
     }
     this.analyser.anchor ??= new TableAnchor(this.cv);
-    const n = this.analyser.anchor.setReferences(refs);
+    const n = this.analyser.anchor.setReferences(refs, pieces);
     this.analyser.markers = n === 0;
     return n;
   }
@@ -156,7 +159,7 @@ export class TrackerCore {
     this.noteArrival();
     try {
       const t0 = this.env.now();
-      if (t0 - this.lastProcessedAt < this.minIntervalMs) {
+      if (this.paused || t0 - this.lastProcessedAt < this.minIntervalMs) {
         this.counters.skipped++;
         return null;
       }
@@ -190,6 +193,10 @@ export class TrackerCore {
     this.noteArrival();
     const t0 = this.env.now();
     try {
+      if (this.paused) {
+        this.counters.skipped++;
+        return null;
+      }
       let res: Analysed | null = null;
       if (this.env.makeVideoFrame) {
         const vf = this.env.makeVideoFrame(bitmap, timestampUs);

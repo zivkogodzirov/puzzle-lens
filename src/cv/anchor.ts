@@ -18,6 +18,10 @@ import type { Mat3, Vec2 } from '../project/types';
 import type { Cv } from './loadCv';
 import type { PixelBuffer } from './frameAnalyser';
 import { freePersistent, persistent, withScope } from './scope';
+import { judgePresence, pieceContrast, type PresencePiece } from './presence';
+
+/** Check which known pieces are still at their spots every this many fixes. */
+export const PRESENCE_EVERY = 4;
 
 export const ANCHOR = {
   /** Reference photos are read at this long side (px). */
@@ -79,6 +83,8 @@ export interface AnchorFix {
   quality: 'good' | 'weak';
   /** Image px per mm at the image centre. */
   pxPerMm: number;
+  /** Every few fixes (M5 part 4): known pieces in view that look gone from their spot, and ones seen there. */
+  presence?: { gone: string[]; there: string[] };
 }
 
 export interface AnchorReference {
@@ -170,6 +176,10 @@ export class TableAnchor {
   private sinceMatch = 0;
   /** Reference features in all. */
   features = 0;
+  /** Known pieces to check for presence, with how much each stood out in the reference photos. */
+  private pieces: PresencePiece[] = [];
+  private base = new Map<string, number>();
+  private fixes = 0;
 
   constructor(cv: Cv) {
     this.cv = cv;
@@ -180,10 +190,12 @@ export class TableAnchor {
   }
 
   /** Replaces the reference (the puzzle's overview photos). Returns the number of features kept. */
-  setReferences(refs: AnchorReference[]): number {
+  setReferences(refs: AnchorReference[], pieces: PresencePiece[] = []): number {
     const cv = this.cv;
     this.clearReferences();
     if (!refs.length) return 0;
+    this.pieces = pieces;
+    this.base = new Map();
     const per = Math.min(ANCHOR.refFeatures, Math.floor(ANCHOR.refTotal / refs.length));
     const descs: Uint8Array[] = [];
     const mms: number[] = [];
@@ -192,6 +204,15 @@ export class TableAnchor {
       const none = s.keep(new cv.Mat());
       for (const ref of refs) {
         const g = s.keep(grayMat(cv, ref.pixels, ref.channels));
+        // How much each known piece stands out here (the presence check's yardstick).
+        const toImg = invertH(ref.imgToTable);
+        if (toImg && pieces.length) {
+          const img = { data: g.data as Uint8Array, width: g.cols as number, height: g.rows as number, stride: g.cols as number };
+          for (const p of pieces) {
+            const c = pieceContrast(img, toImg, p, 0);
+            if (c !== null) this.base.set(p.id, Math.max(this.base.get(p.id) ?? 0, c));
+          }
+        }
         const kps = s.keep(new cv.KeyPointVector());
         const desc = s.keep(new cv.Mat());
         orb.detectAndCompute(g, none, kps, desc);
@@ -251,6 +272,18 @@ export class TableAnchor {
       this.sinceMatch = 0;
     }
     if (!fix) this.flowPx = this.flowMm = null;
+    // Every PRESENCE_EVERY fixes: which known pieces are still at their spots.
+    if (fix && this.pieces.length && ++this.fixes % PRESENCE_EVERY === 0) {
+      const img = { data: gray.data, width: gray.cols, height: gray.rows, stride: gray.cols };
+      const gone: string[] = [];
+      const there: string[] = [];
+      for (const p of this.pieces) {
+        const j = judgePresence(pieceContrast(img, fix.tableToImg, p, fix.pxPerMm), this.base.get(p.id));
+        if (j === 'gone') gone.push(p.id);
+        else if (j === 'there') there.push(p.id);
+      }
+      fix.presence = { gone, there };
+    }
     const prev: Mat = (this.prev ??= persistent(new this.cv.Mat()));
     gray.copyTo(prev);
     return fix;
@@ -437,6 +470,8 @@ export class TableAnchor {
   }
 
   private clearReferences(): void {
+    this.pieces = [];
+    this.base = new Map();
     for (const m of [this.refDesc, this.orb, this.matcher]) if (m) freePersistent(m);
     this.refDesc = this.orb = this.matcher = null;
     this.refMm = new Float32Array(0);

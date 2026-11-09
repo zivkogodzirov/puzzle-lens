@@ -98,6 +98,20 @@ export function installFakeCamera(options: FakeCameraOptions = {}): void {
   }
 
   const t0 = performance.now();
+  /** The scene's transform (canvas px) at performance time `at`: identity without motion. */
+  function sceneMatrix(at: number): [number, number, number, number, number, number] {
+    const mo = win.__fakeSceneMotion as { vx: number; vy: number; rot: number; since: number } | undefined;
+    if (!mo) return [1, 0, 0, 1, 0, 0];
+    const dt = Math.max(0, at - mo.since) / 1000;
+    const a = mo.rot * dt;
+    const c = Math.cos(a);
+    const s2 = Math.sin(a);
+    // Turn about the canvas centre, then shift.
+    const tx = W / 2 + mo.vx * dt - (c * W) / 2 + (s2 * H) / 2;
+    const ty = H / 2 + mo.vy * dt - (s2 * W) / 2 - (c * H) / 2;
+    return [c, s2, -s2, c, tx, ty];
+  }
+  (stats as unknown as { sceneMatrix: typeof sceneMatrix }).sceneMatrix = sceneMatrix;
   let sceneImg: HTMLImageElement | null = null;
   if (options.scene) {
     sceneImg = new Image();
@@ -116,7 +130,17 @@ export function installFakeCamera(options: FakeCameraOptions = {}): void {
       else img.onload = () => (sceneImg = img);
     }
     if (sceneImg) {
+      // A steady camera move over the scene (live view tests): window.__fakeSceneMotion =
+      // { vx, vy (canvas px per second), rot (radians per second), since (performance.now()) }.
+      const mo = win.__fakeSceneMotion as { vx: number; vy: number; rot: number; since: number } | undefined;
+      if (mo) {
+        c2d.fillStyle = '#e9e7e1';
+        c2d.fillRect(0, 0, W, H);
+        const m = sceneMatrix(performance.now());
+        c2d.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+      }
       if (sceneImg.complete && sceneImg.naturalWidth) c2d.drawImage(sceneImg, 0, 0, W, H);
+      c2d.setTransform(1, 0, 0, 1, 0, 0);
       // One changing pixel in the corner keeps frames distinct without moving the picture.
       c2d.fillStyle = stats.framesDrawn % 2 ? '#fefefe' : '#fdfdfd';
       c2d.fillRect(0, 0, 1, 1);

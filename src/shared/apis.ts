@@ -137,7 +137,7 @@ export interface TrackerApi {
    * Live view without markers (M5): find the table in every frame from these photos of it
    * (photo px → table mm each; width/height = the size imgToTable is for). Null switches it off.
    */
-  setAnchor(refs: AnchorPhoto[] | null): Promise<{ features: number; photos: number; ms: number; error?: string }>;
+  setAnchor(refs: AnchorPhoto[] | null, pieces?: Array<{ id: string; outline: number[] }>): Promise<{ features: number; photos: number; ms: number; error?: string }>;
   /** Longest gap between camera frames inside [startAbs, endAbs] (ms since epoch). */
   maxFrameGap(startAbs: number, endAbs: number): number;
   status(): TrackerStatus;

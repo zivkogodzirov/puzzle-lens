@@ -1,3 +1,4 @@
+import { settings } from '../settings';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { go, routeArg } from '../router';
 import { readerWorker, restartReader } from '../workers';
@@ -178,7 +179,7 @@ export function ScanScreen() {
           height: lastDetail.height,
           pxPerMm: pxPerMmOf(lastDetail.imgToTable!, lastDetail.width, lastDetail.height),
         });
-      if (!kindChosen.current) setKind(ps.some((q) => q.status === 'table') ? 'detail' : 'overview');
+      if (!kindChosen.current) setKind(settings.scanMode.value === 'full' && ps.some((q) => q.status === 'table') ? 'detail' : 'overview');
     })();
   }, [id]);
 
@@ -551,9 +552,11 @@ export function ScanScreen() {
       if (weak) lines.push(`${weak} pale piece${weak > 1 ? 's' : ''} with a faint outline (yellow): check ${weak > 1 ? 'they are' : 'it is'} outlined right.`);
       for (const q of r.reasons) if (!/Blurred|Tilted/.test(q)) lines.push(q);
       lines.unshift(...coinLines);
+      if (kind === 'overview' && settings.scanMode.value === 'quick') lines.push('Quick scan done. Close-ups (2×) read the shapes better, if you want them.');
       setNote({ ok: true, lines });
       setAutoPaused(false);
-      if (kind === 'overview') {
+      // Full scan mode: close-ups next. Quick: stay on overviews (M5 part 4).
+      if (kind === 'overview' && settings.scanMode.value === 'full') {
         kindChosen.current = true;
         setKind('detail');
       }
