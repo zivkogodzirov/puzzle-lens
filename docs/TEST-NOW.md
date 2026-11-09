@@ -1,18 +1,18 @@
-# M6: which pieces join (and M5, still to check)
+# M7, part 1: a new batch (and M6, M5, still to check)
 
-**New in M6:** on your puzzle's page, under Pieces, **🧩 Which pieces join** lists pairs of pieces that probably join, most likely first, with a percentage. Four pieces whose pairs all agree make a **square of 4 ✓**. The first card, **What next**, is the best thing to try now. Each card shows the pieces as photographed and where they go on the box picture, with **📷 Point them out**, **✓ They fit** and **✗ Don't fit**.
+**New in M7 part 1:** on your puzzle's page, under Pieces, **🔄 Start a new batch…**. Before, once you swept the pieces together (or put them back in the box) and spread out a new lot, no photo could be matched to the old table any more. Now a new batch sets the table's pieces aside (kept in the list), leaves the pieces in the puzzle and in trays where they are, and the next photo starts a fresh table.
 
-**How it decides:** I first tested on your own 21 pieces whether their shapes alone tell which pieces join. They don't: the true partner came first for none of 48 sides (shape) and 4 of 48 (colours along the edge). Your phone photos are too coarse for the small differences between the knobs. So the app now uses the box picture: two pieces whose spots are next to each other probably join, and the shapes only rule out pairs that can't fit. On your 21 pieces, every pair it was at least 50 % sure of was right (15 of 15), and its three squares of 4 were all right.
+**Good to know:** pieces you spread out again are read as new pieces. I tried recognising them by their picture and measured it first: on computer-made 300-piece batches, 3.5–8.7 % of brand-new pieces would have been mixed up with old ones, so it's off. If there's room, leave the leftovers where they are, spread the new pieces around them and scan as usual: then every piece is recognised by where it lies.
 
-**I tested it in the app with your puzzle** (your box picture, your holes and pieces): the first suggestion was a square of 4 at columns 18–19, rows 7–8, 98 % sure, which is right; ✓ All 4 fit and Undo worked.
+**I tested it myself** with a simulated camera in Safari's engine: the re-spread table wasn't matched, then after **Start a new batch** the next photo read all the pieces, and the counts showed them on the table and set aside.
 
-Allow about 15 minutes for M6, and 45 minutes for the M5 steps further down if you haven't done them yet. These steps are for version **{version}** (Settings shows the version).
+Allow about 15 minutes for M6, 45 minutes for the M5 steps if you haven't done them yet, and 10 minutes for M7 part 1 (last). These steps are for version **{version}** (Settings shows the version).
 
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
 
-## M6: which pieces join
+## M6: which pieces join (still to check)
 1. Under Pieces tap **🧩 Which pieces join**. The first card, **What next**, should be a **square of 4** (or a pair), with its spots marked on a small piece of the box picture.
 2. Tap **📷 Point them out**: the camera opens and those pieces pulse, with a line between the ones that join. Find them on your table.
 3. Try them together.
@@ -59,6 +59,14 @@ Allow about 15 minutes for M6, and 45 minutes for the M5 steps further down if y
 7. Go on with as many pieces as you can (ideally all your holes): the more answers, the more the Accuracy page tells. A piece that doesn't fit any spot it was offered is then offered the other empty holes.
 8. Tap **📊 How often is the app right?** (on the puzzle page, or in Settings): for Strong, Likely and Several, how many of its first choices were right, with a range that narrows as you answer more.
 
+## M7 part 1: a new batch (do this last)
+**Do these steps last** (after M6 and M5): starting a new batch sets the pieces on your table aside, and the M6 and M5 steps need them on the table. Or try it on a spare puzzle (Home → New puzzle).
+1. Have a few scanned pieces on the table. Sweep them together and spread them out again somewhere else. Open **Scan pieces** and take a photo: it should say **"This photo could not be matched to the pieces found so far"** (the problem the new batch solves).
+2. Back on the puzzle page, under Pieces, tap **🔄 Start a new batch…**. Read the box, then tap **Start and scan**.
+3. Take an overview photo: it should say **"Found N pieces (N new)"**, with no "could not be matched".
+4. Back on the puzzle page, **Pieces read** says how many are on the table and set aside, and **Batch 2**.
+5. Open **📷 Live view of my table**: only the new table's pieces are outlined.
+
 ## This 🧪 Test tab
 1. Can you read these steps and tick them? Close this box and open it again: your ticks should still be there.
 
@@ -71,6 +79,7 @@ Allow about 15 minutes for M6, and 45 minutes for the M5 steps further down if y
 - Your answers are kept with the puzzle, and in backups.
 
 ## Please tell me
+- M7 part 1: did the new batch work? How do you usually work: leftovers back in the box, or left on the table?
 - M6: did the squares of 4 and the pairs fit? Any pair the app was 90 % or more sure of that didn't fit (a screenshot of its card helps). Was **📷 Point them out** easy to follow?
 - Part 4: does the live view keep up when you move the phone? Did the red dashed "moved?" outlines appear for pieces you took away, and only for those?
 - Part 3: after moving pieces, did any piece show up twice under Pieces? A screenshot of the note after each photo helps.

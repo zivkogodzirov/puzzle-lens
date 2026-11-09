@@ -14,7 +14,7 @@ export async function resolvePending(projectId: string, pendingId: string, intoI
     if (!p || p.projectId !== projectId || p.status !== 'pending') return;
     const now = Date.now();
     const into = intoId ? await d.pieces.get(intoId) : undefined;
-    if (!into || (into.status !== 'table' && into.status !== 'missing' && into.status !== 'pending')) {
+    if (!into || (into.status !== 'table' && into.status !== 'missing' && into.status !== 'pending' && into.status !== 'aside')) {
       await d.pieces.put({ ...p, status: 'table', maybe: null, updatedAt: now });
       return;
     }
@@ -38,7 +38,13 @@ export async function resolvePending(projectId: string, pendingId: string, intoI
     await d.pieces.delete(pendingId);
     // Answers given for the pending piece now belong to the known one.
     const project = await d.projects.get(projectId);
-    if (project?.answers?.some((a) => a.pieceId === pendingId))
-      await d.projects.put({ ...project, answers: project.answers.map((a) => (a.pieceId === pendingId ? { ...a, pieceId: into.id } : a)), updatedAt: now });
+    const swap = (id: string) => (id === pendingId ? into.id : id);
+    if (project && (project.answers?.some((a) => a.pieceId === pendingId) || project.pairAnswers?.some((a) => a.a === pendingId || a.b === pendingId)))
+      await d.projects.put({
+        ...project,
+        answers: (project.answers ?? []).map((a) => ({ ...a, pieceId: swap(a.pieceId) })),
+        pairAnswers: (project.pairAnswers ?? []).map((a) => ({ ...a, a: swap(a.a), b: swap(a.b) })),
+        updatedAt: now,
+      });
   });
 }

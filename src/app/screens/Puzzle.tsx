@@ -36,6 +36,7 @@ import { pairKey, pairModel, type SidePartners } from '../../project/pairs';
 import { answerPair, pairAnswerView, undoPairAnswer } from '../../project/pairAnswers';
 import { answerSpot, answerView, clearNotHere, placedPieces, removeNotAPiece, undoFits } from '../../project/answers';
 import { resolvePending } from '../../project/pending';
+import { startNewBatch } from '../../project/batches';
 import { TableContrast } from '../components/TableContrast';
 import { BoxFitNotice } from '../components/BoxFitNotice';
 import type { Groups } from '../../project/groups';
@@ -116,7 +117,9 @@ export function PuzzleScreen() {
   const [trayN, setTrayN] = useState(0);
   const [tableN, setTableN] = useState(0);
   const [pendingN, setPendingN] = useState(0);
-  const [scanAction, setScanAction] = useState<'none' | 'confirm-delete' | 'confirm-restore' | 'busy'>('none');
+  const [placedN, setPlacedN] = useState(0);
+  const [asideN, setAsideN] = useState(0);
+  const [scanAction, setScanAction] = useState<'none' | 'confirm-delete' | 'confirm-restore' | 'confirm-batch' | 'busy'>('none');
   const [scanNote, setScanNote] = useState<string | null>(null);
   const mounted = useRef(true);
   const thumb = useBlobUrl(project?.box?.rectifiedBlobId, boxVersion(project?.box));
@@ -147,6 +150,8 @@ export function PuzzleScreen() {
           setTrayN(c.tray);
           setTableN(c.table);
           setPendingN(c.pending);
+          setPlacedN(c.placed);
+          setAsideN(c.aside);
           setBin(await scanBinSummary(p.id));
         }
       })
@@ -250,7 +255,28 @@ export function PuzzleScreen() {
     setTrayN(c.tray);
     setTableN(c.table);
     setPendingN(c.pending);
+    setPlacedN(c.placed);
+    setAsideN(c.aside);
     setBin(b);
+  };
+
+  // A new batch (M7): the pieces on the table are set aside; the next photo starts a fresh table.
+  const onNewBatch = async (thenScan: boolean) => {
+    setScanAction('busy');
+    try {
+      const r = await startNewBatch(p.id);
+      logInfo('puzzle', `Batch ${r.project.batch!.n} started: ${r.aside} pieces set aside`);
+      if (thenScan) {
+        go('scan', p.id);
+        return;
+      }
+      await reloadScan();
+      setScanNote(`Batch ${r.project.batch!.n} started: ${r.aside} pieces set aside. Spread the new pieces and tap Scan pieces.`);
+    } catch (err) {
+      logError('puzzle', 'The new batch could not be started', err);
+      setError(errorWords(err));
+    }
+    if (mounted.current) setScanAction('none');
   };
 
   const onDeleteScan = async (thenScan: boolean) => {
@@ -339,18 +365,25 @@ export function PuzzleScreen() {
           <dd data-testid="puzzle-grid">{p.grid ? `${p.grid.cols} across × ${p.grid.rows} down (${p.grid.cols * p.grid.rows} pieces)` : 'Not chosen yet'}</dd>
           <dt>Pieces read</dt>
           <dd data-testid="puzzle-pieces">
-            {pieces === null ? '—' : pieces - missingN - trayN}
-            {trayN > 0 && (
-              <span class="muted small" data-testid="puzzle-tray-count">
-                {' '}
-                on the table, {trayN} in trays
+            {pieces === null ? '—' : pieces}
+            {pieces !== null && (trayN > 0 || missingN > 0 || placedN > 0 || asideN > 0) && (
+              <span class="muted small" data-testid="puzzle-status-counts">
+                {': '}
+                {[
+                  `${tableN} on the table`,
+                  missingN > 0 ? `${missingN} no longer seen at ${missingN === 1 ? 'its' : 'their'} spot` : '',
+                  trayN > 0 ? `${trayN} in trays` : '',
+                  placedN > 0 ? `${placedN} in the puzzle` : '',
+                  asideN > 0 ? `${asideN} set aside` : '',
+                ]
+                  .filter(Boolean)
+                  .join(', ')}
               </span>
             )}
-            {missingN > 0 && (
-              <span class="muted small" data-testid="puzzle-missing-count">
-                {' '}
-                on the table (+{missingN} no longer seen at {missingN === 1 ? 'its' : 'their'} spot)
-              </span>
+            {(p.batch?.n ?? 1) > 1 && (
+              <div class="muted small" data-testid="puzzle-batch">
+                Batch {p.batch!.n}
+              </div>
             )}
             {p.piecePitch && (
               <div class="muted small" data-testid="puzzle-size">
@@ -413,7 +446,49 @@ export function PuzzleScreen() {
               {scanNote}
             </div>
           )}
-          {(pieces ?? 0) > 0 && scanAction !== 'confirm-delete' && scanAction !== 'confirm-restore' && (
+          {tableN > 0 && scanAction !== 'confirm-delete' && scanAction !== 'confirm-restore' && scanAction !== 'confirm-batch' && (
+            <button
+              class="btn btn-block"
+              data-testid="new-batch"
+              disabled={scanAction === 'busy'}
+              onClick={() => (setScanNote(null), setScanAction('confirm-batch'))}
+            >
+              🔄 Start a new batch…
+            </button>
+          )}
+          {scanAction === 'confirm-batch' && (
+            <div class="notice notice-warn" data-testid="new-batch-confirm">
+              <p>
+                <strong>A new batch</strong> is for when you've put the pieces back in the box (or swept them together) and spread out a new lot. Easier, if
+                there's room: leave the leftovers where they are, spread the new pieces around them and scan as usual. Then every piece is recognised by where
+                it lies, and you don't need a new batch.
+              </p>
+              <ul class="small">
+                <li>
+                  The <strong>{tableN}</strong> {tableN === 1 ? 'piece' : 'pieces'} on the table {tableN === 1 ? 'is' : 'are'} set aside (kept in the list as
+                  "set aside").
+                </li>
+                <li>Pieces in the puzzle and in trays stay where they are.</li>
+                <li>The next photo starts a fresh table.</li>
+                <li>
+                  If you spread some of the set-aside pieces out again, they're read as new pieces: the app can't reliably tell hundreds of pieces apart by
+                  their picture alone.
+                </li>
+              </ul>
+              <div class="row" style={{ flexWrap: 'wrap', gap: '8px' }}>
+                <button class="btn btn-primary" data-testid="new-batch-scan" onClick={() => void onNewBatch(true)}>
+                  Start and scan
+                </button>
+                <button class="btn" data-testid="new-batch-yes" onClick={() => void onNewBatch(false)}>
+                  Start
+                </button>
+                <button class="btn" onClick={() => setScanAction('none')}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {(pieces ?? 0) > 0 && scanAction !== 'confirm-delete' && scanAction !== 'confirm-restore' && scanAction !== 'confirm-batch' && (
             <button
               class="btn btn-block"
               data-testid="delete-scan"
@@ -893,7 +968,10 @@ function Catalog({
         {traysBlock}
       </div>
     ) : (
-      <p class="muted small">No pieces yet. Spread pieces face up {markers ? 'inside the markers' : 'on the table, with small gaps'} and tap Scan pieces.</p>
+      <p class="muted small" data-testid="catalog-empty">
+        {allRows.length ? 'No pieces on the table now.' : 'No pieces yet.'} Spread pieces face up{' '}
+        {markers ? 'inside the markers' : 'on the table, with small gaps'} and tap Scan pieces.
+      </p>
     );
   const n = { corner: 0, edge: 0, interior: 0, unsure: 0 };
   for (const g of groups.values()) n[g]++;
@@ -1132,7 +1210,7 @@ function PendingPanel({ projectId, rows, onDone }: { projectId: string; rows: Pi
               .filter((c): c is PieceRow => Boolean(c))
               .map((c) => (
                 <button key={c.id} class="btn btn-small pending-choice" data-testid="pending-same" onClick={() => settle(p.id, c.id)}>
-                  <PendingThumb piece={c} label={c.status === 'missing' ? 'Missing' : 'Known'} />
+                  <PendingThumb piece={c} label={c.status === 'missing' ? 'Missing' : c.status === 'aside' ? 'Set aside' : 'Known'} />
                   This one
                 </button>
               ))}

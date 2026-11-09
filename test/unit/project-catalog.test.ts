@@ -1,6 +1,6 @@
 /** Catalog merging (src/project/catalog.ts): rescans never add a piece twice. */
 import { describe, expect, it } from 'vitest';
-import { MOVED_SHAPE_MM, planMerge, shapeDistance, shapeSignature, type FoundForCatalog } from '../../src/project/catalog';
+import { BATCH, MOVED_SHAPE_MM, planMerge, shapeDistance, shapeSignature, type FoundForCatalog } from '../../src/project/catalog';
 import type { PieceRow, Vec2 } from '../../src/project/types';
 import { generatePuzzle } from '../synth/index';
 
@@ -362,6 +362,73 @@ describe('re-identification (M5 part 3)', () => {
     expect(plan2.merged).toEqual([{ from: p.id, into: cat.find((c) => c.table.x === 700)!.id }]);
     expect(plan2.removed).toEqual([p.id]);
     expect(plan2.added).toHaveLength(0);
+  });
+
+  it('a new batch (M7): pieces spread out again are read as new pieces; set-aside ones are never marked missing', () => {
+    const cat = apply([], planMerge([], [withFp(100, 100, 1), withFp(150, 100, 2)], ctx(4, 1)));
+    const aside = cat.map((p) => ({ ...p, status: 'aside' as const }));
+    // Piece 2 lies where piece 1 used to be (another layout: old spots mean nothing), and a new piece.
+    const plan = planMerge(aside, [withFp(100, 100, 2), withFp(50, 250, 9)], { ...ctx(4, 2), view });
+    expect(plan.back).toBe(0);
+    expect(plan.updates).toHaveLength(0);
+    expect(plan.added).toHaveLength(2);
+    expect(plan.added.every((p) => p.status === 'table')).toBe(true);
+    expect(plan.missing).toBe(0);
+  });
+
+  it('a new batch, with picture matching switched on (BATCH, for tuning): set-aside pieces come back recognised', () => {
+    const save = { ...BATCH };
+    BATCH.asideCost = 12;
+    try {
+      const cat = apply([], planMerge([], [withFp(100, 100, 1), withFp(150, 100, 2), withFp(200, 100, 3)], ctx(4, 1)));
+      // A new batch: all set aside. The new table's first photo has piece 2 at the spot where piece 1
+      // used to be (another layout: old spots mean nothing), piece 3 elsewhere, and a new piece.
+      const aside = cat.map((p) => ({ ...p, status: 'aside' as const }));
+      const plan = planMerge(aside, [withFp(100, 100, 2), withFp(300, 250, 3), withFp(50, 250, 9)], { ...ctx(4, 2), view });
+      expect(plan.back).toBe(2);
+      expect(plan.moved).toBe(2);
+      expect(plan.added).toHaveLength(1);
+      const back = new Map(plan.updates.map((u) => [u.id, u]));
+      expect(back.get(cat[1]!.id)).toMatchObject({ status: 'table', table: { x: 100, y: 100 } });
+      expect(back.get(cat[2]!.id)).toMatchObject({ status: 'table', table: { x: 300, y: 250 } });
+      // Piece 1 stays aside (not seen), and is never marked missing.
+      expect(back.has(cat[0]!.id)).toBe(false);
+      expect(plan.missing).toBe(0);
+    } finally {
+      Object.assign(BATCH, save);
+    }
+  });
+
+  it('a new batch: a sighting that looks like two set-aside pieces is a new piece, not a piece to check', () => {
+    const cat = apply([], planMerge([], [withFp(100, 100, 7), withFp(150, 100, 7)], ctx(4, 1)));
+    const aside = cat.map((p) => ({ ...p, status: 'aside' as const }));
+    const plan = planMerge(aside, [withFp(200, 200, 7)], { ...ctx(4, 2), view });
+    expect(plan.back).toBe(0);
+    expect(plan.pending).toBe(0);
+    expect(plan.added).toHaveLength(1);
+    expect(plan.added[0]!.status).toBe('table');
+  });
+
+  it('a new batch, with picture matching switched on: a set-aside piece is taken back only on a very clear match', () => {
+    const save = { ...BATCH };
+    BATCH.asideCost = 12;
+    try {
+      const cat = apply([], planMerge([], [withFp(100, 100, 3)], ctx(4, 1)));
+      const aside = cat.map((p) => ({ ...p, status: 'aside' as const }));
+      // The same picture slightly changed (light, a corner read differently): still clear.
+      const near = fp(3).map((v, i) => v + (i % 5 === 0 ? 2 : 0));
+      const same = planMerge(aside, [found(200, 200, { patch: { blob: new Blob([]), flats: [false, false, false, false], sure: true, fp: near } })], {
+        ...ctx(4, 2),
+        view,
+      });
+      expect(same.back).toBe(1);
+      // Another piece's picture: a new piece.
+      const other = planMerge(aside, [withFp(200, 200, 4)], { ...ctx(4, 3), view });
+      expect(other.back).toBe(0);
+      expect(other.added).toHaveLength(1);
+    } finally {
+      Object.assign(BATCH, save);
+    }
   });
 
   it('another piece put down on a known piece’s spot: very different picture and outline, not merged', () => {

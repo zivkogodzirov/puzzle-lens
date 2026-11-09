@@ -10,6 +10,10 @@
  * around the centre, best rotation), size and colour; a clear, unambiguous match is the same piece,
  * moved. Pieces that left and matched nothing are marked "missing" (not on the table any more; they
  * come back if found at that spot again). Full fingerprints for lookalikes come in M5.
+ *
+ * Batches (M7): pieces set aside when a new batch was started have no spot on the new table, and
+ * by default they are not matched by their picture either (BATCH): a piece spread out again in a
+ * new batch is read as a new piece.
  */
 import type { PieceFlags, PiecePatchInfo, PieceRow, Vec2 } from './types';
 import { fingerprintDistance } from '../cv/fingerprint';
@@ -33,6 +37,8 @@ export interface MergePlan {
   /** Existing pieces to update (same id), including moved ones and ones now missing. */
   updates: PieceRow[];
   /** Of those: recognised at a new spot (moved), and no longer seen at their spot (missing). */
+  /** Of the moved ones: pieces set aside in an earlier batch, back on the table (M7). */
+  back: number;
   moved: number;
   missing: number;
   /** New pieces. */
@@ -98,6 +104,24 @@ export const MOVED_SHAPE_WEIGHT = 6;
 export const MOVED_MARGIN_ABS = 3;
 export const MOVED_AREA_FP = 0.35;
 export const MOVED_DELTA_E_FP = 20;
+
+/**
+ * Pieces set aside in an earlier batch (M7) are not matched by their picture: measured 2026-11-09,
+ * a fingerprint can't tell that many pieces apart. Synthetic val300 (a new batch of 100 new + 50
+ * returning pieces, 150 set aside): at the strictest cost (8) only 35 % of the returning pieces
+ * were recognised and 3.5 % of the NEW pieces were merged into a set-aside one (12: 42 % / 8.7 %);
+ * no fingerprint and outline limits together separate them (fp ≤ 6 and outline ≤ 0.3 mm: 33 true
+ * pairs, 10 false). On the owner's photos (the same 21 pieces from four places, 12 orders), cost 16
+ * recognised 162 of 252 sightings, cost 20 202 with 4 wrong; there were no new pieces to mix up.
+ * A wrong merge mixes two pieces up silently; a piece read again is only counted twice, so the
+ * default is off (asideCost −1). Kept as a setting for M8 (tuning on the owner's real batches).
+ */
+export const BATCH = {
+  /** Highest cost (fingerprint + shape) for taking a set-aside piece back; −1 = never. */
+  asideCost: -1,
+  /** Unsure sightings among set-aside pieces become pieces to check. */
+  asidePending: false,
+};
 /** A fragment (an unmatched blob lying this much inside a piece already matched in this photo) is part of it. */
 export const FRAGMENT_OVERLAP = 0.5;
 /** A piece is marked missing only by a photo with at least this × its best pixels per mm. */
@@ -383,6 +407,7 @@ export function planMerge(
 
   // Moved pieces. Known pieces whose spot is well inside this photo and empty have left it.
   let moved = 0;
+  let back = 0;
   let missing = 0;
   const left: PieceRow[] = [];
   if (ctx.view && ctx.view.length >= 3) {
@@ -412,8 +437,10 @@ export function planMerge(
   // With fingerprints on both sides, any piece not found at its spot may be the one (its spot may
   // look covered by a neighbour, or by another piece put down nearby); the fingerprint and the
   // clear-margin rule decide.
-  const candidates = existing.filter((p) => !taken.has(p.id) && (p.status === 'table' || p.status === 'pending' || p.status === 'missing'));
-  const free = (p: PieceRow) => leftIds.has(p.id) || p.status === 'missing' || outOfView(p);
+  const candidates = existing.filter(
+    (p) => !taken.has(p.id) && (p.status === 'table' || p.status === 'pending' || p.status === 'missing' || p.status === 'aside'),
+  );
+  const free = (p: PieceRow) => leftIds.has(p.id) || p.status === 'missing' || p.status === 'aside' || outOfView(p);
   const sigs = new Map(candidates.map((p) => [p.id, shapeSignature(p.outlineMm)]));
   const newOnes: number[] = [];
   const matchedRows = new Map(updates.map((u) => [u.id, u]));
@@ -473,10 +500,11 @@ export function planMerge(
         // A piece whose spot is free (empty in view, missing, or out of view) may differ more (a
         // corner read differently changes the straightened picture); one whose spot still looks
         // covered only when the picture agrees well.
-        if (cost > (free(p) ? MOVED_FP_COST_FREE : MOVED_FP_COST)) continue;
+        if (cost > (p.status === 'aside' ? BATCH.asideCost : free(p) ? MOVED_FP_COST_FREE : MOVED_FP_COST)) continue;
       } else {
         // Without fingerprints (pieces scanned before M5 part 3): the outline alone, and only among
         // pieces that left a spot in view or are missing.
+        // (Set-aside pieces need a fingerprint: there are too many of them for the outline alone.)
         if (!leftIds.has(p.id) && p.status !== 'missing') continue;
         if (areaDiff > MOVED_AREA || deltaE(p.colour.meanLab, f.meanLab) > MOVED_DELTA_E || shapeD > MOVED_SHAPE_MM) continue;
         cost = (shapeD / MOVED_SHAPE_MM) * MOVED_FP_COST;
@@ -498,6 +526,7 @@ export function planMerge(
     const best = pr.p;
     taken.add(best.id);
     moved++;
+    if (best.status === 'aside') back++;
     const sharper = ctx.pxPerMm > best.bestPxPerMm * 1.15 && !f.flags.weak;
     const next: PieceRow = {
       ...best,
@@ -527,7 +556,7 @@ export function planMerge(
   const pendingOf = new Map<number, string[]>();
   for (const { i } of toMatch) {
     if (done.has(i)) continue;
-    const maybe = pairs.filter((q) => q.i === i && !taken.has(q.p.id)).slice(0, 3);
+    const maybe = pairs.filter((q) => q.i === i && !taken.has(q.p.id) && (BATCH.asidePending || q.p.status !== 'aside')).slice(0, 3);
     if (maybe.length)
       pendingOf.set(
         i,
@@ -563,7 +592,7 @@ export function planMerge(
       .sort((a, b) => a.cost - b.cost);
     const top = costs[0]!;
     const second = costs[1];
-    const limit = leftIds.has(top.c.id) || top.c.status === 'missing' ? MOVED_FP_COST_FREE : MOVED_FP_COST;
+    const limit = leftIds.has(top.c.id) || top.c.status === 'missing' || top.c.status === 'aside' ? MOVED_FP_COST_FREE : MOVED_FP_COST;
     const isClear = top.cost <= limit && (!second || second.cost >= MOVED_MARGIN * top.cost + MOVED_MARGIN_ABS);
     if (!isClear) {
       updates[k] = { ...u, maybe: rest.map((c) => c.id) };
@@ -573,6 +602,7 @@ export function planMerge(
     const c = top.c;
     taken.add(c.id);
     moved++;
+    if (c.status === 'aside') back++;
     merged.push({ from: u.id, into: c.id });
     removed.push(u.id);
     updates[k] = {
@@ -628,7 +658,7 @@ export function planMerge(
       patch: takePatch(f, id, null) ?? null,
     });
   }
-  return { updates, added, thumbs, patches, skipped, moved, missing, pending, merged, removed };
+  return { updates, added, thumbs, patches, skipped, moved, back, missing, pending, merged, removed };
 }
 
 /**

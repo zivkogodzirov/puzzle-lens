@@ -14,7 +14,8 @@ import { latestFrame, latestFrameAt, pumpError, startPump, stopPump } from '../.
 import { frameToElement } from '../../camera/coords';
 import { applyH } from '../../geo/homography';
 import { db } from '../../db/db';
-import { getBlob } from '../../project/store';
+import { getBlob, getProject } from '../../project/store';
+import { snapsOfBatch } from '../../project/batches';
 import type { PieceRow, Vec2 } from '../../project/types';
 import type { AnchorPhoto } from '../../shared/apis';
 import { trackerWorker } from '../workers';
@@ -125,7 +126,9 @@ export function LiveTable({
     const t0 = performance.now();
     void (async () => {
       try {
-        const snaps = (await db().snaps.where('projectId').equals(projectId).toArray())
+        // This batch's photos only (M7): earlier batches show another table layout.
+        const project = await getProject(projectId);
+        const snaps = snapsOfBatch(project ?? {}, await db().snaps.where('projectId').equals(projectId).toArray())
           .filter((s) => s.kind === 'overview' && s.blobId && s.imgToTable)
           .sort((a, b) => b.ts - a.ts)
           .slice(0, MAX_REF_PHOTOS);

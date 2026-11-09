@@ -10,7 +10,8 @@ import { applyH, invertH } from '../../geo/homography';
 import { GROUPS, type PieceColours } from '../../cv/colourGroups';
 import { loadPieceColours, makeGroups, type Group, type Groups } from '../../project/groups';
 import { emptyTray, moveToTray, trayCountOf, trayCounts } from '../../project/trays';
-import { getBlob, updateProject } from '../../project/store';
+import { getBlob, getProject, updateProject } from '../../project/store';
+import { snapsOfBatch } from '../../project/batches';
 import type { PieceRow, Project, SnapRow } from '../../project/types';
 import { logError, logInfo } from '../../log/logger';
 
@@ -256,7 +257,9 @@ export function TablePhoto({
     let live = true;
     const made: string[] = [];
     void (async () => {
-      const snaps = (await db().snaps.where('projectId').equals(projectId).toArray())
+      // This batch's photos only (M7): earlier batches show another table layout.
+      const project = await getProject(projectId);
+      const snaps = snapsOfBatch(project ?? {}, await db().snaps.where('projectId').equals(projectId).toArray())
         .filter((s) => (s.kind === 'overview' || s.kind === 'detail') && s.blobId && s.imgToTable)
         // Overviews first, then the newest.
         .sort((a, b) => Number(b.kind === 'overview') - Number(a.kind === 'overview') || b.ts - a.ts);

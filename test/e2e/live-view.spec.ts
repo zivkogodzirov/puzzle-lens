@@ -182,8 +182,8 @@ test.describe('what to test', () => {
     await expect(page.getByTestId('test-tab-new')).toBeVisible();
     await page.getByTestId('test-tab').click();
     const sheet = page.getByTestId('test-sheet');
-    await expect(sheet.locator('h2').first()).toContainText('M6');
-    await expect(sheet).toContainText('Which pieces join');
+    await expect(sheet.locator('h2').first()).toContainText('M7');
+    await expect(sheet).toContainText('Start a new batch');
     await expect(sheet).not.toContainText('{version}');
     const ticks = sheet.getByTestId('test-tick');
     expect(await ticks.count()).toBeGreaterThanOrEqual(5);

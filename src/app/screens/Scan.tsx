@@ -5,6 +5,7 @@ import { readerWorker, restartReader } from '../workers';
 import { TableCamera, type CaptureMeta } from '../components/TableCamera';
 import { deleteBlob, getProject, newId, projectBlobId, putBlob, updateProject } from '../../project/store';
 import { measurePitch, planMerge } from '../../project/catalog';
+import { snapsOfBatch } from '../../project/batches';
 import { Coverage, sortingArea, type Area } from '../../scan/coverage';
 import { FREE_RULES, markerCentres, type CaptureKind } from '../../scan/autoCapture';
 import { applyH, invertH } from '../../geo/homography';
@@ -168,7 +169,9 @@ export function ScanScreen() {
       const p = await getProject(id);
       setProject(p ?? null);
       if (!p) return;
-      const [ps, ss] = await Promise.all([db().pieces.where('projectId').equals(id).toArray(), db().snaps.where('projectId').equals(id).toArray()]);
+      const [ps, ss0] = await Promise.all([db().pieces.where('projectId').equals(id).toArray(), db().snaps.where('projectId').equals(id).toArray()]);
+      // Only this batch's photos (M7): earlier batches show another table layout.
+      const ss = snapsOfBatch(p, ss0);
       setPieces(ps);
       setSnaps(ss);
       // The close-up view size comes from the newest close-up, if any.
@@ -524,11 +527,16 @@ export function ScanScreen() {
       const next = await updateProject(project.id, { ...(pitch2 ? { piecePitch: pitch2 } : {}), ...(scaleChanged ? { scaleSource: 'coin' as const } : {}) });
       setProject(next);
       setPieces(all);
-      if (scaleChanged) setSnaps(await db().snaps.where('projectId').equals(project.id).toArray());
+      if (scaleChanged) setSnaps(snapsOfBatch(next, await db().snaps.where('projectId').equals(project.id).toArray()));
       else setSnaps((s) => [...s, snap]);
       const lines0: string[] = [];
       if (plan.moved || plan.missing) logInfo('scan', `Moved pieces recognised: ${plan.moved}; no longer at their spot: ${plan.missing}`);
-      if (plan.moved) lines0.push(`${plan.moved === 1 ? '1 piece was' : `${plan.moved} pieces were`} moved: recognised, not counted again.`);
+      if (plan.back)
+        lines0.push(
+          `${plan.back === 1 ? '1 piece' : `${plan.back} pieces`} set aside in an earlier batch ${plan.back === 1 ? 'is' : 'are'} back: recognised, not counted again.`,
+        );
+      const movedHere = plan.moved - plan.back;
+      if (movedHere) lines0.push(`${movedHere === 1 ? '1 piece was' : `${movedHere} pieces were`} moved: recognised, not counted again.`);
       if (plan.pending)
         lines0.push(
           `${plan.pending === 1 ? '1 piece' : `${plan.pending} pieces`} may be ${plan.pending === 1 ? 'one' : 'ones'} you moved: check ${plan.pending === 1 ? 'it' : 'them'} on the puzzle page ("Pieces to check"), or take a close-up.`,

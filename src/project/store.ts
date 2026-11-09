@@ -67,6 +67,7 @@ export function normalizeProject(row: Partial<Project> & { id: string }): Projec
         : null,
     answers: Array.isArray(row.answers) ? row.answers : [],
     pairAnswers: Array.isArray(row.pairAnswers) ? row.pairAnswers : [],
+    batch: row.batch && Number.isFinite(row.batch.n) && Number.isFinite(row.batch.startedAt) ? row.batch : null,
   };
 }
 
@@ -197,16 +198,20 @@ export async function deleteBlob(id: string): Promise<void> {
   await db().blobs.delete(id);
 }
 
-/** Pieces catalogued for a puzzle: on the table now, put into trays, in the puzzle (M5 part 2), and no longer seen at their spot (missing). */
+/**
+ * Pieces catalogued for a puzzle: on the table now (pieces to check included), put into trays, in
+ * the puzzle (M5 part 2), no longer seen at their spot (missing), and set aside in an earlier batch (M7).
+ */
 export async function countPiecesByStatus(
   projectId: string,
-): Promise<{ table: number; missing: number; tray: number; placed: number; pending: number; all: number }> {
+): Promise<{ table: number; missing: number; tray: number; placed: number; pending: number; aside: number; all: number }> {
   const rows = await db().pieces.where('projectId').equals(projectId).toArray();
-  const missing = rows.filter((p) => p.status === 'missing').length;
-  const tray = rows.filter((p) => p.status === 'tray').length;
-  const placed = rows.filter((p) => p.status === 'placed').length;
-  const pending = rows.filter((p) => p.status === 'pending').length;
-  return { table: rows.length - missing - tray - placed, missing, tray, placed, pending, all: rows.length };
+  const n = (s: PieceRow['status']) => rows.filter((p) => p.status === s).length;
+  const missing = n('missing');
+  const tray = n('tray');
+  const placed = n('placed');
+  const aside = n('aside');
+  return { table: rows.length - missing - tray - placed - aside, missing, tray, placed, pending: n('pending'), aside, all: rows.length };
 }
 
 /** Number of pieces catalogued for a puzzle. */

@@ -146,7 +146,7 @@ test('pieces are grouped by colour, light up on the photo, go into a tray and ba
   await page.getByTestId('tray-move').click();
   await expect(page.getByTestId('tray-note')).toContainText('3 pieces in tray A');
   await expect(page.getByTestId('tray-summary')).toContainText('In trays: A 3');
-  await expect(page.getByTestId('puzzle-tray-count')).toContainText('on the table, 3 in trays');
+  await expect(page.getByTestId('puzzle-status-counts')).toContainText('6 on the table, 3 in trays');
   await expect(page.getByTestId('tray-count')).toContainText('Fixed while pieces are in trays');
   await expect(page.getByTestId('catalog').locator('.thumb-btn')).toHaveCount(6);
 

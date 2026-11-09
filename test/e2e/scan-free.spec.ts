@@ -11,6 +11,7 @@ const W = 4032;
 const H = 3024;
 let overview = '';
 let closeUp = '';
+let respread = '';
 let visible = 0;
 
 test.beforeAll(async () => {
@@ -27,6 +28,9 @@ test.beforeAll(async () => {
   const c = await renderScene({ ...base, camera: { x: 280, y: 220, heightMm: 620, tiltDeg: 2, tiltDirDeg: 40, zoom: 2, imageSize: [W, H] } });
   overview = `data:image/jpeg;base64,${o.jpeg.toString('base64')}`;
   closeUp = `data:image/jpeg;base64,${c.jpeg.toString('base64')}`;
+  // The same kind of pieces spread out anew (another layout): a new batch (M7).
+  const b = await renderScene({ ...base, seed: 4242, light: { dirDeg: 80 } });
+  respread = `data:image/jpeg;base64,${b.jpeg.toString('base64')}`;
   visible = o.truth.pieces.filter((p) => !p.faceDown && p.visibleShare > 0.99).length;
 });
 
@@ -140,5 +144,84 @@ test.describe('scan mode (M5 part 4)', () => {
     await page.getByTestId('snap').click();
     await expect(page.getByTestId('scan-note')).toContainText('Quick scan done', { timeout: 150_000 });
     await expect(page.getByTestId('table-camera')).toHaveAttribute('data-mode', 'overview');
+  });
+});
+
+test.describe('batches (M7)', () => {
+  test.use({ fakeCameraOptions: { width: W, height: H, fps: 8 }, persistentStorage: true });
+  test.setTimeout(600_000);
+
+  test('a table spread anew can’t be matched; a new batch sets the pieces aside and the next photo starts a fresh table', async ({ page }) => {
+    await page.addInitScript((url) => {
+      (window as unknown as { __fakeScene?: string }).__fakeScene = url;
+    }, overview);
+    await gotoScreen(page, '');
+    const id = 'e2e-batch';
+    await page.evaluate(async (pid) => {
+      const req = indexedDB.open('puzzle-lens');
+      const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
+      await new Promise<void>((res) => {
+        const tx = dbh.transaction('projects', 'readwrite');
+        tx.objectStore('projects').put({
+          id: pid,
+          name: 'Batches',
+          createdAt: 1,
+          updatedAt: 2,
+          pieceCount: 48,
+          grid: { cols: 8, rows: 6, source: 'suggested' },
+          box: null,
+          markerMap: null,
+          tableModel: null,
+          piecePitch: null,
+          setupStep: 6,
+          tracking: 'pieces',
+        });
+        tx.oncomplete = () => res();
+      });
+      dbh.close();
+    }, id);
+    await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}`), id);
+    const tilt = async () => {
+      await page.getByTestId('allow-tilt').click();
+      await page.evaluate(() => {
+        setInterval(() => dispatchEvent(Object.assign(new Event('deviceorientation'), { alpha: 0, beta: 1, gamma: -1 })), 50);
+      });
+    };
+    // Batch 1.
+    await page.getByTestId('scan-pieces').click();
+    await tilt();
+    await expect(page.getByTestId('scan-note')).toContainText('Found', { timeout: 150_000 });
+    const n1 = Number((await page.getByTestId('scan-count').innerText()).match(/\d+/)![0]);
+    // The pieces swept together and spread anew: that photo can't be placed on the old table.
+    await page.evaluate((url) => ((window as unknown as { __fakeScene?: string }).__fakeScene = url), respread);
+    await page.waitForTimeout(1500);
+    await expect(page.getByTestId('snap')).toBeEnabled({ timeout: 60_000 });
+    await page.getByTestId('snap').click();
+    await expect(page.getByTestId('scan-note')).toContainText('could not be matched', { timeout: 150_000 });
+
+    // A new batch.
+    await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}`), id);
+    await expect(page.getByTestId('puzzle-pieces')).toContainText(String(n1));
+    await page.getByTestId('new-batch').click();
+    await expect(page.getByTestId('new-batch-confirm')).toContainText(`${n1} pieces on the table are set aside`);
+    await page.getByTestId('new-batch-confirm').screenshot({ path: test.info().outputPath('new-batch-confirm.png') });
+    await page.getByTestId('new-batch-yes').click();
+    await expect(page.getByTestId('scan-bin-note')).toContainText(`Batch 2 started: ${n1} pieces set aside`);
+    await expect(page.getByTestId('puzzle-status-counts')).toContainText(`0 on the table, ${n1} set aside`);
+    await expect(page.getByTestId('puzzle-batch')).toContainText('Batch 2');
+    await expect(page.getByTestId('new-batch')).toHaveCount(0);
+    await page.screenshot({ path: test.info().outputPath('new-batch-started.png'), fullPage: true });
+
+    // The next photo starts a fresh table: its pieces are read (as new ones).
+    await page.getByTestId('scan-pieces').click();
+    await expect(page.getByTestId('table-camera')).toHaveAttribute('data-mode', 'overview');
+    // (The tilt sensor is allowed already, and the phone still held flat.)
+    await expect(page.getByTestId('scan-note')).toContainText('Found', { timeout: 150_000 });
+    await expect(page.getByTestId('scan-note')).not.toContainText('could not be matched');
+    const text = await page.getByTestId('scan-note').innerText();
+    const added = Number(text.match(/\((\d+) new\)/)![1]);
+    expect(added).toBeGreaterThanOrEqual(Math.floor(0.85 * visible));
+    await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}`), id);
+    await expect(page.getByTestId('puzzle-status-counts')).toContainText(`${added} on the table, ${n1} set aside`);
   });
 });

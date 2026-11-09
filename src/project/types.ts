@@ -110,6 +110,12 @@ export interface Project {
   answers?: SpotAnswer[];
   /** Pairs the owner joined, or said don't join (M6), oldest first (src/project/answers.ts). */
   pairAnswers?: PairAnswer[];
+  /**
+   * The batch on the table now (M7, src/project/batches.ts): its number (from 1) and when it was
+   * started. Photos taken before `startedAt` belong to earlier batches (another table layout).
+   * Missing = batch 1, started with the puzzle.
+   */
+  batch?: { n: number; startedAt: number } | null;
 }
 
 /**
@@ -182,7 +188,12 @@ export interface OpenSpots {
   ts: number;
 }
 
-export type PieceStatus = 'table' | 'tray' | 'placed' | 'missing' | 'pending';
+/**
+ * Where a piece is: on the table, in a tray, in the puzzle, no longer seen at its spot (missing),
+ * to check (pending, M5 part 3), or set aside when a new batch was started (M7: back in the box,
+ * recognised by its picture when it comes back).
+ */
+export type PieceStatus = 'table' | 'tray' | 'placed' | 'missing' | 'pending' | 'aside';
 
 export interface PieceFlags {
   /** Probably two or more touching pieces ("spread these apart"). */
