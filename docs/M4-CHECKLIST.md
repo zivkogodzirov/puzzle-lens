@@ -65,6 +65,8 @@ Part 4b (after your screenshot): colours are now evened out for the lamp. Your p
 8. Best real test, if you can: scan a bigger pile of mixed pieces and sort them into 6 trays. Then tell me if any tray is a mix that doesn't make sense, with a screenshot.
 
 ## Part I: Fill this spot (part 5)
+✅ Checked on your iPhone 2026-11-09: the right piece shows for your holes.
+
 1. Update the app (Part A). Settings should show the version I sent you.
 2. Open *The Kiss*. Under Pieces, tap **🎯 Fill this spot**. Your box picture shows the 21 empty spots as light squares.
 3. Tap one of the top-right holes, e.g. column 26, row 1. A close-up shows it in green, and below it **The piece for this spot** with "Strong" and a %. Check it's really the piece for that hole.

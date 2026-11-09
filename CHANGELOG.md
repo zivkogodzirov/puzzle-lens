@@ -4,7 +4,7 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
-### M4 (part 5): Fill this spot (2026-11-09; tested in the app on the Mac, not yet on your iPhone)
+### M4 (part 5): Fill this spot (2026-11-09; tested in the app on the Mac and checked on your iPhone)
 - **🎯 Fill this spot** (puzzle page, under Pieces): the other way round from tapping a piece. Tap a spot on the box picture and see the pieces that may go there, each with its chance.
 - **With your holes photo** (empty spots): tap near a hole and the app picks that hole (the light squares). The piece chosen for it comes first, in a green frame with Strong / Likely and its %. Other possible pieces follow in yellow frames, each saying where its own best spot is. Pieces already in a tray say "in tray C".
 - **On the whole picture:** tap roughly, then tap the exact spot in the close-up (9 pieces across, with a grid), or move with the arrows. Listed: the pieces that have this spot among their best few. On real pieces that's often none, which the app says plainly.
