@@ -4,6 +4,11 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M5 (part 1b): live view tested on your real photos, matching improved (2026-11-09; tested on the Mac with your photos, not yet on your iPhone)
+- **Tested on your photos** (you couldn't test on the phone yet): IMG_9263 → IMG_9264 (the same 26 pieces from another place): every outline within **0.3 mm**. A simulated moving phone over IMG_9276 (your 21 pieces; turning, tilting, blur, light changes, 3 pieces moved by hand): table found in every frame, pieces typically within **0.3 mm**, 95 % within 1.5 mm, a rare frame up to ~5–8 mm.
+- **Better matching:** after the first fit, a second, guided pass compares each feature only with the ones the fit puts near it. It finds many more right matches: on the finished puzzle (IMG_9272 → IMG_9280) the grid now lands on the 21 holes within **5 mm** typically (worst 8 mm), instead of 21 mm (worst 46 mm); the steep shots IMG_9225 and IMG_9226 now match with 250 and 151 points instead of 88 and 39.
+- **Honest limit:** over the finished or half-built puzzle, its repeating seams can still throw a frame off by a piece or more now and then (simulated over IMG_9280: about 1 mm typically, but some frames 3–6 cm). Loose pieces on the table (each with its own print) are the reliable case. Very steep angles (IMG_9227) aren't recognised: hold the phone fairly flat.
+
 ### M5 (part 1): live view of your table, without markers (2026-11-09; tested in the app on the Mac, not yet on your iPhone)
 - **📷 Live view of my table** (puzzle page, under Pieces): the camera picture with every scanned piece outlined in its state colour, as in Show my table: green = spot known (labelled column·row, e.g. 26·1), blue = shape read, grey = found. The outlines stay on the pieces while you move the phone.
 - **No markers needed:** the app recognises your table from the pieces in your newest scan photos (up to 3). A full match (about 50 ms on the Mac) every 6th frame; in between, the matched points are simply followed from frame to frame (about 5 ms).

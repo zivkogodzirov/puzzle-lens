@@ -4,12 +4,19 @@
  * the same 26 shiny pieces from another place, turned 90°) stands in for a live frame (960 px).
  * The truth is the piece-based registration the scan itself uses (scanMarkerless with the first
  * photo's catalog), which is accurate to about a millimetre.
+ *
+ * IMG_9272 (the finished puzzle) → IMG_9280 (the same puzzle with 21 pieces out, from another
+ * place): the finished puzzle's 28 × 36 grid, carried into IMG_9280 by the live view, against the
+ * 21 holes the finished-puzzle check finds there. The repeating seams make this the hard case;
+ * the truth (corners found in each photo) is itself good to a few mm.
  */
 import { describe, expect, it } from 'vitest';
 import { ANCHOR, TableAnchor, upscaleH } from '../../src/cv/anchor';
 import { scanMarkerless } from '../../src/cv/scanMarkerless';
+import { puzzleQuad, readAssembledGrid } from '../../src/cv/assembledGrid';
+import type { Mat3, Vec2 } from '../../src/project/types';
 import { cvCounters } from '../../src/cv/scope';
-import { applyH, invertH, mulH } from '../../src/geo/homography';
+import { applyH, fitHomography, invertH, mulH } from '../../src/geo/homography';
 import { planMerge } from '../../src/project/catalog';
 import type { PixelBuffer } from '../../src/cv/frameAnalyser';
 import { getCv, type Cv } from '../helpers/cv';
@@ -78,5 +85,59 @@ describe('live view on the owner’s photos', () => {
       expect(cvCounters.liveScoped).toBe(0);
     },
     180_000,
+  );
+
+  const has2 = Boolean(path('IMG_9272') && path('IMG_9280'));
+  it.skipIf(!has2)(
+    'IMG_9272 (finished) → IMG_9280 (21 holes): the grid lands on the holes within half a piece',
+    async () => {
+      const cv = await getCv();
+      const a = await load(cv, path('IMG_9272')!);
+      const b = await load(cv, path('IMG_9280')!);
+      const quadOf = (img: PixelBuffer) => {
+        const r = scanMarkerless(cv, img, { catalog: [], zoom: 1, kind: 'overview', table: null });
+        const area = r.regions.find((g) => g.kind === 'assembled')!;
+        const toPx = invertH(r.imgToCatalog!)!;
+        const out: number[] = [];
+        for (let i = 0; i < area.outlineMm.length; i += 2) out.push(...applyH(toPx, [area.outlineMm[i]!, area.outlineMm[i + 1]!]));
+        return puzzleQuad(cv, img, out)!;
+      };
+      const mmQuad: Vec2[] = [
+        [0, 0],
+        [500, 0],
+        [500, 700],
+        [0, 700],
+      ];
+      const ref = shrink(cv, a, ANCHOR.refMaxSide);
+      const anchor = new TableAnchor(cv);
+      anchor.setReferences([{ pixels: ref.buf, channels: 4, imgToTable: mulH(fitHomography(quadOf(a), mmQuad)! as Mat3, upscaleH(ref.scale)) }]);
+      const live = shrink(cv, b, 960);
+      const g = new cv.Mat(live.buf.height, live.buf.width, cv.CV_8UC4);
+      g.data.set(live.buf.data);
+      const gray = new cv.Mat();
+      cv.cvtColor(g, gray, cv.COLOR_RGBA2GRAY);
+      const fix = anchor.track(gray)!;
+      g.delete();
+      gray.delete();
+      expect(fix).not.toBeNull();
+      const toFull = mulH(upscaleH(live.scale), fix.tableToImg);
+      const qb = quadOf(b);
+      const grid = readAssembledGrid(cv, b, qb, { pieceCount: 1000, grid: { cols: 28, rows: 36 } })!;
+      expect(grid.gaps.length).toBe(21);
+      const ppm = Math.hypot(qb[1]![0] - qb[0]![0], qb[1]![1] - qb[0]![1]) / 500;
+      const errs = grid.gaps.map(([c, r], i) => {
+        const p = applyH(toFull, [((c + 0.5) * 500) / 28, ((r + 0.5) * 700) / 36]);
+        return Math.hypot(p[0] - grid.gapsPx[i]![0], p[1] - grid.gapsPx[i]![1]) / ppm;
+      });
+      errs.sort((x, y) => x - y);
+      console.log(
+        `IMG_9272 → IMG_9280: ${fix.inliers}/${fix.candidates} points; 21 holes: median ${errs[10]!.toFixed(1)} mm, worst ${errs[20]!.toFixed(1)} mm`,
+      );
+      // Half a piece is ~9 mm.
+      expect(errs[10]!).toBeLessThan(7);
+      expect(errs[20]!).toBeLessThan(12);
+      anchor.dispose();
+    },
+    300_000,
   );
 });

@@ -30,6 +30,19 @@ export const ANCHOR = {
   frameFeatures: 1000,
   /** Lowe's ratio test: best match clearly better than the second best. */
   ratio: 0.8,
+  /**
+   * Guided matching after the first fit: each frame feature is compared only with reference
+   * features the fit puts within this many px (analysis px), first wide, then narrow. Finds many
+   * more right matches where the print repeats (a finished puzzle's seams) and spreads them over the
+   * whole view, so the fit holds at the edges too (owner's IMG_9272 → IMG_9280).
+   */
+  guideRadii: [24, 8] as readonly number[],
+  /** Guided: the best local match must be at most this far (Hamming bits of 256)… */
+  guideMaxBits: 64,
+  /** …and clearly better than the second-best local one. */
+  guideRatio: 0.85,
+  /** RANSAC threshold for the guided fits (analysis px). */
+  guideRansacPx: 3,
   /** RANSAC: a point this far (analysis px) from where the fit puts it is an outlier. */
   ransacPx: 4,
   /** Fewer agreeing points than this: no fix (not enough of the table recognised). */
@@ -127,11 +140,27 @@ export function plausible(tableToImg: Mat3, imgW: number, imgH: number): { ok: b
   return { ok, pxPerMm };
 }
 
+/** A fit with its agreeing points (table mm and image px). */
+interface Fitted {
+  fix: AnchorFix;
+  keepMm: number[];
+  keepPx: number[];
+}
+
+/** Set bits in each byte value (Hamming distance of ORB descriptors). */
+const POPCOUNT = Uint8Array.from({ length: 256 }, (_, v) => {
+  let c = 0;
+  for (let x = v; x; x >>= 1) c += x & 1;
+  return c;
+});
+
 export class TableAnchor {
   private readonly cv: Cv;
   private refDesc: Mat | null = null;
   /** Reference features' places on the table (mm), x0, y0, x1, y1, … */
   private refMm = new Float32Array(0);
+  /** Reference descriptors (32 bytes each), also kept here for guided matching. */
+  private refBytes = new Uint8Array(0);
   private orb: { delete(): void; detectAndCompute: (...a: unknown[]) => void } | null = null;
   private matcher: { delete(): void; knnMatch: (...a: unknown[]) => void } | null = null;
   private prev: Mat | null = null;
@@ -185,6 +214,7 @@ export class TableAnchor {
     refDesc.data.set(all);
     this.refDesc = refDesc;
     this.refMm = Float32Array.from(mms);
+    this.refBytes = all;
     this.features = descs.length;
     this.orb = persistent(new cv.ORB(ANCHOR.frameFeatures));
     this.matcher = persistent(new cv.BFMatcher(cv.NORM_HAMMING, false));
@@ -250,8 +280,79 @@ export class TableAnchor {
         mm.push(this.refMm[a.trainIdx * 2]!, this.refMm[a.trainIdx * 2 + 1]!);
         px.push(pt.x, pt.y);
       }
-      return this.fit(mm, px, gray.cols, gray.rows, 'features');
+      let best = this.fit(mm, px, gray.cols, gray.rows, 'features', ANCHOR.ransacPx);
+      if (!best) return null;
+      // Guided matching around the first fit.
+      const xy = new Float32Array(2 * n);
+      for (let i = 0; i < n; i++) {
+        const pt = kps.get(i).pt as { x: number; y: number };
+        xy[2 * i] = pt.x;
+        xy[2 * i + 1] = pt.y;
+      }
+      const fd = Uint8Array.from(desc.data as Uint8Array);
+      for (const r of ANCHOR.guideRadii) {
+        const g = this.guided(best.fix.tableToImg, xy, fd, gray.cols, gray.rows, r);
+        const next = this.fit(g.mm, g.px, gray.cols, gray.rows, 'features', ANCHOR.guideRansacPx);
+        if (!next || next.fix.inliers < best.fix.inliers) break;
+        best = next;
+      }
+      this.keepForFlow(best);
+      return best.fix;
     });
+  }
+
+  /** Each frame feature against the reference features `tableToImg` puts within `radius` px of it. */
+  private guided(tableToImg: Mat3, xy: Float32Array, desc: Uint8Array, w: number, h: number, radius: number): { mm: number[]; px: number[] } {
+    const H = tableToImg;
+    const gw = Math.ceil((w + 2 * radius) / radius) + 1;
+    const gh = Math.ceil((h + 2 * radius) / radius) + 1;
+    const buckets: number[][] = Array.from({ length: gw * gh }, () => []);
+    const proj = new Float32Array(this.features * 2);
+    for (let j = 0; j < this.features; j++) {
+      const X = this.refMm[2 * j]!;
+      const Y = this.refMm[2 * j + 1]!;
+      const d = H[6]! * X + H[7]! * Y + H[8]!;
+      if (!(d > 0)) continue;
+      const x = (H[0]! * X + H[1]! * Y + H[2]!) / d;
+      const y = (H[3]! * X + H[4]! * Y + H[5]!) / d;
+      if (!(x >= -radius && y >= -radius && x <= w + radius && y <= h + radius)) continue;
+      proj[2 * j] = x;
+      proj[2 * j + 1] = y;
+      buckets[Math.floor((y + radius) / radius) * gw + Math.floor((x + radius) / radius)]!.push(j);
+    }
+    const ref = this.refBytes;
+    const mm: number[] = [];
+    const px: number[] = [];
+    const r2 = radius * radius;
+    for (let i = 0; i < xy.length / 2; i++) {
+      const x = xy[2 * i]!;
+      const y = xy[2 * i + 1]!;
+      const bx = Math.floor((x + radius) / radius);
+      const by = Math.floor((y + radius) / radius);
+      let d1 = 999;
+      let d2 = 999;
+      let j1 = -1;
+      for (let yy = by - 1; yy <= by + 1; yy++)
+        for (let xx = bx - 1; xx <= bx + 1; xx++) {
+          if (xx < 0 || yy < 0 || xx >= gw || yy >= gh) continue;
+          for (const j of buckets[yy * gw + xx]!) {
+            const dx = proj[2 * j]! - x;
+            const dy = proj[2 * j + 1]! - y;
+            if (dx * dx + dy * dy > r2) continue;
+            let bits = 0;
+            for (let b = 0; b < 32; b++) bits += POPCOUNT[desc[i * 32 + b]! ^ ref[j * 32 + b]!]!;
+            if (bits < d1) {
+              d2 = d1;
+              d1 = bits;
+              j1 = j;
+            } else if (bits < d2) d2 = bits;
+          }
+        }
+      if (j1 < 0 || d1 > ANCHOR.guideMaxBits || d1 >= ANCHOR.guideRatio * d2) continue;
+      mm.push(this.refMm[2 * j1]!, this.refMm[2 * j1 + 1]!);
+      px.push(x, y);
+    }
+    return { mm, px };
   }
 
   private byFlow(gray: Mat): AnchorFix | null {
@@ -281,15 +382,30 @@ export class TableAnchor {
         mm.push(prevMm[2 * i]!, prevMm[2 * i + 1]!);
         px.push(x, y);
       }
-      const fix = this.fit(mm, px, w, h, 'flow');
+      const fit = this.fit(mm, px, w, h, 'flow', ANCHOR.ransacPx);
       // Most followed points must still agree; otherwise match afresh.
-      if (fix && fix.inliers < 0.6 * n) return null;
-      return fix;
+      if (!fit || fit.fix.inliers < 0.6 * n) return null;
+      this.keepForFlow(fit);
+      return fit.fix;
     });
   }
 
-  /** RANSAC homography table mm → image px; keeps the agreeing points for flow. */
-  private fit(mm: number[], px: number[], w: number, h: number, via: AnchorVia): AnchorFix | null {
+  /** Follow at most maxFlowPoints of the agreeing points into the next frame (spread: every k-th). */
+  private keepForFlow(f: Fitted): void {
+    const inliers = f.keepMm.length / 2;
+    const step = Math.max(1, Math.ceil(inliers / ANCHOR.maxFlowPoints));
+    const fm: number[] = [];
+    const fp: number[] = [];
+    for (let i = 0; i < inliers; i += step) {
+      fm.push(f.keepMm[2 * i]!, f.keepMm[2 * i + 1]!);
+      fp.push(f.keepPx[2 * i]!, f.keepPx[2 * i + 1]!);
+    }
+    this.flowMm = Float32Array.from(fm);
+    this.flowPx = Float32Array.from(fp);
+  }
+
+  /** RANSAC homography table mm → image px, with the agreeing points. */
+  private fit(mm: number[], px: number[], w: number, h: number, via: AnchorVia, ransacPx: number): Fitted | null {
     const cv = this.cv;
     const n = mm.length / 2;
     if (n < ANCHOR.minInliers) return null;
@@ -297,7 +413,7 @@ export class TableAnchor {
       const src = s.keep(cv.matFromArray(n, 1, cv.CV_32FC2, mm));
       const dst = s.keep(cv.matFromArray(n, 1, cv.CV_32FC2, px));
       const mask = s.keep(new cv.Mat());
-      const Hm = s.keep(cv.findHomography(src, dst, cv.RANSAC, ANCHOR.ransacPx, mask, 2000, 0.995));
+      const Hm = s.keep(cv.findHomography(src, dst, cv.RANSAC, ransacPx, mask, 2000, 0.995));
       if (Hm.empty() || Hm.rows !== 3) return null;
       const H = Array.from(Hm.data64F) as Mat3;
       const k = mask.data as Uint8Array;
@@ -315,18 +431,8 @@ export class TableAnchor {
       if (!pl.ok) return null;
       const inv = invertH(norm);
       if (!inv) return null;
-      // Follow at most maxFlowPoints of the agreeing points (spread: every k-th).
-      const step = Math.max(1, Math.ceil(inliers / ANCHOR.maxFlowPoints));
-      const fm: number[] = [];
-      const fp: number[] = [];
-      for (let i = 0; i < inliers; i += step) {
-        fm.push(keepMm[2 * i]!, keepMm[2 * i + 1]!);
-        fp.push(keepPx[2 * i]!, keepPx[2 * i + 1]!);
-      }
-      this.flowMm = Float32Array.from(fm);
-      this.flowPx = Float32Array.from(fp);
       const quality = inliers >= ANCHOR.goodInliers && inliers >= 0.3 * n ? 'good' : 'weak';
-      return { tableToImg: norm, imgToTable: inv, inliers, candidates: n, via, quality, pxPerMm: pl.pxPerMm };
+      return { fix: { tableToImg: norm, imgToTable: inv, inliers, candidates: n, via, quality, pxPerMm: pl.pxPerMm }, keepMm, keepPx };
     });
   }
 
@@ -334,6 +440,7 @@ export class TableAnchor {
     for (const m of [this.refDesc, this.orb, this.matcher]) if (m) freePersistent(m);
     this.refDesc = this.orb = this.matcher = null;
     this.refMm = new Float32Array(0);
+    this.refBytes = new Uint8Array(0);
     this.features = 0;
     this.reset();
   }

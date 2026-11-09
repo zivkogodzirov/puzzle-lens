@@ -20,6 +20,10 @@ Allow about 10 minutes. These steps are for version **{version}** (Settings show
 ## This 🧪 Test tab
 1. Can you read these steps and tick them? Close this box and open it again: your ticks should still be there.
 
+## Good to know
+- Tested on the Mac with your own photos: on loose pieces the outlines sat within a fraction of a millimetre. Over the finished or half-built puzzle the repeating seams can make the outlines jump by a piece now and then; loose pieces on plain table are the reliable case.
+- Hold the phone fairly flat. A very steep angle (like your IMG_9227) isn't recognised.
+
 ## Please tell me
 - Did the outlines sit on the right pieces? Roughly how far off, if at all?
 - Does it feel smooth? The small number after "Tracking" (e.g. **15/s**) is how many times per second it finds the table.
