@@ -84,6 +84,8 @@ Part 4b (after your screenshot): colours are now evened out for the lamp. Your p
 5. Tap **Border** among the piece groups: the top-right pieces show small arrows (↑ top edge, ↗ the corner, → right edge), and a line counts them.
 
 ## Part K: box setup checks (part 7)
+✅ Checked on your iPhone 2026-11-09.
+
 1. Update the app (Part A). Settings should show the version I sent you.
 2. Open *The Kiss*. Under the piece groups: **"Table contrast ✓ Only about 1 % of the picture is close to your table's colour…"**. Tap **Show where**: a few spots on the white lace sleeve and the collar are marked in pink. Do those look like the pieces that are hardest to see on your table?
 3. You won't see a "Box picture check" for *The Kiss*: your box picture already fits the real puzzle (within 0.15 of a piece). It appears only when the pieces show the box picture is a little bigger or smaller than the puzzle.
