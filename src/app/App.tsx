@@ -11,6 +11,7 @@ import { LogScreen } from './screens/Log';
 import { MarkerSheetsScreen, NewPuzzleScreen } from './screens/NewPuzzle';
 import { PuzzleScreen } from './screens/Puzzle';
 import { TrayLabelsScreen } from './screens/TrayLabels';
+import { TestSteps } from './components/TestSteps';
 
 export function App() {
   const r = route.value;
@@ -29,6 +30,7 @@ export function App() {
       {r === 'markers' && <MarkerSheetsScreen />}
       {r === 'scan' && <ScanScreen />}
       {r === 'trays' && <TrayLabelsScreen />}
+      <TestSteps />
     </div>
   );
 }

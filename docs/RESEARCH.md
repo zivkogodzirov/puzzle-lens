@@ -244,6 +244,8 @@ Our markers will be hundreds of pixels across and static, so detector speed and 
 - **Markerless fallback:** RANSAC on already-catalogued piece centroids against the current detections. puzzle-helper's similarity-transform RANSAC works this way, but we upgrade it to a homography once there are ≥ 6 links.
 - **Marker sheets are masked out** of piece detection (their positions are known). Pieces partly under a sheet are flagged.
 
+**Addendum 2026-11-09 (M5 part 1, measured): live tracking without markers.** The owner scans without markers, so the live view finds the table from the pieces' print instead: ORB features of the puzzle's overview photos (with their table position in mm) matched to each live frame, a RANSAC homography, and Lucas–Kanade optical flow on the agreeing points between full matches. Piece-centroid RANSAC (the fallback above) would need the pieces found in every live frame, which is far too slow at 30 fps; ORB on the print is cheap and the white table gives almost no features to confuse it. Measured: within 1 mm on synthetic tables from other camera places (up to 90° turned, 18° tilted, ±30 % height), 1.2 mm in a slow pan; on the owner's IMG_9263 → IMG_9264, 0.42 mm worst. A full match costs ~50 ms on the Mac (the brute-force matching of 1,000 × 2,500 features is most of it), a flow frame ~5 ms; the phone's speed is checked in the owner's test (the rate is shown on screen).
+
 ---
 
 ## 6. Finding pieces (segmentation)

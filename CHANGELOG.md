@@ -4,6 +4,16 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M5 (part 1): live view of your table, without markers (2026-11-09; tested in the app on the Mac, not yet on your iPhone)
+- **📷 Live view of my table** (puzzle page, under Pieces): the camera picture with every scanned piece outlined in its state colour, as in Show my table: green = spot known (labelled column·row, e.g. 26·1), blue = shape read, grey = found. The outlines stay on the pieces while you move the phone.
+- **No markers needed:** the app recognises your table from the pieces in your newest scan photos (up to 3). A full match (about 50 ms on the Mac) every 6th frame; in between, the matched points are simply followed from frame to frame (about 5 ms).
+- A line at the top says **Tracking ✓ · N pieces in view** (with how many times per second it finds the table), **hold steady** when it's unsure, or **Looking for your pieces** when the camera sees something else.
+- **Tap a piece** to see what the app knows about it; **Point it out** makes it pulse, and an arrow at the screen's edge shows the way when it's out of view; **Show where it goes** opens its spot on the box picture.
+- **🎯 Fill this spot → 📷 Find it live:** the possible pieces for the chosen hole pulse on the live picture (green = the best one, yellow = also possible).
+- **How exact:** on computer-made tables seen from other places (moved 80 mm, turned up to 90°, tilted 18°, 30 % higher or lower) every piece was within 1 mm of the truth; during a slow pan, within 1.2 mm. On your photos IMG_9263 → IMG_9264 (the same 26 pieces from another place, phone turned 90°): within 0.4 mm. 10 minutes of live frames: memory doesn't grow.
+- **Not yet:** pieces moved by hand keep their old outline until you scan again (re-identification comes in a later M5 part); while the phone moves fast the outlines may trail a little (smoothing comes later).
+- **🧪 Test tab** (your request): a small tab on the right edge of every screen opens the same test steps I send you in the chat, with tick boxes that stay on the phone. A red dot means there are new steps you haven't opened yet.
+
 ### M4 (part 7): box setup checks, M4 finished (2026-11-09; tested in the app on the Mac and checked on your iPhone)
 - **Border question** (new-puzzle wizard, after straightening the box picture): "Does this picture show exactly the puzzle?" Yes / It has a frame or white border (then: put the dots inside the frame, with an **Adjust corners** button) / The box shows a bit more or less / Not sure. The answer is kept.
 - **Table-contrast check** (puzzle page, under the piece groups, once pieces are scanned): how much of the picture is close to your table's colour, so pieces from there stand out little and a scan may miss them; **Show where** marks those spots on the box picture. Your *The Kiss* on your white table: about 1 % (the white lace sleeve and the collar), shown as a calm ✓ line; from 2 % on, a warning suggests checking those pieces or sorting them on a darker cloth.

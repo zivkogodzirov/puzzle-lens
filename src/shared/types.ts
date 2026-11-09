@@ -1,6 +1,7 @@
 /** Types shared between the main thread and the workers. Keep this file free of DOM-only APIs. */
 import type { TableFix } from '../geo/tableFix';
 import type { LivePieceStats } from '../cv/frameAnalyser';
+import type { AnchorFix } from '../cv/anchor';
 
 export type StageTimings = Record<string, number>;
 
@@ -42,6 +43,8 @@ export interface TrackerFrameResult {
   table: TableFix | null;
   /** Quick piece statistics for the marker-free gauge (null unless switched on). */
   pieces: LivePieceStats | null;
+  /** Live view without markers (M5): the table found from the pieces; null = not found in this frame, undefined = not looking. */
+  anchor?: AnchorFix | null;
 }
 
 export interface FrameInfo {

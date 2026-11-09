@@ -4,7 +4,7 @@
  */
 import type { ColourMatch, Placement } from '../cv/placement';
 import type { CvBenchResult, PhotoStats, TrackerFrameResult, TrackerStatus, TwoXResult, WorkerInitInfo, WorkerMemory } from './types';
-import type { MarkerMap } from '../project/types';
+import type { MarkerMap, Mat3 } from '../project/types';
 import type { RectifyBoxResult } from '../cv/rectify';
 import type { TableSetupResult } from '../cv/tableSetup';
 import type { ScanPhotoResult } from '../cv/scanPhoto';
@@ -111,6 +111,13 @@ export type FreeScanReply = ScanMarkerlessResult & {
 
 export type ScanReply = ScanPhotoResult & { thumbs: Array<Blob | null>; preview: Blob; width: number; height: number; ms: number; decodeMs: number };
 
+export interface AnchorPhoto {
+  blob: Blob;
+  imgToTable: Mat3;
+  width: number;
+  height: number;
+}
+
 export interface TrackerApi {
   init(): Promise<WorkerInitInfo>;
   /** Takes ownership of a cloned camera track (transferred) and reads its frames until detach(). */
@@ -124,6 +131,11 @@ export interface TrackerApi {
   setTableMap(map: MarkerMap | null, zoom: number): void;
   /** Measure the pieces in every frame (for the marker-free gauge). */
   setPieceStats(on: boolean): void;
+  /**
+   * Live view without markers (M5): find the table in every frame from these photos of it
+   * (photo px → table mm each; width/height = the size imgToTable is for). Null switches it off.
+   */
+  setAnchor(refs: AnchorPhoto[] | null): Promise<{ features: number; photos: number; ms: number; error?: string }>;
   /** Longest gap between camera frames inside [startAbs, endAbs] (ms since epoch). */
   maxFrameGap(startAbs: number, endAbs: number): number;
   status(): TrackerStatus;

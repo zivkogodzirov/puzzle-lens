@@ -10,6 +10,7 @@ import { locateOnTable } from '../geo/tableFix';
 import type { MarkerMap } from '../project/types';
 import { cvErrorMessage, wasmBytes, type Cv } from './loadCv';
 import { upscaleCoord, type FrameAnalyser, type FrameAnalysis } from './frameAnalyser';
+import { scaleFix, TableAnchor, type AnchorReference } from './anchor';
 import { cvCounters } from './scope';
 import type { ReadFrame } from '../shared/frameRead';
 import type { FrameInfo, FrameSource, TrackerFrameResult, WorkerError, WorkerMemory } from '../shared/types';
@@ -100,6 +101,24 @@ export class TrackerCore {
   /** Measure the pieces in every frame (marker-free puzzles). */
   setPieceStats(on: boolean): void {
     this.analyser.pieceStats = on;
+  }
+
+  /**
+   * Live view without markers (M5): find the table in every frame from these pictures of it
+   * (the puzzle's overview photos). Null or [] switches it off. Returns the features kept.
+   * Markers are not looked for while it is on.
+   */
+  setAnchor(refs: AnchorReference[] | null): number {
+    if (!refs?.length) {
+      this.analyser.anchor?.dispose();
+      this.analyser.anchor = null;
+      this.analyser.markers = true;
+      return 0;
+    }
+    this.analyser.anchor ??= new TableAnchor(this.cv);
+    const n = this.analyser.anchor.setReferences(refs);
+    this.analyser.markers = n === 0;
+    return n;
   }
 
   setRate(fps: number): void {
@@ -343,6 +362,7 @@ export class TrackerCore {
       flip: extra.flip,
       frameInfo: extra.frameInfo,
       table,
+      anchor: analysis.anchor === undefined ? undefined : analysis.anchor && scaleFix(analysis.anchor, scale),
       pieces: analysis.pieces
         ? {
             ...analysis.pieces,

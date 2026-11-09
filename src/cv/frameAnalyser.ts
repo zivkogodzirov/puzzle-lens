@@ -4,6 +4,7 @@
  * Later milestones add the table homography and optical flow on top of this.
  */
 import { cvGuard, type Cv } from './loadCv';
+import { scaleFix, type AnchorFix, type TableAnchor } from './anchor';
 import { freePersistent, persistent, withScope } from './scope';
 import type { MarkerDetection, StageTimings } from '../shared/types';
 
@@ -36,6 +37,8 @@ export interface LivePieceStats {
 export interface FrameAnalysis {
   markers: MarkerDetection[];
   pieces?: LivePieceStats;
+  /** Live view without markers (M5): where the frame is on the table, found from the pieces (image px of the input). */
+  anchor?: AnchorFix | null;
   sharpness: number;
   analysisWidth: number;
   /** Size of the image that was passed in (the pixel space the marker corners are in). */
@@ -80,6 +83,10 @@ export class FrameAnalyser {
   private kernel: Mat | null = null;
   /** Also measure the pieces in each frame (marker-free mode). */
   pieceStats = false;
+  /** Look for printed markers (off in the marker-free live view, to save time). */
+  markers = true;
+  /** Find the table from the pieces (M5 live view), when set and ready. */
+  anchor: TableAnchor | null = null;
 
   constructor(cv: Cv, opts: Partial<FrameAnalyserOptions> = {}) {
     this.cv = cv;
@@ -145,24 +152,26 @@ export class FrameAnalyser {
 
     // 2. Markers
     t = performance.now();
-    const markers = withScope((s) => {
-      const corners = s.keep(new cv.MatVector());
-      const ids = s.keep(new cv.Mat());
-      const rejected = s.keep(new cv.MatVector());
-      this.detector!.detectMarkers(src, corners, ids, rejected);
-      const found: MarkerDetection[] = [];
-      const n = corners.size() as number;
-      // Copy the ids out first: corners.get() allocates, and if WASM memory grows the old view goes dead.
-      const idData = Int32Array.from(ids.data32S as Int32Array);
-      for (let i = 0; i < n; i++) {
-        const c = s.keep(corners.get(i));
-        const f: Float32Array = c.data32F;
-        const pts: number[] = [];
-        for (let k = 0; k < 8; k++) pts.push(upscaleCoord(f[k] ?? 0, scale));
-        found.push({ id: idData[i] ?? -1, corners: pts });
-      }
-      return found;
-    });
+    const markers = !this.markers
+      ? []
+      : withScope((s) => {
+          const corners = s.keep(new cv.MatVector());
+          const ids = s.keep(new cv.Mat());
+          const rejected = s.keep(new cv.MatVector());
+          this.detector!.detectMarkers(src, corners, ids, rejected);
+          const found: MarkerDetection[] = [];
+          const n = corners.size() as number;
+          // Copy the ids out first: corners.get() allocates, and if WASM memory grows the old view goes dead.
+          const idData = Int32Array.from(ids.data32S as Int32Array);
+          for (let i = 0; i < n; i++) {
+            const c = s.keep(corners.get(i));
+            const f: Float32Array = c.data32F;
+            const pts: number[] = [];
+            for (let k = 0; k < 8; k++) pts.push(upscaleCoord(f[k] ?? 0, scale));
+            found.push({ id: idData[i] ?? -1, corners: pts });
+          }
+          return found;
+        });
     timings.markers = performance.now() - t;
 
     // 3. Sharpness = variance of the Laplacian
@@ -183,7 +192,14 @@ export class FrameAnalyser {
       pieces = this.measurePieces(src, scale);
       timings.pieces = performance.now() - t;
     }
-    return { markers, pieces, sharpness, analysisWidth: aw, inputWidth: width, inputHeight: height, timings };
+    let anchor: AnchorFix | null | undefined;
+    if (this.anchor?.ready) {
+      t = performance.now();
+      const fix = this.anchor.track(src as never);
+      anchor = fix ? scaleFix(fix, scale) : null;
+      timings.anchor = performance.now() - t;
+    }
+    return { markers, pieces, anchor, sharpness, analysisWidth: aw, inputWidth: width, inputHeight: height, timings };
   }
 
   private measurePieces(src: Mat, scale: number): LivePieceStats {
@@ -246,7 +262,22 @@ export class FrameAnalyser {
   }
 
   dispose(): void {
-    for (const m of [this.detector, this.refine, this.params, this.dictionary, this.small, this.lap, this.mask, this.labels, this.stats, this.centroids, this.kernel]) if (m) freePersistent(m);
+    this.anchor?.dispose();
+    this.anchor = null;
+    for (const m of [
+      this.detector,
+      this.refine,
+      this.params,
+      this.dictionary,
+      this.small,
+      this.lap,
+      this.mask,
+      this.labels,
+      this.stats,
+      this.centroids,
+      this.kernel,
+    ])
+      if (m) freePersistent(m);
     this.mask = this.labels = this.stats = this.centroids = this.kernel = null;
     if (this.gray) freePersistent(this.gray);
     if (this.rgba) freePersistent(this.rgba);

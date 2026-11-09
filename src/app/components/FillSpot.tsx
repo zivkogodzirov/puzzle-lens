@@ -9,6 +9,7 @@ import { candidatesFor, nearestSpot, type SpotCandidate } from '../../project/fi
 import type { PieceRow, Project } from '../../project/types';
 import { useBlobUrl } from '../screens/Puzzle';
 import { TablePhoto } from './Trays';
+import { LiveTable } from './LiveTable';
 
 /** Cells across the close-up. */
 const ZOOM = 9;
@@ -43,6 +44,7 @@ export function FillSpot({
   const [sel, setSel] = useState<[number, number] | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [photo, setPhoto] = useState(false);
+  const [live, setLive] = useState(false);
   const aspect = project.box ? project.box.width / project.box.height : grid.cols / grid.rows;
   const cellAspect = (aspect * grid.rows) / grid.cols;
   const byId = useMemo(() => new Map(pieces.map((p) => [p.id, p])), [pieces]);
@@ -172,9 +174,27 @@ export function FillSpot({
               <button class="btn btn-block" data-testid="fill-photo" disabled={!onTable.length} onClick={() => setPhoto(true)}>
                 Show on my table photo
               </button>
+              <button class="btn btn-block" data-testid="fill-live" disabled={!onTable.length} onClick={() => setLive(true)}>
+                📷 Find it live
+              </button>
             </>
           )}
         </>
+      )}
+      {live && sel && (
+        <LiveTable
+          projectId={project.id}
+          pieces={onTable}
+          colourOf={(p) => (cands.find((c) => c.id === p.id)?.chosen ? BEST : OTHER)}
+          infoOf={(p) => {
+            const c = cands.find((q) => q.id === p.id);
+            return c ? `${c.chosen ? `${WORDS[c.verdict]}, ` : ''}${pct(c.p)} % for column ${sel[0] + 1}, row ${sel[1] + 1}.` : 'A possible piece.';
+          }}
+          find={onTable.map((p) => p.id)}
+          title={`Pieces for column ${sel[0] + 1}, row ${sel[1] + 1}`}
+          legend={<>Green: the best piece for this spot; yellow: also possible.</>}
+          onClose={() => setLive(false)}
+        />
       )}
       {photo && sel && (
         <TablePhoto

@@ -30,6 +30,7 @@ import {
   type PieceState,
 } from '../../project/progress';
 import { FillSpot } from '../components/FillSpot';
+import { LiveTable } from '../components/LiveTable';
 import { TableContrast } from '../components/TableContrast';
 import { BoxFitNotice } from '../components/BoxFitNotice';
 import type { Groups } from '../../project/groups';
@@ -569,6 +570,7 @@ function Catalog({
   const [traysOpen, setTraysOpen] = useState(false);
   const [fillOpen, setFillOpen] = useState(false);
   const [tableOpen, setTableOpen] = useState(false);
+  const [liveOpen, setLiveOpen] = useState(false);
   const [trayGroup, setTrayGroup] = useState<number | null>(null);
   const [show, setShow] = useState<'all' | 'border' | 'interior' | 'unsure'>('all');
   const [places, setPlaces] = useState<PlacementCache | null>(null);
@@ -645,6 +647,33 @@ function Catalog({
       <button class="btn btn-block" data-testid="table-toggle" onClick={() => setTableOpen(true)}>
         🗺 Show my table
       </button>
+      <button class="btn btn-block" data-testid="live-toggle" onClick={() => setLiveOpen(true)}>
+        📷 Live view of my table
+      </button>
+      {liveOpen && (
+        <LiveTable
+          projectId={projectId}
+          pieces={rows}
+          colourOf={(p) => STATE_COLOUR[states.get(p.id) ?? 'found']}
+          labelOf={(p) => spotLabel(shownPlaces.get(p.id))}
+          infoOf={infoOf}
+          onPick={(p) => {
+            setLiveOpen(false);
+            setSelected(p.id);
+            setTimeout(() => document.querySelector('[data-testid="piece-spots"]')?.scrollIntoView({ block: 'center' }), 50);
+          }}
+          title="Live view"
+          legend={
+            <>
+              <span class="state-dot" style={{ background: STATE_COLOUR.placed }} />
+              spot known <span class="state-dot" style={{ background: STATE_COLOUR.shape }} />
+              shape read <span class="state-dot" style={{ background: STATE_COLOUR.found }} />
+              found. Hold the phone about as high as for your scan. Tap a piece.
+            </>
+          }
+          onClose={() => setLiveOpen(false)}
+        />
+      )}
       {tableOpen && (
         <TablePhoto
           projectId={projectId}

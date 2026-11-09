@@ -14,6 +14,10 @@ import { probeWorkerCapabilities } from '../shared/workerCaps';
 import type { FrameSource, TrackerFrameResult, TrackerStatus, WorkerError, WorkerInitInfo } from '../shared/types';
 import type { TrackerApi } from '../shared/apis';
 import type { MarkerMap } from '../project/types';
+import type { AnchorPhoto } from '../shared/apis';
+import { ANCHOR, upscaleH } from '../cv/anchor';
+import { decodeAtMost } from '../cv/rectify';
+import { mulH } from '../geo/homography';
 
 type FrameReader = ReadableStreamDefaultReader<VideoFrame>;
 type ProcessorCtor = new (o: { track: MediaStreamTrack }) => { readable: ReadableStream<VideoFrame> };
@@ -24,6 +28,8 @@ let source: FrameSource | null = null;
 let pendingRate = 0;
 let pendingPieceStats = false;
 let pendingMap: { map: MarkerMap | null; zoom: number } = { map: null, zoom: 1 };
+let coreReady: (ok: boolean) => void = () => {};
+const coreReadyP = new Promise<boolean>((r) => (coreReady = r));
 /** Bumped by every attach/detach; a loop keeps running only while it still holds the current number. */
 let loopGen = 0;
 /** The one direct-frames loop that may be running. */
@@ -81,8 +87,10 @@ const api: TrackerApi = {
       core.setRate(pendingRate);
       core.setTableMap(pendingMap.map, pendingMap.zoom);
       core.setPieceStats(pendingPieceStats);
+      coreReady(true);
       return { ok: true, cvLoadMs: cvLoadMs(), capabilities };
     } catch (err) {
+      coreReady(false);
       initError = { message: String(err), at: Date.now() };
       return { ok: false, cvLoadMs: 0, error: String(err), capabilities };
     }
@@ -145,6 +153,39 @@ const api: TrackerApi = {
   setTableMap(map: MarkerMap | null, zoom: number): void {
     pendingMap = { map, zoom };
     core?.setTableMap(map, zoom);
+  },
+
+  async setAnchor(refs: AnchorPhoto[] | null): Promise<{ features: number; photos: number; ms: number; error?: string }> {
+    const t0 = performance.now();
+    if (!(await coreReadyP) || !core) return { features: 0, photos: 0, ms: 0, error: 'The image engine is not ready' };
+    if (!refs?.length) {
+      core.setAnchor(null);
+      return { features: 0, photos: 0, ms: 0 };
+    }
+    try {
+      const pics = [];
+      for (const r of refs) {
+        const bmp = await decodeAtMost(r.blob, { width: r.width, height: r.height }, ANCHOR.refMaxSide);
+        try {
+          const canvas = new OffscreenCanvas(bmp.width, bmp.height);
+          const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+          ctx.drawImage(bmp, 0, 0);
+          const img = ctx.getImageData(0, 0, bmp.width, bmp.height);
+          pics.push({
+            pixels: { data: new Uint8Array(img.data.buffer), width: bmp.width, height: bmp.height, stride: bmp.width * 4 },
+            channels: 4 as const,
+            imgToTable: mulH(r.imgToTable, upscaleH(r.width / bmp.width)),
+          });
+        } finally {
+          bmp.close();
+        }
+      }
+      const features = core.setAnchor(pics);
+      return { features, photos: pics.length, ms: performance.now() - t0 };
+    } catch (err) {
+      core.setAnchor(null);
+      return { features: 0, photos: 0, ms: performance.now() - t0, error: String((err as Error)?.message ?? err) };
+    }
   },
 
   /** Longest gap between camera frames inside [startAbs, endAbs] (ms since epoch). */
