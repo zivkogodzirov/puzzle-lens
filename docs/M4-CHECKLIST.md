@@ -29,6 +29,8 @@ This tells us exactly how well it works on your pieces:
 3. Scan the holes photo (IMG_9280): the finished-puzzle check should list **21 gaps**, with red squares exactly on the holes.
 
 ## Part F: leftover pieces into the empty spots (part 2)
+✅ Checked on your iPhone 2026-11-09.
+
 With most of the puzzle done, the app now uses your photo of the puzzle with its holes: the leftover pieces are matched **only to the empty spots**, and **each spot takes one piece**.
 1. Update the app (Part A). Settings should show the version I sent you.
 2. Open *The Kiss* → **📷 Scan pieces** → **🖼 Choose a photo** → your holes photo (IMG_9280). It doesn't matter whether the screen says "Overview" or "Close-ups". It should say **21 possible gaps** and then **"Saved: your leftover pieces will now be matched only to these 21 empty spots"**. If it says "Close-up read: … pieces" instead, the app hasn't updated yet: close it fully and open it again, then check the version.
@@ -39,6 +41,8 @@ With most of the puzzle done, the app now uses your photo of the puzzle with its
 7. Optional: **Use the whole picture instead** goes back to searching the whole picture; choosing the holes photo again brings the empty spots back. After putting pieces in, photograph the puzzle again so the empty spots are updated.
 
 ## Part G: knob shapes (part 3)
+✅ Checked on your iPhone 2026-11-09: the top-right wall pieces land in their holes.
+
 1. Update the app (Part A). Settings should show the version I sent you.
 2. Open *The Kiss*. Under Pieces you'll see **"Knob shapes not used yet"**: your holes and pieces were read before this version.
 3. **📷 Scan pieces → 🖼 Choose a photo →** your holes photo (IMG_9280). It should say "21 possible gaps … Saved".
