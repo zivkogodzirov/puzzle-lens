@@ -97,6 +97,10 @@ export function FillSpot({
       {spots?.map(([c, r]) => (
         <rect key={`o${c},${r}`} x={c} y={r} width={1} height={1} class="spot-open" vector-effect="non-scaling-stroke" />
       ))}
+      {[...(filled ?? [])].map((k) => {
+        const [c, r] = k.split(',').map(Number) as [number, number];
+        return <rect key={`f${k}`} x={c} y={r} width={1} height={1} class="spot-filled" data-testid="spot-filled" />;
+      })}
       {sel && <rect x={sel[0]} y={sel[1]} width={1} height={1} class="spot-best" vector-effect="non-scaling-stroke" data-testid={`${testId}-sel`} />}
     </svg>
   );

@@ -4,6 +4,15 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M5 (part 2b): tested by me on your photos, with fixes (2026-11-09; tested on the Mac with your photos, not yet on your iPhone)
+- **Live view, your new photos** (IMG_9274–9277, the same 21 pieces from four places): each photo as the scan, the other three as the live picture, 12 combinations: the table found every time; outlines within 0.1–0.5 mm typically, worst 1.8 mm. In the app itself (Safari's engine, with your photos as the camera): scan of IMG_9276, then the live view over IMG_9274, 9275 and 9277: "Tracking ✓ · 20 pieces in view" each time.
+- **Fixed: a photo taken much closer than usual couldn't be scanned properly.** IMG_9277 (about 3× closer than the app expects) came out at 3.7 px/mm instead of 11.5 (your coin says 11.2): whole pieces looked like "objects", and the photo couldn't be matched to your other photos of the same pieces. Now 21 clean pieces, scale within 3 % of the coin, and it matches the others. Your other photos scan exactly as before.
+- **Fits / Doesn't fit, simulated on your real 21 pieces and 21 holes** (answering truthfully from the known right holes): 18 of the 19 real pieces went in on the first try. The 19th (an edge piece whose flat side isn't read) was never offered its hole: **now, once you've said "doesn't fit" to every spot a piece was offered, the other empty holes are offered too**, and it goes in after a few tries (all 19 placed).
+- **New: "Not a puzzle piece? Remove it"** under a piece's spot (two taps). Your scan counts a bottle label and a patch of table as pieces; they got suggested spots (5–25 wasted tries in the simulation) and spoilt the Accuracy page. Removed things leave the list and the Accuracy page.
+- **New: "✓ N in the puzzle" opens a list** of the pieces you said fit, each with **Take it out** (before, Undo was only offered right after the answer).
+- **Fill this spot** shows filled holes in green.
+- Checked in a browser on your *The Kiss* test puzzle (your box picture, holes and pieces): the piece panel asks about the right hole, ✓ Fits takes the piece and its hole, Fill this spot offers the next hole's piece, the 📊 page counts it, Take it out restores everything.
+
 ### M5 (part 2): Fits / Doesn't fit, and how often the app is right (2026-11-09; tested in the app on the Mac, not yet on your iPhone)
 - **✓ Fits / ✗ Doesn't fit** wherever the app suggests a spot: under a piece's spot ("Tried it in column X, row Y?"), on each piece offered in 🎯 Fill this spot, and in the 📷 live view when you tap a piece.
 - **Fits:** the piece goes into the puzzle in the app (status "in the puzzle"): it leaves the table list and the live view, its hole counts as filled (no other piece is offered there), and the line under the piece groups counts "✓ N in the puzzle". **Undo** puts it back on the table or into its tray.

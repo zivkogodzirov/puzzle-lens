@@ -193,6 +193,25 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
       measured = measureScale(res.pieces, ppm, pitch, share);
     }
   }
+  // Phone much closer still (3–4× the usual scale): whole pieces come out as "objects" and
+  // "assembled areas", too big even for the clump check above, and fragments measure a small,
+  // wrong scale (owner's IMG_9277, 2026-11-09: 3.7 px/mm instead of ~13; the same pieces as
+  // IMG_9276 could not be matched). When such blobs far outnumber the clean single pieces, ask the
+  // scale-robust pre-pass, and keep its scale when it gives clearly more single pieces.
+  {
+    const blobs = res.pieces.filter((p) => p.flags.clump && !p.flags.cut).length + res.regions.length;
+    if (blobs >= CLOSE_MIN_CLUMPS && blobs > CLOSE_CLUMP_RATIO * singles(res)) {
+      const pre = estimatePxPerMm(cv, rgba, { pitchMm: pitch, zoom: opts.zoom, table: opts.table });
+      if (pre && pre.pxPerMm / ppm > 1 + RESCALE_LIMIT) {
+        const alt = find(pre.pxPerMm);
+        if (singles(alt.res) > CLOSE_CLUMP_RATIO * singles(res)) {
+          ppm = pre.pxPerMm;
+          ({ frame, res } = alt);
+          measured = measureScale(res.pieces, ppm, pitch, share);
+        }
+      }
+    }
+  }
   timings.scale = performance.now() - t; // includes the second detection when the zoom was wrong
   if (measured) {
     if (Math.abs(measured / ppm - 1) > RESCALE_LIMIT) {

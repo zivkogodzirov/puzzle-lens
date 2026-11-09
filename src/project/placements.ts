@@ -146,7 +146,22 @@ export function shownPlacements(
     for (const p of pieces)
       if (p.patch?.sides && p.patch.sideConf)
         shapes.pieces.set(p.id, { sides: p.patch.sides, conf: p.patch.sideConf.map((c) => c * (p.patch!.sure ? 1 : UNSURE_SHAPE_WEIGHT)) });
-    return chooseSpots(placed, cells, shapes);
+    const result = chooseSpots(placed, cells, shapes);
+    // A piece the owner has tried in every spot it was offered: offer the other empty spots too (its
+    // shape may have been misread, e.g. an edge piece whose flat side wasn't seen: owner's piece #8,
+    // simulated 2026-11-09). Equal chances, "several spots look alike".
+    if (view?.notHere.size)
+      for (const { id } of placed) {
+        const not = view.notHere.get(id);
+        if (!not || result.get(id)?.placement.top.length) continue;
+        const rest = cells.filter(([c, r]) => !not.has(`${c},${r}`));
+        if (!rest.length) continue;
+        result.set(id, {
+          placement: { top: rest.map(([c, r]) => ({ col: c, row: r, rot: 0 as const, score: 0, p: 1 / rest.length })), verdict: 'several' },
+          fits: true,
+        });
+      }
+    return result;
   }
   for (const p of placed) out.set(p.id, { placement: p.placement, fits: p.placement.top.length > 0 });
   return out;

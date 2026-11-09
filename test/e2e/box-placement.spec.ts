@@ -324,6 +324,19 @@ test('Fits / Doesn’t fit (M5 part 2): ruled-out spots, a piece into the puzzle
   await tapCell(page, 'fill-picture', 2, 1);
   await expect(page.getByTestId('fill-filled')).toBeVisible();
 
+  // "Not a puzzle piece": r6c8 (last in id order now that two are in the puzzle) is removed after a second tap.
+  await page.getByTestId('fill-toggle').click();
+  await expect(thumbs).toHaveCount(4);
+  await thumbs.nth(3).click();
+  await page.getByTestId('spot-remove').click();
+  await page.getByTestId('spot-remove-yes').click();
+  await expect(thumbs).toHaveCount(3);
+
+  // The pieces in the puzzle, with "Take it out".
+  await page.getByTestId('in-puzzle').click();
+  await expect(page.getByTestId('in-puzzle-row')).toHaveCount(2);
+  await expect(page.getByTestId('in-puzzle-list')).toContainText('Column 3, row 2');
+
   // Accuracy: two first-choice answers, both right (the undone one and the taken-back "doesn't fit" are left out).
   await page.getByTestId('accuracy-link').click();
   await expect(page.getByTestId('accuracy')).toContainText('2 answers');

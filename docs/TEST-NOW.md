@@ -4,6 +4,7 @@
 - **Fits:** the piece goes into the puzzle in the app (it leaves your table list), its hole counts as filled, and its knobs tell the holes next to it what they need.
 - **Doesn't fit:** that spot is ruled out for the piece, and its next best spot shows.
 - **📊 How often is the app right?** (on the puzzle page once you've answered, and in Settings) shows how often its first choice was right, separately for Strong, Likely and "Several spots look alike".
+- **I tested both parts myself with your photos** (details in the changelog): the live view found your table in all your loose-piece photos (outlines within about half a millimetre), and a simulated you placed all 19 real pieces into your 21 holes, 18 on the first try. Fixed on the way: photos taken very close now scan properly; after "doesn't fit" everywhere a piece is offered the other empty holes; "Not a puzzle piece? Remove it"; and "✓ N in the puzzle" lists the pieces with **Take it out**.
 
 **Still to check from part 1:** **📷 Live view of my table** (puzzle page, under Pieces) outlines your scanned pieces on the live camera picture: **green** = spot known (labelled e.g. 26·1 = column 26, row 1), **blue** = shape read, **grey** = found. No markers needed.
 
@@ -26,11 +27,12 @@ Allow about 25 minutes for both parts. These steps are for version **{version}**
 2. Try that piece in that hole on your real puzzle.
    - It fits: tap **✓ Fits**. A green note says **"In the puzzle at column X, row Y"** with **Undo**; the piece leaves the list, and the line under the piece groups ends with **"✓ 1 in the puzzle"**.
    - It doesn't: tap **✗ Doesn't fit**. Its next best spot shows (or "You said it doesn't fit any of its suggested spots" with **Ask again**).
-3. Tap **Undo** once: the piece comes back to the list. Then tap it and **✓ Fits** again.
-4. In **🎯 Fill this spot**, tap a hole: each piece offered has **✓ Fits** and **✗ No**. After ✓ Fits the hole says **"✓ This spot is filled"**.
-5. In **📷 Live view of my table**, tap a piece: the box at the bottom asks **"Tried it in column X, row Y?"** with the same two buttons.
-6. Go on with as many pieces as you can (ideally all your holes): the more answers, the more the Accuracy page tells.
-7. Tap **📊 How often is the app right?** (on the puzzle page, or in Settings): for Strong, Likely and Several, how many of its first choices were right, with a range that narrows as you answer more.
+3. Tap **Undo** once: the piece comes back to the list. Then tap it and **✓ Fits** again. Tap **✓ 1 in the puzzle** (end of the line under the piece groups): the list shows it with **Take it out**.
+4. If your scan counted the bottle label or a patch of table as a piece: tap it, then **Not a puzzle piece? Remove it** (twice to confirm).
+5. In **🎯 Fill this spot**, tap a hole: each piece offered has **✓ Fits** and **✗ No**. After ✓ Fits the hole turns green on the picture and is no longer offered.
+6. In **📷 Live view of my table**, tap a piece: the box at the bottom asks **"Tried it in column X, row Y?"** with the same two buttons.
+7. Go on with as many pieces as you can (ideally all your holes): the more answers, the more the Accuracy page tells. A piece that doesn't fit any spot it was offered is then offered the other empty holes.
+8. Tap **📊 How often is the app right?** (on the puzzle page, or in Settings): for Strong, Likely and Several, how many of its first choices were right, with a range that narrows as you answer more.
 
 ## This 🧪 Test tab
 1. Can you read these steps and tick them? Close this box and open it again: your ticks should still be there.

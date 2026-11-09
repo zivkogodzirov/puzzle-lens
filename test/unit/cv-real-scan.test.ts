@@ -191,6 +191,32 @@ describe.skipIf(photos.length === 0)('real photos, marker-free scan', () => {
     );
   }
 
+  // IMG_9274–9277 (owner, 2026-11-09): the same 21 pieces and a 2-denar coin from four places.
+  // IMG_9277 is taken about 3× closer than the app expects: whole pieces looked like "objects" and
+  // fragments measured 3.7 px/mm, so the photo couldn't be matched to the others. The scale-robust
+  // pre-pass now steps in when blobs far outnumber clean pieces.
+  for (const [name, minSingles] of [
+    ['IMG_9274', 12],
+    ['IMG_9275', 19],
+    ['IMG_9276', 12],
+    ['IMG_9277', 19],
+  ] as const) {
+    it.skipIf(!has(name))(
+      `${name}: 21 pieces with a 2-denar coin: scale within 7 % of the coin's, pieces found whole`,
+      async () => {
+        const cv = await getCv();
+        const img = await load(cv, photos.find((p) => p.name.startsWith(name))!.path);
+        const r = scanMarkerless(cv, img, { catalog: [], zoom: 1, kind: 'overview', table: null });
+        const coin = findCoin(cv, img, { pxPerMm: r.pxPerMm! });
+        expect(coin).not.toBeNull();
+        const coinPpm = coin!.diameterPx / 23.5;
+        expect(Math.abs(r.pxPerMm! / coinPpm - 1), `${r.pxPerMm} vs coin ${coinPpm}`).toBeLessThan(0.07);
+        expect(r.pieces.filter(single).length, 'clean single pieces').toBeGreaterThanOrEqual(minSingles);
+      },
+      120_000,
+    );
+  }
+
   // shot-9267: the owner's photo cut out of an app screenshot (1244 × 1652, so ~4.6 px/mm here and
   // ~12 px/mm in the 4032 px original): 23 brown pieces and the 2-denar coin on the cream table in
   // low sunlight, phone held ~3× closer than usual. The first scale guess saw no piece-sized blobs

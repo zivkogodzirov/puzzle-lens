@@ -40,11 +40,12 @@ Set-up as in Part 1 ("Get ready"): your leftover pieces scanned, with their spot
 2. Try that piece in that hole on your real puzzle.
    - It fits: tap **✓ Fits**. A green note says **"In the puzzle at column X, row Y"** with **Undo**; the piece leaves the list, and the line under the piece groups ends with **"✓ 1 in the puzzle"**.
    - It doesn't: tap **✗ Doesn't fit**. Its next best spot shows (or "You said it doesn't fit any of its suggested spots" with **Ask again**).
-3. Tap **Undo** once: the piece comes back to the list. Then tap it and **✓ Fits** again.
-4. In **🎯 Fill this spot**, tap a hole: each piece offered has **✓ Fits** and **✗ No**. After ✓ Fits the hole says **"✓ This spot is filled"**.
-5. In **📷 Live view of my table**, tap a piece: the box at the bottom asks **"Tried it in column X, row Y?"** with the same two buttons.
-6. Go on with as many pieces as you can (ideally all your holes): the more answers, the more the Accuracy page tells.
-7. Tap **📊 How often is the app right?** (on the puzzle page, or in Settings): for Strong, Likely and Several, how many of its first choices were right, with a range that narrows as you answer more.
+3. Tap **Undo** once: the piece comes back to the list. Then tap it and **✓ Fits** again. Tap **✓ 1 in the puzzle** (end of the line under the piece groups): the list shows it with **Take it out**.
+4. If your scan counted the bottle label or a patch of table as a piece: tap it, then **Not a puzzle piece? Remove it** (twice to confirm).
+5. In **🎯 Fill this spot**, tap a hole: each piece offered has **✓ Fits** and **✗ No**. After ✓ Fits the hole turns green on the picture and is no longer offered.
+6. In **📷 Live view of my table**, tap a piece: the box at the bottom asks **"Tried it in column X, row Y?"** with the same two buttons.
+7. Go on with as many pieces as you can (ideally all your holes): the more answers, the more the Accuracy page tells. A piece that doesn't fit any spot it was offered is then offered the other empty holes.
+8. Tap **📊 How often is the app right?** (on the puzzle page, or in Settings): for Strong, Likely and Several, how many of its first choices were right, with a range that narrows as you answer more.
 
 ### Good to know (part 2)
 - ✓ Fits puts the piece into the puzzle in the app: it isn't outlined on your table any more. Tapped by mistake? **Undo** puts it back on the table, or back into its tray.

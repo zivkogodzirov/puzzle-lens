@@ -14,6 +14,7 @@ import {
   answerView,
   clearNotHere,
   placedPieces,
+  removeNotAPiece,
   placementWithAnswers,
   spotSidesWithNeighbours,
   undoFits,
@@ -175,6 +176,47 @@ describe('answers', () => {
     const withAns = shownPlacements(cache, [a], { view, placed: placedPieces([k]) });
     // (3, 4) is filled now: a goes to (4, 4), the only empty spot left.
     expect(withAns.get('a')!.placement.top[0]).toMatchObject({ col: 4, row: 4 });
+  });
+
+  it('empty spots: a piece tried in every spot it was offered is offered the other empty spots', () => {
+    const cache: PlacementCache = {
+      boxKey: 'k',
+      colour: null,
+      open: {
+        cells: [
+          [1, 1],
+          [2, 1],
+          [3, 1],
+        ],
+        turn: 0,
+        fit: 1,
+        runnerUp: 0,
+      } as never,
+      byPiece: { a: { ts: 100, placement: placement('strong', { ...spot(1, 1, 0.9), score: 0.9 }) } },
+    };
+    const a = piece('p', 'a');
+    const view = answerView({
+      grid: { cols: 28, rows: 36 } as never,
+      answers: [{ pieceId: 'a', col: 1, row: 1, rot: 0, fits: false, at: 1, grid: '28x36', verdict: 'strong', p: 0.9, rank: 0, from: 'piece', mode: 'open' }],
+    });
+    const shown = shownPlacements(cache, [a], { view, placed: new Map() }).get('a')!;
+    expect(shown.fits).toBe(true);
+    expect(shown.placement.verdict).toBe('several');
+    expect(shown.placement.top.map((t) => [t.col, t.row])).toEqual([
+      [2, 1],
+      [3, 1],
+    ]);
+  });
+
+  it('"not a puzzle piece": removed from the list, its answers left out of the Accuracy page', async () => {
+    const pz = await puzzle();
+    const a = piece(pz.id, 'label');
+    await db().pieces.put(a);
+    await answerSpot(pz.id, a, { col: 3, row: 4, rot: 0 }, false, { placement: placement('strong', spot(3, 4, 0.9)), fits: true }, 'piece');
+    const next = await removeNotAPiece(pz.id, 'label');
+    expect(await db().pieces.get('label')).toBeUndefined();
+    expect(next.answers!.every((x) => x.undone)).toBe(true);
+    expect(answerView(next).notHere.size).toBe(0);
   });
 
   it('accuracy: first-choice answers by verdict with a 95 % range; tries per piece; undone answers left out', () => {

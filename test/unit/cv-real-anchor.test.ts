@@ -140,4 +140,55 @@ describe('live view on the owner’s photos', () => {
     },
     300_000,
   );
+
+  const has4 = ['IMG_9274', 'IMG_9275', 'IMG_9276', 'IMG_9277'].every((n) => path(n));
+  it.skipIf(!has4)(
+    'IMG_9276 → IMG_9274 / 9275 / 9277 (the same 21 pieces from three other places, one 3× closer): pieces within 2 mm',
+    async () => {
+      const cv = await getCv();
+      const a = await load(cv, path('IMG_9276')!);
+      const r1 = scanMarkerless(cv, a, { catalog: [], zoom: 1, kind: 'overview', table: null });
+      let nid = 0;
+      const catalog = planMerge([], r1.pieces, {
+        projectId: 'p',
+        snapId: 's1',
+        pxPerMm: r1.pxPerMm ?? 8,
+        now: 1,
+        newId: () => `n${nid++}`,
+        thumbId: (id) => id,
+      }).added;
+      const ref = shrink(cv, a, ANCHOR.refMaxSide);
+      const anchor = new TableAnchor(cv);
+      anchor.setReferences([{ pixels: ref.buf, channels: 4, imgToTable: mulH(r1.imgToCatalog!, upscaleH(ref.scale)) }]);
+      for (const name of ['IMG_9274', 'IMG_9275', 'IMG_9277']) {
+        const b = await load(cv, path(name)!);
+        const r2 = scanMarkerless(cv, b, { catalog, zoom: 1, kind: 'overview', table: null });
+        expect(r2.registered, `${name} scanned onto the same pieces`).toBe(true);
+        const truthToImg = invertH(r2.imgToCatalog!)!;
+        const live = shrink(cv, b, 960);
+        const g = new cv.Mat(live.buf.height, live.buf.width, cv.CV_8UC4);
+        g.data.set(live.buf.data);
+        const gray = new cv.Mat();
+        cv.cvtColor(g, gray, cv.COLOR_RGBA2GRAY);
+        anchor.reset();
+        const fix = anchor.track(gray)!;
+        g.delete();
+        gray.delete();
+        expect(fix, name).not.toBeNull();
+        const toFull = mulH(upscaleH(live.scale), fix.tableToImg);
+        const errs = catalog.map((c) => {
+          const p = applyH(toFull, [c.table.x, c.table.y]);
+          const q = applyH(truthToImg, [c.table.x, c.table.y]);
+          return Math.hypot(p[0] - q[0], p[1] - q[1]) / r2.pxPerMm!;
+        });
+        errs.sort((x, y) => x - y);
+        console.log(
+          `IMG_9276 → ${name}: ${fix.inliers}/${fix.candidates} points; ${errs.length} pieces: median ${errs[errs.length >> 1]!.toFixed(2)} mm, worst ${errs[errs.length - 1]!.toFixed(2)} mm`,
+        );
+        expect(errs[errs.length - 1]!, name).toBeLessThan(2);
+      }
+      anchor.dispose();
+    },
+    600_000,
+  );
 });

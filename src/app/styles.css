@@ -990,3 +990,7 @@ pre.logbox {
 .accuracy-table { width: 100%; border-collapse: collapse; margin: 6px 0; }
 .accuracy-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .nw { white-space: nowrap; }
+.spot-filled { fill: rgba(60, 207, 122, 0.45); stroke: none; }
+.in-puzzle-list { display: flex; flex-direction: column; gap: 6px; }
+.in-puzzle-row { gap: 10px; align-items: center; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }

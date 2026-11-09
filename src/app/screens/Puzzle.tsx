@@ -31,7 +31,7 @@ import {
 } from '../../project/progress';
 import { FillSpot } from '../components/FillSpot';
 import { LiveTable } from '../components/LiveTable';
-import { answerSpot, answerView, clearNotHere, placedPieces, undoFits } from '../../project/answers';
+import { answerSpot, answerView, clearNotHere, placedPieces, removeNotAPiece, undoFits } from '../../project/answers';
 import { TableContrast } from '../components/TableContrast';
 import { BoxFitNotice } from '../components/BoxFitNotice';
 import type { Groups } from '../../project/groups';
@@ -589,6 +589,7 @@ function Catalog({
   const [placing, setPlacing] = useState<{ done: number; total: number } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [justPlaced, setJustPlaced] = useState<{ id: string; col: number; row: number } | null>(null);
+  const [inPuzzleOpen, setInPuzzleOpen] = useState(false);
   const boxUrl = useBlobUrl(project.box?.rectifiedBlobId, boxVersion(project.box));
   const placeKey = placeKeyOf(project);
   useEffect(() => {
@@ -838,8 +839,38 @@ function Catalog({
         {progress.found} found · <span class="state-dot" style={{ background: STATE_COLOUR.shape }} />
         {progress.shape} shapes read · <span class="state-dot" style={{ background: STATE_COLOUR.placed }} />
         {progress.placed} placed on box
-        {inPuzzle > 0 && <span data-testid="in-puzzle"> · ✓ {inPuzzle} in the puzzle</span>}
+        {inPuzzle > 0 && (
+          <>
+            {' · '}
+            <button class="link-btn" data-testid="in-puzzle" aria-expanded={inPuzzleOpen} onClick={() => setInPuzzleOpen(!inPuzzleOpen)}>
+              ✓ {inPuzzle} in the puzzle
+            </button>
+          </>
+        )}
       </p>
+      {inPuzzleOpen && inPuzzle > 0 && (
+        <div class="card in-puzzle-list" data-testid="in-puzzle-list">
+          <p class="small muted">Pieces you said fit. Tapped ✓ Fits by mistake? Take it out: it goes back on the table (or into its tray).</p>
+          {allRows
+            .filter((r) => r.status === 'placed')
+            .sort((a, b) => (b.placedAt?.at ?? 0) - (a.placedAt?.at ?? 0))
+            .map((r) => (
+              <InPuzzleRow
+                key={r.id}
+                piece={r}
+                onTakeOut={() =>
+                  void undoFits(projectId, r.id)
+                    .then((next) => {
+                      onProject(next);
+                      if (justPlaced?.id === r.id) setJustPlaced(null);
+                      onPiecesChanged();
+                    })
+                    .catch((err) => logError('answer', 'Could not take the piece out again', err))
+                }
+              />
+            ))}
+        </div>
+      )}
       {justPlaced && (
         <div class="notice notice-good row" role="status" data-testid="placed-note" style={{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span class="grow">
@@ -942,10 +973,35 @@ function Catalog({
               .then(onProject)
               .catch((err) => logError('answer', 'Could not clear the answers', err))
           }
+          onRemove={() =>
+            void removeNotAPiece(projectId, selected)
+              .then((next) => {
+                logInfo('answer', 'Removed something that is not a puzzle piece');
+                onProject(next);
+                setSelected(null);
+                onPiecesChanged();
+              })
+              .catch((err) => logError('answer', 'Could not remove it', err))
+          }
           onClose={() => setSelected(null)}
         />
       )}
       {shown.length > SHOW_MAX && <p class="muted small">…and {shown.length - SHOW_MAX} more.</p>}
+    </div>
+  );
+}
+
+/** A piece in the puzzle (M5 part 2), with a way to take it out again. */
+function InPuzzleRow({ piece, onTakeOut }: { piece: PieceRow; onTakeOut: () => void }) {
+  const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
+  const at = piece.placedAt;
+  return (
+    <div class="row in-puzzle-row" data-testid="in-puzzle-row">
+      {url ? <img src={url} class="spot-thumb" alt="A piece" /> : <span class="spot-thumb" />}
+      <span class="grow small">{at ? `Column ${at.col + 1}, row ${at.row + 1}` : 'In the puzzle'}</span>
+      <button class="btn btn-small" data-testid="take-out" onClick={onTakeOut}>
+        Take it out
+      </button>
     </div>
   );
 }
@@ -1099,6 +1155,7 @@ function PieceSpots({
   onAnswer,
   ruledOut = 0,
   onClearRuledOut,
+  onRemove,
   onClose,
 }: {
   piece: PieceRow;
@@ -1108,6 +1165,8 @@ function PieceSpots({
   /** Spots the owner said it doesn't fit, and a way to take those answers back. */
   ruledOut?: number;
   onClearRuledOut?: () => void;
+  /** "Not a puzzle piece": removes it from the list. */
+  onRemove?: () => void;
   /** The empty spots pieces are matched to (drawn faintly), or null for the whole picture. */
   spots: Array<[number, number]> | null;
   boxUrl: string | null;
@@ -1118,6 +1177,7 @@ function PieceSpots({
   onClose: () => void;
 }) {
   const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
+  const [sureRemove, setSureRemove] = useState(false);
   const place = choice?.placement ?? null;
   const best = place?.top[0];
   const fits = choice?.fits ?? true;
@@ -1218,6 +1278,25 @@ function PieceSpots({
               />
             ))}
         </svg>
+      )}
+      {onRemove && (
+        <p class="small muted" data-testid="spot-remove-row">
+          {sureRemove ? (
+            <>
+              Remove it from the list? Move it off the table too, or the next scan finds it again.{' '}
+              <button class="btn btn-small" data-testid="spot-remove-yes" onClick={onRemove}>
+                Remove
+              </button>{' '}
+              <button class="btn btn-small" onClick={() => setSureRemove(false)}>
+                Keep
+              </button>
+            </>
+          ) : (
+            <button class="btn btn-small" data-testid="spot-remove" onClick={() => setSureRemove(true)}>
+              Not a puzzle piece? Remove it
+            </button>
+          )}
+        </p>
       )}
     </div>
   );
