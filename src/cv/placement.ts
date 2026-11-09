@@ -36,6 +36,8 @@ export interface PlacementSpot {
   score: number;
   /** Probability (finalists plus "somewhere else"). */
   p: number;
+  /** With `full`: the score in each of the 4 turns (−Infinity where a turn isn't allowed). */
+  rotScores?: number[];
 }
 
 export interface Placement {
@@ -91,6 +93,13 @@ export const PLACE = {
   gapTemperature: 0.04,
   gapStrongP: 0.75,
   gapLikelyP: 0.55,
+  /**
+   * Knob fit among empty spots (M4 part 3), per side, times how sure both reads are: a side that
+   * can't fit (knob out where the hole or the neighbour needs knob in, or the same against each
+   * other) costs knobMismatch; one that fits gains knobMatch (by chance half of all sides fit).
+   */
+  knobMismatch: 0.12,
+  knobMatch: 0.025,
 };
 
 // ---- Colour --------------------------------------------------------------------------------------
@@ -596,9 +605,20 @@ export function placePiece(box: BoxGrid, patch: PiecePatch, opts: PlaceOptions =
   const ex = finals.map((c) => Math.exp((c.s - best) / T));
   const exElse = Math.exp(-PLACE.elseBelow / T) * Math.max(1, cols * rows - finals.length) ** 0.25;
   const Z = ex.reduce((a, b) => a + b, 0) + exElse;
-  const top = finals
-    .slice(0, opts.full ? finals.length : (opts.topN ?? 5))
-    .map((c, i) => ({ col: c.col, row: c.row, rot: c.rot as 0 | 1 | 2 | 3, score: c.s, p: ex[i]! / Z }));
+  // Every turn's score per cell (full: all candidates were refined).
+  const rotScores = new Map<number, number[]>();
+  if (opts.full)
+    for (const c of cands) {
+      const k = c.row * cols + c.col;
+      const r = rotScores.get(k) ?? [-Infinity, -Infinity, -Infinity, -Infinity];
+      r[c.rot] = Math.max(r[c.rot]!, c.s);
+      rotScores.set(k, r);
+    }
+  const top = finals.slice(0, opts.full ? finals.length : (opts.topN ?? 5)).map((c, i) => {
+    const spot: PlacementSpot = { col: c.col, row: c.row, rot: c.rot as 0 | 1 | 2 | 3, score: c.s, p: ex[i]! / Z };
+    if (opts.full) spot.rotScores = rotScores.get(c.row * cols + c.col)!;
+    return spot;
+  });
   const p1 = top[0]?.p ?? 0;
   return { top, verdict: p1 >= PLACE.strongP ? 'strong' : p1 >= PLACE.likelyP ? 'likely' : 'several' };
 }

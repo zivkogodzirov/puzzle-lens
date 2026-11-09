@@ -717,6 +717,7 @@ function PlaceSummary({
   }
   const none = rows.length - n.strong - n.likely - n.several - n.nofit;
   const spots = open?.cells.length ?? 0;
+  const noKnobs = rows.filter((r) => r.patch && !r.patch.sides).length;
   return (
     <>
       {!hasSpots && rows.length > 0 && (
@@ -733,6 +734,16 @@ function PlaceSummary({
             <p>
               Leftover pieces are matched only to the <strong>{spots || '…'} empty spots</strong> from your finished-puzzle photo, one piece per spot. Put some
               in? Photograph the puzzle again to update the spots.
+            </p>
+          )}
+          {spots > 0 && (!open?.sides || noKnobs > 0) && (
+            <p data-testid="knobs-off">
+              <strong>Knob shapes not used yet</strong> (read before this version): {!open?.sides ? 'choose your photo of the puzzle with its holes again' : ''}
+              {!open?.sides && noKnobs > 0 ? ', then ' : ''}
+              {noKnobs > 0
+                ? `scan your leftover pieces again (${noKnobs === rows.length ? 'all of them' : `${noKnobs} of them`}: Delete scanned pieces → Delete and scan again)`
+                : ''}
+              .
             </p>
           )}
           <button class="btn btn-small" data-testid="whole-picture" onClick={onWholePicture}>

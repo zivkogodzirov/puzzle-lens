@@ -84,6 +84,8 @@ export interface OrientedSpots {
   turn: number;
   /** The empty spots in box-picture columns and rows (0-based). */
   cells: Array<[number, number]>;
+  /** Their sides (top, right, bottom, left on the box picture), when read in the photo. */
+  sides?: string[];
   /** How alike the turned photo and the box picture are (−1…1), and the next best turn's. */
   fit: number;
   runnerUp: number;
@@ -94,7 +96,14 @@ export interface OrientedSpots {
  * photo, `thumb` its straightened picture) to match the box picture. Null when the photo's grid
  * doesn't fit the box's in any turn.
  */
-export function orientSpots(box: BoxGrid, thumb: PixelBuffer, cols: number, rows: number, gaps: Array<[number, number]>): OrientedSpots | null {
+export function orientSpots(
+  box: BoxGrid,
+  thumb: PixelBuffer,
+  cols: number,
+  rows: number,
+  gaps: Array<[number, number]>,
+  gapSides?: string[],
+): OrientedSpots | null {
   const lv = box.levels[0];
   const c = lv.cell;
   // The photo's puzzle at the same scale as the box picture's coarse level, in Lab.
@@ -149,6 +158,8 @@ export function orientSpots(box: BoxGrid, thumb: PixelBuffer, cols: number, rows
   return {
     turn: best.t,
     cells: gaps.map(([gc, gr]) => turnCell(gc, gr, cols, rows, best.t)),
+    // Turned t quarter turns clockwise, the side that faced d now faces d + t.
+    sides: gapSides?.length === gaps.length ? gapSides.map((sd) => [0, 1, 2, 3].map((e) => sd[(e - best.t + 4) % 4]).join('')) : undefined,
     fit: best.z,
     runnerUp: fits[1]?.z ?? -1,
   };
@@ -162,36 +173,181 @@ export interface SpotChoice {
   fits: boolean;
 }
 
+/** The pieces' and the spots' side shapes, for knob fit (M4 part 3). */
+export interface SpotShapes {
+  /** Per piece id: its sides in patch order (top, right, bottom, left: 't', 'b', 'f', 'u') and how sure (0–1). */
+  pieces: Map<string, { sides: string; conf: number[] }>;
+  /** Per spot (same order as the cells): its sides on the box picture ('t', 'b', 'f', 'o' open, '?'), or null. */
+  spots: string[] | null;
+}
+
+/** Side kind facing direction e (0 top … 3 left) for a piece turned q quarter turns clockwise. */
+const facing = (sides: string, q: number, e: number): string => sides[(e - q + 4) % 4] ?? 'u';
+
 /**
  * One piece per empty spot: `byPiece` holds each piece's scores at every empty spot (placePiece
  * with `full`). Returns each piece's spot, its chance and verdict (PLACE.gapStrongP / gapLikelyP).
+ *
+ * With `shapes` (M4 part 3), the knobs must fit too: a piece's side must be what the hole's outline
+ * shows there (read from the photo of the puzzle with its holes), and two pieces in neighbouring
+ * empty spots must interlock (knob out against knob in). The best pairing and turns are found by
+ * improving the plain pairing one move at a time (swap two pieces, move one to a free spot, turn
+ * one); the chances then count each spot's neighbours as placed.
  */
-export function chooseSpots(byPiece: Array<{ id: string; placement: Placement }>, cells: Array<[number, number]>): Map<string, SpotChoice> {
+export function chooseSpots(
+  byPiece: Array<{ id: string; placement: Placement }>,
+  cells: Array<[number, number]>,
+  shapes: SpotShapes | null = null,
+): Map<string, SpotChoice> {
   const key = (c: number, r: number) => `${c},${r}`;
   const index = new Map(cells.map(([c, r], j) => [key(c, r), j]));
+  const P = byPiece.length;
+  const S = cells.length;
   const spots = new Map<string, Map<number, PlacementSpot>>();
-  const score = byPiece.map(({ id, placement }) => {
-    const row = new Array<number>(cells.length).fill(Number.NEGATIVE_INFINITY);
+  // Unary scores per piece × spot × turn.
+  const NEG = Number.NEGATIVE_INFINITY;
+  const U: number[][][] = byPiece.map(({ id, placement }) => {
+    const rows = Array.from({ length: S }, () => [NEG, NEG, NEG, NEG]);
     const m = new Map<number, PlacementSpot>();
     for (const t of placement.top) {
       const j = index.get(key(t.col, t.row));
       if (j === undefined) continue;
-      row[j] = t.score;
       m.set(j, t);
+      if (t.rotScores) for (let q = 0; q < 4; q++) rows[j]![q] = t.rotScores[q]!;
+      else rows[j]![t.rot] = t.score;
     }
     spots.set(id, m);
-    return row;
+    return rows;
   });
   const out = new Map<string, SpotChoice>();
-  if (!byPiece.length) return out;
-  const pick = bestAssignment(score, PLACE.gapMinScore);
-  const chance = pairChances(score, PLACE.gapMinScore, PLACE.gapTemperature);
+  if (!P) return out;
+  const pieceShape = byPiece.map(({ id }) => shapes?.pieces.get(id) ?? null);
+  const useShapes = Boolean(shapes && (pieceShape.some(Boolean) || shapes.spots));
+  // Knob fit of a piece side against what's needed there.
+  const fit = (a: string, ca: number, b: string, cb: number, interlock: boolean): number => {
+    if ((a !== 't' && a !== 'b') || (b !== 't' && b !== 'b')) return 0;
+    const ok = interlock ? a !== b : a === b;
+    return ok ? PLACE.knobMatch * ca * cb : -PLACE.knobMismatch * ca * cb;
+  };
+  if (useShapes && shapes!.spots)
+    for (let i = 0; i < P; i++) {
+      const ps = pieceShape[i];
+      if (!ps) continue;
+      for (let j = 0; j < S; j++) {
+        const ss = shapes!.spots[j];
+        if (!ss) continue;
+        for (let q = 0; q < 4; q++) {
+          if (U[i]![j]![q] === NEG) continue;
+          let add = 0;
+          for (let e = 0; e < 4; e++) add += fit(facing(ps.sides, q, e), ps.conf[(e - q + 4) % 4] ?? 0, ss[e] ?? '?', 1, false);
+          U[i]![j]![q]! += add;
+        }
+      }
+    }
+  // Neighbouring spots: for spot j and direction e, the spot next to it (or −1).
+  const nb = cells.map(([c, r]) => [0, 1, 2, 3].map((e) => index.get(key(c + [0, 1, 0, -1][e]!, r + [-1, 0, 1, 0][e]!)) ?? -1));
+  const ub = U.map((rows) => rows.map((r) => Math.max(...r)));
+  const minS = PLACE.gapMinScore;
+  let a = bestAssignment(ub, minS);
+  const turn = a.map((j, i) => (j >= 0 ? U[i]![j]!.indexOf(ub[i]![j]!) : 0));
+  const at = new Int32Array(S).fill(-1);
+  a.forEach((j, i) => j >= 0 && (at[j] = i));
+  /** Knob fit of piece i (turn q) at spot j with whatever pieces are on the neighbouring spots (except `skip`). */
+  const pairAt = (i: number, j: number, q: number, skip = -1): number => {
+    const ps = pieceShape[i];
+    if (!ps) return 0;
+    let s = 0;
+    for (let e = 0; e < 4; e++) {
+      const n = nb[j]![e]!;
+      if (n < 0) continue;
+      const k = at[n]!;
+      if (k < 0 || k === i || k === skip || !pieceShape[k]) continue;
+      const kq = turn[k]!;
+      const back = (e + 2) % 4;
+      s += fit(
+        facing(ps.sides, q, e),
+        ps.conf[(e - q + 4) % 4] ?? 0,
+        facing(pieceShape[k]!.sides, kq, back),
+        pieceShape[k]!.conf[(back - kq + 4) % 4] ?? 0,
+        true,
+      );
+    }
+    return s;
+  };
+  if (useShapes) {
+    // A piece's part of the total: its score above "unpaired" and its knob fit with its neighbours
+    // (with `skip`'s fit left out, so a pair of moved pieces counts their shared side once).
+    const part = (i: number, skip = -1): number => (a[i]! >= 0 ? U[i]![a[i]!]![turn[i]!]! - minS + pairAt(i, a[i]!, turn[i]!, skip) : 0);
+    const bestTurn = (i: number, j: number, skip = -1): number => {
+      let bq = 0;
+      let bv = NEG;
+      for (let q = 0; q < 4; q++) {
+        if (U[i]![j]![q] === NEG) continue;
+        const v = U[i]![j]![q]! + pairAt(i, j, q, skip);
+        if (v > bv) [bv, bq] = [v, q];
+      }
+      return bq;
+    };
+    for (let round = 0; round < 30; round++) {
+      let improved = false;
+      // Turn each piece.
+      for (let i = 0; i < P; i++) {
+        if (a[i]! < 0) continue;
+        const q0 = turn[i]!;
+        const before = part(i);
+        turn[i] = bestTurn(i, a[i]!);
+        if (part(i) > before + 1e-9) improved = true;
+        else turn[i] = q0;
+      }
+      // Swap two pieces' spots (either may be unpaired), or move a piece to a free spot.
+      for (let i1 = 0; i1 < P; i1++)
+        for (let i2 = i1 + 1; i2 <= P; i2++) {
+          const free = i2 === P;
+          const targets = free ? [...Array(S).keys()].filter((j) => at[j]! < 0).concat([-1]) : [a[i2]!];
+          for (const j2 of targets) {
+            const j1 = a[i1]!;
+            if (j1 === j2 || (!free && j1 < 0 && j2 < 0)) continue;
+            if (j2 >= 0 && ub[i1]![j2]! === NEG) continue;
+            if (!free && j1 >= 0 && ub[i2]![j1]! === NEG) continue;
+            const before = part(i1) + (free ? 0 : part(i2, i1));
+            const save = { a1: a[i1]!, a2: free ? -2 : a[i2]!, q1: turn[i1]!, q2: free ? 0 : turn[i2]! };
+            // Apply.
+            if (j1 >= 0) at[j1] = free ? -1 : i2;
+            if (j2 >= 0) at[j2] = i1;
+            a[i1] = j2;
+            if (!free) a[i2] = j1;
+            if (j2 >= 0) turn[i1] = bestTurn(i1, j2);
+            if (!free && j1 >= 0) turn[i2] = bestTurn(i2, j1);
+            if (part(i1) + (free ? 0 : part(i2, i1)) > before + 1e-9) {
+              improved = true;
+              continue;
+            }
+            // Undo.
+            if (j2 >= 0) at[j2] = free ? -1 : i2;
+            if (j1 >= 0) at[j1] = i1;
+            a[i1] = save.a1;
+            turn[i1] = save.q1;
+            if (!free) ((a[i2] = save.a2), (turn[i2] = save.q2));
+          }
+        }
+      if (!improved) break;
+    }
+  }
+  // Chances: each piece's best turn at each spot, counting knob fit with the pieces placed around it.
+  const cond = byPiece.map((_, i) =>
+    cells.map((__, j) => Math.max(...[0, 1, 2, 3].map((q) => (U[i]![j]![q]! === NEG ? NEG : U[i]![j]![q]! + (useShapes ? pairAt(i, j, q) : 0))))),
+  );
+  const chance = pairChances(cond, minS, PLACE.gapTemperature);
+  if (!useShapes) a = bestAssignment(cond, minS);
   byPiece.forEach(({ id }, i) => {
     const m = spots.get(id)!;
-    const order = [...m.keys()].sort((a, b) => chance[i]![b]! - chance[i]![a]! || score[i]![b]! - score[i]![a]!);
-    const j = pick[i]!;
+    const order = [...m.keys()].sort((x, y) => chance[i]![y]! - chance[i]![x]! || cond[i]![y]! - cond[i]![x]!);
+    const j = a[i]!;
     if (j >= 0) (order.splice(order.indexOf(j), 1), order.unshift(j));
-    const top = order.map((k) => ({ ...m.get(k)!, p: chance[i]![k]! }));
+    const top = order.map((k) => {
+      const q = k === j ? turn[i]! : (U[i]![k]!.indexOf(Math.max(...U[i]![k]!)) as 0 | 1 | 2 | 3);
+      return { ...m.get(k)!, rot: q as 0 | 1 | 2 | 3, p: chance[i]![k]! };
+    });
     const p1 = j >= 0 ? chance[i]![j]! : 0;
     out.set(id, {
       placement: { top, verdict: p1 >= PLACE.gapStrongP ? 'strong' : p1 >= PLACE.gapLikelyP ? 'likely' : 'several' },

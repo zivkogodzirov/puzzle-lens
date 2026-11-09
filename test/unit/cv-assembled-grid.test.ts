@@ -88,6 +88,42 @@ describe('finished-puzzle check', () => {
       for (let col = 16; col <= 18; col++) want.push([col, 8]);
       const key = (a: [number, number]) => a[1] * 100 + a[0];
       expect([...g.gaps].sort((a, b) => key(a) - key(b))).toEqual(want.sort((a, b) => key(a) - key(b)));
+      // The missing pieces' sides where a hole borders a piece in place (read by eye from this photo
+      // and the complete puzzle's seams, IMG_9272): t knob out, b knob in, f edge, o another hole;
+      // '?' = may be unreadable. Top, right, bottom, left; column-row 1-based.
+      const sidesWant: Record<string, string> = {
+        c24r1: 'foot',
+        c25r1: 'fooo',
+        c26r1: 'fooo',
+        c27r1: 'fooo',
+        c28r1: 'ffoo',
+        c24r2: 'ootb',
+        c25r2: 'oobo',
+        c26r2: 'oobo',
+        c27r2: 'ooto',
+        c28r2: 'ofto',
+        c17r7: 'boot',
+        c18r7: 'booo',
+        c19r7: 'booo',
+        c20r7: 'tboo',
+        c17r8: 'ooob',
+        c18r8: 'oooo',
+        c19r8: 'oooo',
+        c20r8: 'otto',
+        c17r9: 'oo?t',
+        c18r9: 'ooto',
+        c19r9: 'obbo',
+      };
+      let unread = 0;
+      g.gaps.forEach(([c, r], k) => {
+        const want4 = sidesWant[`c${c + 1}r${r + 1}`]!;
+        const got4 = g.gapSides[k]!;
+        for (let d = 0; d < 4; d++) {
+          if (got4[d] === '?') unread++;
+          else if (want4[d] !== '?') expect(`c${c + 1}r${r + 1} side ${d}: ${got4[d]}`).toBe(`c${c + 1}r${r + 1} side ${d}: ${want4[d]}`);
+        }
+      });
+      expect(unread, g.gapSides.join(' ')).toBeLessThanOrEqual(4);
       // Turned onto the box picture (the owner's, from a screenshot of the app), as the photo is and
       // as if it had been taken from the other side of the table (upside down).
       const shot = listRealPhotos().find((p) => p.name.startsWith('shot-9294'));

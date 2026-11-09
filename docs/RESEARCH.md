@@ -462,6 +462,12 @@ So I'm designing and testing this from scratch.
 4. Real result, owner's 21 patches (19 pieces + a bottle label + a table patch) vs the 21 holes, box picture from the app screenshot, truth = one-to-one matching against the finished-puzzle photo IMG_9272 with the pieces in place: best spot alone 13 of 19, with one-per-spot 14 of 19; Strong 9 (all right), Likely 2 (both right), no wrong Strong or Likely; the table patch is left unpaired. Errors are plain wall pieces exchanged within the top-right holes, which also have the least reliable truth.
 5. Synthetic (val48 / val300, scanned end to end, photographed-lid box picture; gaps = every scanned piece's cell + 20 % unscanned): right 95.1 % / 86.9 % (best spot alone 90.7 % / 83.2 %); Strong 73 % / 23 % of pieces, right 99.7 % / 100 %; Likely right 100 % / 99.2 %. Time grows with the number of gaps (24 ms per piece at ~60 gaps, 306 ms at ~360 on the Mac).
 
+**Knob fit among the empty spots (2026-11-09, M4 part 3).** Look-alike plain pieces (the owner's wall) can't be told apart by colour and pattern, but a jigsaw's knobs are a strong constraint: every hole side that borders a piece in place shows in the holes photo whether the missing piece had a knob out or in, and neighbouring missing pieces must interlock.
+1. Real check of the idea: the 10 top-right holes' knob patterns (from the seams of the complete puzzle IMG_9272, confirmed by the holes photo on every outer side) identify 8 of the 9 scanned wall pieces uniquely from their shape-read sides; two holes share a pattern (knob in/out alternating). One piece was read as interior though it has a flat side (an untrusted read); with that corrected it fits its hole exactly.
+2. Method: see PLAN decisions (2026-11-09, M4 part 3). The weights are log-odds-like: by chance half of all sides fit, so a fit is weak evidence (+0.025) and a misfit strong (−0.12), scaled by both reads' confidence, at the pairing temperature 0.04.
+3. Results: real 13 → 16 of 19 (box picture from a screenshot), in the app 17 Strong all right; synthetic two-group holes val300 89 → 98 %. A full outline match against the hole (chamfer to the complete puzzle's seams) was tried as ground truth and was too ambiguous: Ravensburger knobs are so uniform that one outline fits several holes within the grid's tenth-of-a-piece uncertainty; only the knob pattern is reliable.
+
+
 ---
 
 ## 10. Grid size

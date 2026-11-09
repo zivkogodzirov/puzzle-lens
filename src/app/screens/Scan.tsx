@@ -439,7 +439,15 @@ export function ScanScreen() {
           return {
             ...p,
             thumb: r.thumbs[i] ?? null,
-            patch: pt ? { blob: new Blob([pt.rgba as Uint8Array<ArrayBuffer>], { type: 'application/octet-stream' }), flats: pt.flats, sure: pt.sure } : null,
+            patch: pt
+              ? {
+                  blob: new Blob([pt.rgba as Uint8Array<ArrayBuffer>], { type: 'application/octet-stream' }),
+                  flats: pt.flats,
+                  sure: pt.sure,
+                  sides: pt.sides,
+                  sideConf: pt.sideConf,
+                }
+              : null,
           };
         }),
         {
@@ -670,7 +678,9 @@ export async function saveOpenSpots(project: Project, fin: FinishedCheck): Promi
   const id = projectBlobId(project.id, 'open-spots');
   if (fin.gaps.length && fin.thumb) {
     await putBlob(id, 'open-spots', fin.thumb);
-    return updateProject(project.id, { openSpots: { cols: fin.cols, rows: fin.rows, gaps: fin.gaps, thumbBlobId: id, ts: Date.now() } });
+    return updateProject(project.id, {
+      openSpots: { cols: fin.cols, rows: fin.rows, gaps: fin.gaps, gapSides: fin.gapSides, thumbBlobId: id, ts: Date.now() },
+    });
   }
   if (!fin.gaps.length && project.openSpots) {
     const next = await updateProject(project.id, { openSpots: null });

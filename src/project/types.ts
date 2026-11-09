@@ -103,6 +103,8 @@ export interface OpenSpots {
   rows: number;
   /** The empty spots: column, row from the photo's top-left (0-based). */
   gaps: Array<[number, number]>;
+  /** Each spot's sides as read from the hole's outline (top, right, bottom, left in the photo; see AssembledGrid.gapSides). */
+  gapSides?: string[];
   /** blobs id of the puzzle straightened small (to turn the spots to match the box picture). */
   thumbBlobId: string;
   /** When the photo was read (placements are redone when this changes). */
@@ -157,6 +159,12 @@ export interface PiecePatchInfo {
   flats: boolean[];
   sure: boolean;
   ts: number;
+  /**
+   * Each side's shape (patch top, right, bottom, left): 't' knob out, 'b' knob in, 'f' flat, 'u'
+   * not sure; and how sure (0–1). Absent on pieces scanned before M4 part 3.
+   */
+  sides?: string;
+  sideConf?: number[];
 }
 
 export type SnapKind = 'overview' | 'detail' | 'empty-table' | 'marker-map' | 'box';

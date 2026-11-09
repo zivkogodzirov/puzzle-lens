@@ -25,7 +25,7 @@ export interface FoundForCatalog {
   flags: PieceFlags;
   thumb?: Blob | null;
   /** The piece straightened for box placement (M4). */
-  patch?: { blob: Blob; flats: boolean[]; sure: boolean } | null;
+  patch?: { blob: Blob; flats: boolean[]; sure: boolean; sides?: string; sideConf?: number[] } | null;
 }
 
 export interface MergePlan {
@@ -170,7 +170,12 @@ export function planMerge(
     if (!f.patch) return old;
     const id = old?.blobId ?? patchId(pieceId);
     patches.push({ id, blob: f.patch.blob });
-    return { blobId: id, flats: f.patch.flats, sure: f.patch.sure, ts: ctx.now };
+    const info: PiecePatchInfo = { blobId: id, flats: f.patch.flats, sure: f.patch.sure, ts: ctx.now };
+    if (f.patch.sides) {
+      info.sides = f.patch.sides;
+      info.sideConf = f.patch.sideConf ?? [1, 1, 1, 1];
+    }
+    return info;
   };
   let skipped = 0;
   /** Found pieces matched to nobody by position (index into found), to try as moved pieces. */

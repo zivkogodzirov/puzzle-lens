@@ -152,6 +152,9 @@ test('with empty spots from an upside-down finished-puzzle photo: pieces go only
   const gaps = cells.map(([c, r]) => [9 - c, 7 - r] as [number, number]);
   await seed(page, { gaps, thumb: jpeg(true, 10 * 8, 8 * 8) });
   await expect(page.getByTestId('open-spots')).toContainText('8 empty spots', { timeout: 60_000 });
+  // Saved before knob shapes were read: the page says how to switch them on.
+  await expect(page.getByTestId('knobs-off')).toContainText('choose your photo of the puzzle with its holes again');
+  await expect(page.getByTestId('knobs-off')).toContainText('scan your leftover pieces again (all of them');
   await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
   await eachPieceAtItsCell(page);
   await expect(page.getByTestId('spot-box').locator('rect.spot-open')).toHaveCount(8);

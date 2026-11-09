@@ -42,6 +42,9 @@ export interface PatchForCatalog {
   flats: boolean[];
   /** The shape read behind the corners and flats is trusted. */
   sure: boolean;
+  /** Each side's shape ('t' knob out, 'b' knob in, 'f' flat, 'u' not sure) and how sure (0–1). */
+  sides: string;
+  sideConf: number[];
 }
 
 /** The empty spots of a nearly finished puzzle as found in a photo of it (see Project.openSpots). */
@@ -49,6 +52,8 @@ export interface OpenSpotsInput {
   cols: number;
   rows: number;
   gaps: Array<[number, number]>;
+  /** Each gap's sides (top, right, bottom, left in the photo), when read. */
+  gapSides?: string[];
   thumb: Blob;
 }
 
@@ -72,6 +77,8 @@ export interface FinishedCheck {
   seamStrength: number;
   /** Missing-piece spots (column, row from the top-left, 0-based) and their centres in preview px. */
   gaps: Array<[number, number]>;
+  /** Each gap's sides as read from the hole's outline (AssembledGrid.gapSides). */
+  gapSides: string[];
   gapsPreview: Array<[number, number]>;
   /** The puzzle's 4 corners in preview px. */
   cornersPreview: Array<[number, number]>;
@@ -172,7 +179,7 @@ export interface PlaceReply {
    * box picture and how alike they looked (best and next best turn). No cells (turn −1) when the
    * photo's grid fits the box's in no turn. Null when no empty spots were given.
    */
-  open: { cells: Array<[number, number]>; turn: number; fit: number; runnerUp: number } | null;
+  open: { cells: Array<[number, number]>; sides?: string[]; turn: number; fit: number; runnerUp: number } | null;
   ms: number;
 }
 

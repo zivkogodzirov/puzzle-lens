@@ -37,6 +37,13 @@ export interface AssembledGrid {
   gaps: Array<[number, number]>;
   /** Each gap's centre in photo px. */
   gapsPx: Array<[number, number]>;
+  /**
+   * Each gap's sides (top, right, bottom, left, in the reported orientation): what the missing
+   * piece has there, read from the hole's outline where it borders a piece still in place:
+   * 't' knob out (the hole reaches into the neighbour), 'b' knob in (the neighbour's knob reaches
+   * into the hole), 'f' the puzzle's edge, 'o' another gap (unknown), '?' not readable.
+   */
+  gapSides: string[];
 }
 
 /** Below this seam strength the count is not trusted. */
@@ -400,6 +407,7 @@ export function readAssembledGrid(
   const tableLab = ringLab(rgba, corners);
   const gaps: Array<[number, number]> = [];
   const gapsPx: Array<[number, number]> = [];
+  const gapRect: Array<[number, number]> = [];
   const toPhoto = fitHomography(
     [
       [0, 0],
@@ -445,12 +453,108 @@ export function readAssembledGrid(
           // In the reported orientation (turned: the straightened picture's x runs down the puzzle).
           // Turned: the puzzle's columns run down the straightened picture and its rows right to left.
           gaps.push(turnedNow ? [j, nX - 1 - i] : [i, j]);
+          gapRect.push([i, j]);
           if (toPhoto) gapsPx.push(applyH(toPhoto, [(i + 0.5) / nX, (j + 0.5) / nY]));
         }
       }
   }
-  return { cornersPx, aspect: rect.aspect, colsExact, rowsExact, cols, rows, seamStrength: Math.min(cx.strength, cy.strength), gaps, gapsPx };
+  let gapSides: string[] = [];
+  if (tableLab && gapRect.length) {
+    const nX = Math.round(W / cx.lag);
+    const nY = Math.round(H / cy.lag);
+    const sidesRect = holeSides(data, W, H, nX, nY, gapRect, tableLab);
+    // Turned: the reported top is the straightened picture's right side, and so on round.
+    gapSides = sidesRect.map((sd) => (turnedNow ? [1, 2, 3, 0].map((k) => sd[k]).join('') : sd));
+  }
+  return { cornersPx, aspect: rect.aspect, colsExact, rowsExact, cols, rows, seamStrength: Math.min(cx.strength, cy.strength), gaps, gapsPx, gapSides };
 }
+
+/**
+ * The missing pieces' sides, from the holes' outlines in the straightened puzzle (`data`, W × H,
+ * nX × nY cells). Where a hole borders a piece still in place, that piece's knob either reaches
+ * into the hole (the missing piece had a knob in: 'b') or the hole reaches into it (knob out:
+ * 't'). The side's true line is first found from the table edge away from the knob (the grid can
+ * be a tenth of a piece off), then two boxes on the knob's axis are compared: table just outside
+ * the line = knob out; piece just inside = knob in.
+ */
+function holeSides(
+  data: Uint8ClampedArray,
+  W: number,
+  H: number,
+  nX: number,
+  nY: number,
+  gaps: Array<[number, number]>,
+  tableLab: [number, number, number],
+): string[] {
+  const cw = W / nX;
+  const ch = H / nY;
+  const isGap = new Set(gaps.map(([i, j]) => j * nX + i));
+  const table = (x: number, y: number): number | null => {
+    const X = Math.round(x);
+    const Y = Math.round(y);
+    if (X < 0 || Y < 0 || X >= W || Y >= H) return null;
+    const k = (Y * W + X) * 4;
+    return deltaE(rgbToLab(data[k]!, data[k + 1]!, data[k + 2]!), tableLab) < GAP_PIXEL_DELTA_E ? 1 : 0;
+  };
+  return gaps.map(([i, j]) =>
+    [0, 1, 2, 3]
+      .map((d) => {
+        const [di, dj] = [
+          [0, -1],
+          [1, 0],
+          [0, 1],
+          [-1, 0],
+        ][d]!;
+        const ni = i + di!;
+        const nj = j + dj!;
+        if (ni < 0 || nj < 0 || ni >= nX || nj >= nY) return 'f';
+        if (isGap.has(nj * nX + ni)) return 'o';
+        // Side middle, outward normal and the side's direction, in px; sizes across and along.
+        const sN = d % 2 ? cw : ch;
+        const sL = d % 2 ? ch : cw;
+        const mx = (i + 0.5 + di! * 0.5) * cw;
+        const my = (j + 0.5 + dj! * 0.5) * ch;
+        const at = (t: number, u: number): number | null => table(mx + di! * t * sN - dj! * u * sL, my + dj! * t * sN + di! * u * sL);
+        // The line: along normals away from the knob, how far the table reaches.
+        const edges: number[] = [];
+        for (const u of [-0.34, -0.28, 0.28, 0.34]) {
+          let n = 0;
+          let tab = 0;
+          for (let t = -0.25; t <= 0.25; t += 0.01) {
+            const v = at(t, u);
+            if (v === null) continue;
+            n++;
+            tab += v;
+          }
+          if (n > 30) edges.push(-0.25 + (tab / n) * 0.5);
+        }
+        if (edges.length < 2) return '?';
+        edges.sort((a, b) => a - b);
+        const t0 = Math.max(-0.15, Math.min(0.15, (edges[(edges.length - 1) >> 1]! + edges[edges.length >> 1]!) / 2));
+        const share = (a: number, b: number): number => {
+          let n = 0;
+          let s = 0;
+          for (let t = a; t <= b; t += 0.02)
+            for (let u = -0.07; u <= 0.0701; u += 0.035) {
+              const v = at(t0 + t, u);
+              if (v === null) continue;
+              n++;
+              s += v;
+            }
+          return n ? s / n : 0;
+        };
+        const out = share(0.1, 0.3);
+        const intrude = 1 - share(-0.3, -0.1);
+        if (out > intrude + HOLE_SIDE_MARGIN) return 't';
+        if (intrude > out + HOLE_SIDE_MARGIN) return 'b';
+        return '?';
+      })
+      .join(''),
+  );
+}
+
+/** A hole side is read only when one kind's evidence (share of the box) beats the other's by this. */
+const HOLE_SIDE_MARGIN = 0.2;
 
 /**
  * The table-like part of the cell must be the table's colour and plain, together:

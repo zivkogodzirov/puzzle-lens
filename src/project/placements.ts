@@ -14,12 +14,15 @@
  */
 import { db } from '../db/db';
 import type { ColourMatch, Placement } from '../cv/placement';
-import { chooseSpots, type SpotChoice } from '../cv/openSpots';
+import { chooseSpots, type SpotChoice, type SpotShapes } from '../cv/openSpots';
 import type { OpenSpotsInput, PieceToPlace, PlaceReply, ReaderApi } from '../shared/apis';
 import { getBlob, placementKey } from './store';
 import type { PieceRow, Project } from './types';
 
 export { placementKey };
+
+/** Knob reads of a piece whose shape read isn't trusted count this much. */
+const UNSURE_SHAPE_WEIGHT = 0.6;
 
 export interface PlacementCache {
   /** The box picture, grid and empty spots these placements are for (placeKeyOf). */
@@ -77,7 +80,7 @@ export async function updatePlacements(
   let open: OpenSpotsInput | null = null;
   if (project.openSpots) {
     const thumb = await getBlob(project.openSpots.thumbBlobId);
-    if (thumb) open = { cols: project.openSpots.cols, rows: project.openSpots.rows, gaps: project.openSpots.gaps, thumb };
+    if (thumb) open = { cols: project.openSpots.cols, rows: project.openSpots.rows, gaps: project.openSpots.gaps, gapSides: project.openSpots.gapSides, thumb };
   }
   // Among empty spots, all pieces go in one batch so the colour match is measured from all of them.
   const BATCH = open ? Math.max(40, todo.length) : 40;
@@ -109,7 +112,14 @@ export function shownPlacements(cache: PlacementCache | null, pieces: PieceRow[]
   const out = new Map<string, SpotChoice>();
   if (!cache) return out;
   const placed = pieces.filter((p) => cache.byPiece[p.id]).map((p) => ({ id: p.id, placement: cache.byPiece[p.id]!.placement }));
-  if (cache.open?.cells.length) return chooseSpots(placed, cache.open.cells);
+  if (cache.open?.cells.length) {
+    // Knob fit (M4 part 3): pieces scanned since then carry their sides; an unsure shape read counts less.
+    const shapes: SpotShapes = { pieces: new Map(), spots: cache.open.sides?.length === cache.open.cells.length ? cache.open.sides : null };
+    for (const p of pieces)
+      if (p.patch?.sides && p.patch.sideConf)
+        shapes.pieces.set(p.id, { sides: p.patch.sides, conf: p.patch.sideConf.map((c) => c * (p.patch!.sure ? 1 : UNSURE_SHAPE_WEIGHT)) });
+    return chooseSpots(placed, cache.open.cells, shapes);
+  }
   for (const p of placed) out.set(p.id, { placement: p.placement, fits: true });
   return out;
 }

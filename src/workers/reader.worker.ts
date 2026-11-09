@@ -393,7 +393,15 @@ const api: ReaderApi = {
           rd.corners.map(([x, y]) => [x * ppmHere, y * ppmHere] as [number, number]),
           p.outlineImg,
         );
-        return patch ? { rgba: patch.rgba, flats: rd.sides.map((sd) => sd.kind === 'flat'), sure: Boolean(rd.kind) && rd.quality >= READ_OK } : null;
+        return patch
+          ? {
+              rgba: patch.rgba,
+              flats: rd.sides.map((sd) => sd.kind === 'flat'),
+              sure: Boolean(rd.kind) && rd.quality >= READ_OK,
+              sides: rd.sides.map((sd) => (sd.kind === 'unsure' ? 'u' : sd.kind[0])).join(''),
+              sideConf: rd.sides.map((sd) => Math.round(sd.conf * 100) / 100),
+            }
+          : null;
       });
       const { thumbs, preview, previewScale } = await thumbsAndPreview(
         rgba,
@@ -417,6 +425,7 @@ const api: ReaderApi = {
         rowsExact: finishedRaw.rowsExact,
         seamStrength: finishedRaw.seamStrength,
         gaps: finishedRaw.gaps,
+        gapSides: finishedRaw.gapSides,
         gapsPreview: finishedRaw.gapsPx.map(([x, y]) => [x * previewScale, y * previewScale] as [number, number]),
         cornersPreview: finishedRaw.cornersPx.map(([x, y]) => [x * previewScale, y * previewScale] as [number, number]),
       };
@@ -639,8 +648,8 @@ const api: ReaderApi = {
       const reader = new PhotoReader(await decodeAtMost(open.thumb, await headerSize(open.thumb), 4096));
       try {
         const thumb = ensureRgba(await reader.read({ x: 0, y: 0, width: reader.width, height: reader.height }));
-        const o = orientSpots(bg, thumb, open.cols, open.rows, open.gaps);
-        spots = o ? { cells: o.cells, turn: o.turn, fit: o.fit, runnerUp: o.runnerUp } : { cells: [], turn: -1, fit: 0, runnerUp: 0 };
+        const o = orientSpots(bg, thumb, open.cols, open.rows, open.gaps, open.gapSides);
+        spots = o ? { cells: o.cells, sides: o.sides, turn: o.turn, fit: o.fit, runnerUp: o.runnerUp } : { cells: [], turn: -1, fit: 0, runnerUp: 0 };
       } finally {
         reader.close();
       }

@@ -179,4 +179,37 @@ describe('one piece per spot', () => {
     expect(got.get('label')!.fits).toBe(false);
     expect(got.get('label')!.placement.verdict).toBe('several');
   });
+
+  it('knob fit: equal-looking pieces go where their knobs fit the hole and each other', () => {
+    // Two spots side by side; the left one's hole shows a knob out on its left. Pieces A and B look
+    // the same everywhere (equal scores, upright only); A has a knob out on its left, B a knob in.
+    const cells: Array<[number, number]> = [
+      [5, 5],
+      [6, 5],
+    ];
+    const NEG = Number.NEGATIVE_INFINITY;
+    const pl = (): Placement => ({
+      top: cells.map(([col, row]) => ({ col, row, rot: 0, score: 0.4, p: 0, rotScores: [0.4, NEG, NEG, NEG] })),
+      verdict: 'several',
+    });
+    const placed = [
+      { id: 'B', placement: pl() },
+      { id: 'A', placement: pl() },
+    ];
+    const shapes = {
+      // Sides: top, right, bottom, left.
+      pieces: new Map([
+        ['A', { sides: 'utut', conf: [1, 1, 1, 1] }],
+        ['B', { sides: 'uuub', conf: [1, 1, 1, 1] }],
+      ]),
+      spots: ['?o?t', '???o'],
+    };
+    const got = chooseSpots(placed, cells, shapes);
+    expect(got.get('A')!.placement.top[0]).toMatchObject({ col: 5, row: 5 });
+    expect(got.get('B')!.placement.top[0]).toMatchObject({ col: 6, row: 5 });
+    expect(got.get('A')!.placement.top[0]!.p).toBeGreaterThan(got.get('A')!.placement.top[1]!.p);
+    // The other way round, A's knob out would meet the hole's knob out: never preferred.
+    const swapped = chooseSpots(placed, cells, { ...shapes, spots: ['?o?b', '???o'] });
+    expect(swapped.get('B')!.placement.top[0]).toMatchObject({ col: 5, row: 5 });
+  });
 });
