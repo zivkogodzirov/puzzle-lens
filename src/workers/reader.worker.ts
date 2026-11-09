@@ -364,9 +364,12 @@ const api: ReaderApi = {
         }
       }
       // A finished puzzle: most of the photo is one assembled area whose seams count up to the box's
-      // pieces with few gaps (owner's request 2026-11-08).
+      // pieces with few gaps (owner's request 2026-11-08). Checked on close-ups too: after the first
+      // overview the scan screen switches to close-ups, and the owner's photo of the puzzle with its
+      // holes was then read as a close-up, its holes never looked for and 11 of its spots taken for
+      // loose pieces (2026-11-09). A close-up of part of the puzzle can't count up to the box's pieces.
       let finishedRaw: AssembledGrid | null = null;
-      if (opts.kind === 'overview' && opts.pieceCount) {
+      if (opts.pieceCount) {
         const big = (r.regions ?? []).filter((g) => g.kind === 'assembled').sort((a, b) => outlineArea(b.outlineImg) - outlineArea(a.outlineImg))[0];
         if (big && outlineArea(big.outlineImg) >= FINISHED_MIN_SHARE * rgba.width * rgba.height) {
           const q = puzzleQuad(c, rgba, big.outlineImg);

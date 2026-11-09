@@ -1,4 +1,4 @@
-# M4 (parts 1, 1b and 2) checklist for your iPhone: where does each piece go?
+# M4 (parts 1, 1b, 2 and 2b) checklist for your iPhone: where does each piece go?
 
 M4 part 1 suggests, for every scanned piece, **where it goes on the box picture**: the best spot (column and row, counted from the top-left), how sure it is (**Strong**, **Likely**, or **Several spots look alike**) and up to 4 other possible spots. Allow about 20 minutes. Screenshots of anything wrong help.
 
@@ -31,7 +31,7 @@ This tells us exactly how well it works on your pieces:
 ## Part F: leftover pieces into the empty spots (part 2)
 With most of the puzzle done, the app now uses your photo of the puzzle with its holes: the leftover pieces are matched **only to the empty spots**, and **each spot takes one piece**.
 1. Update the app (Part A). Settings should show the version I sent you.
-2. Open *The Kiss* → **📷 Scan pieces** → **🖼 Choose a photo** → your holes photo (IMG_9280). It should say **21 possible gaps** and then **"Saved: your leftover pieces will now be matched only to these 21 empty spots"**.
+2. Open *The Kiss* → **📷 Scan pieces** → **🖼 Choose a photo** → your holes photo (IMG_9280). It doesn't matter whether the screen says "Overview" or "Close-ups". It should say **21 possible gaps** and then **"Saved: your leftover pieces will now be matched only to these 21 empty spots"**. If it says "Close-up read: … pieces" instead, the app hasn't updated yet: close it fully and open it again, then check the version.
 3. If your Pieces list has pieces other than the 21 leftovers (from earlier tests), tap **Delete scanned pieces… → Delete and scan again** and choose your 21-piece photo (IMG_9276). Otherwise just go back to the puzzle page.
 4. Under Pieces you should see a green box: **"Leftover pieces are matched only to the 21 empty spots…"**, then a count such as "9 strong · 2 likely · 8 several spots look alike · 1 fit none of the empty spots".
 5. **Tap a piece:** the box picture shows the 21 empty spots as light squares, its spot in **green**, other possible spots in yellow. Check the **Strong** ones against the real holes: they should all be right.

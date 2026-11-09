@@ -719,6 +719,12 @@ function PlaceSummary({
   const spots = open?.cells.length ?? 0;
   return (
     <>
+      {!hasSpots && rows.length > 0 && (
+        <p class="small muted" data-testid="open-spots-tip">
+          <strong>Most of the puzzle done?</strong> Tap <strong>📷 Scan pieces → 🖼 Choose a photo</strong> and pick one photo of the whole puzzle with its
+          holes. Your leftover pieces are then matched only to those empty spots, which is far more reliable than searching the whole picture.
+        </p>
+      )}
       {hasSpots && (
         <div class="notice notice-good small" data-testid="open-spots">
           {open && !spots ? (

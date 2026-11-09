@@ -4,6 +4,12 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M4 (part 2b): your holes photo is now recognised after the first photo (2026-11-09; tested in the app on the Mac, not yet on your iPhone)
+- **Why your test showed the same wrong "Strong":** the app never switched to empty-spots mode. After the first photo, the scan screen moves to close-ups, and close-ups were never checked for a finished puzzle. Your holes photo was read as a close-up of loose pieces: its holes weren't looked for, and 11 of its spots were even added as "pieces". **Fixed:** every photo is checked for a finished puzzle, close-up or not (a close-up of part of the puzzle can't count up to 1,008 pieces).
+- **A tip on the puzzle page** when no empty spots are saved: "Most of the puzzle done? … pick one photo of the whole puzzle with its holes."
+- **Tested in the app itself** (the same build, run on the Mac with your photos, so they never go online): new puzzle with your box picture → your 21-piece photo → your holes photo while on close-ups → "21 possible gaps … Saved". On the puzzle page: 8 Strong, 5 Likely, 8 "Several spots look alike", and 2 "fit none" (the bottle's label and a patch of table). Checked against your finished-puzzle photo with the pieces in place: **all 8 Strong are right**, and the Likely ones look right too. Column 28, row 28 can no longer come up: it isn't an empty spot.
+- Without the holes photo (whole picture), about 1 "Strong" in 25 is still wrong on real pieces. Use the holes photo whenever most of the puzzle is done.
+
 ### M4 (part 2): leftover pieces go only into the empty spots (2026-11-09; not yet checked on your iPhone)
 - **Why:** your two screenshots showed "Strong" on wrong spots (column 28, row 28 by the steps; column 13, row 10 at the man's elbow). Neither is one of your 21 holes. With 987 pieces already in, searching the whole picture made no sense.
 - **Empty spots are saved:** a photo of the puzzle with its holes (the finished-puzzle check) now keeps those spots. It works even if the photo shows the puzzle sideways or upside down: the app turns it to match the box picture. A photo with no holes clears them.
