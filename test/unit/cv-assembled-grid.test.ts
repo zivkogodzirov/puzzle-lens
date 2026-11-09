@@ -6,6 +6,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { puzzleQuad, readAssembledGrid } from '../../src/cv/assembledGrid';
+import { orientSpots, SPOT_THUMB_CELL, straightenQuad, turnCell } from '../../src/cv/openSpots';
+import { buildBoxGrid } from '../../src/cv/placement';
 import { applyH, fitHomography } from '../../src/geo/homography';
 import type { Vec2 } from '../../src/project/types';
 import { scanMarkerless } from '../../src/cv/scanMarkerless';
@@ -86,6 +88,30 @@ describe('finished-puzzle check', () => {
       for (let col = 16; col <= 18; col++) want.push([col, 8]);
       const key = (a: [number, number]) => a[1] * 100 + a[0];
       expect([...g.gaps].sort((a, b) => key(a) - key(b))).toEqual(want.sort((a, b) => key(a) - key(b)));
+      // Turned onto the box picture (the owner's, from a screenshot of the app), as the photo is and
+      // as if it had been taken from the other side of the table (upside down).
+      const shot = listRealPhotos().find((p) => p.name.startsWith('shot-9294'));
+      if (!shot) return;
+      const s = await decodeRgba(shot.path);
+      const BW = 1120;
+      const BH = 1569;
+      const boxPx = new Uint8Array(BW * BH * 4);
+      for (let y = 0; y < BH; y++) boxPx.set(s.data.subarray((1059 + y) * s.stride + 100 * 4, (1059 + y) * s.stride + (100 + BW) * 4), y * BW * 4);
+      const box = buildBoxGrid({ data: boxPx, width: BW, height: BH, stride: BW * 4 }, 28, 36);
+      const c = g.cornersPx as Array<[number, number]>;
+      const asIs = orientSpots(box, straightenQuad(img, c, 28 * SPOT_THUMB_CELL, 36 * SPOT_THUMB_CELL), 28, 36, g.gaps)!;
+      expect(asIs.turn).toBe(0);
+      expect([...asIs.cells].sort((a, b) => key(a) - key(b))).toEqual(want);
+      const flipped = orientSpots(
+        box,
+        straightenQuad(img, [c[2]!, c[3]!, c[0]!, c[1]!], 28 * SPOT_THUMB_CELL, 36 * SPOT_THUMB_CELL),
+        28,
+        36,
+        g.gaps.map(([col, row]) => turnCell(col, row, 28, 36, 2)),
+      )!;
+      expect(flipped.turn).toBe(2);
+      expect([...flipped.cells].sort((a, b) => key(a) - key(b))).toEqual(want);
+      expect(asIs.fit, `fit ${asIs.fit.toFixed(2)} vs ${asIs.runnerUp.toFixed(2)}`).toBeGreaterThan(asIs.runnerUp + 0.2);
     },
     300_000,
   );

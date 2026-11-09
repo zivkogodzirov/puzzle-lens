@@ -20,9 +20,10 @@ import { ensureRgba, scanPixels, tableFromPixels } from '../cv/scanPhoto';
 import { scanMarkerless } from '../cv/scanMarkerless';
 import { findCoin } from '../cv/coin';
 import { readShape, READ_OK } from '../cv/shapeRead';
-import { buildBoxGrid, extractPatch, patchStats, placePiece, PATCH_SIZE, type BoxGrid, type ColourMatch } from '../cv/placement';
+import { buildBoxGrid, extractPatch, patchStats, placePiece, spotStats, PATCH_SIZE, type BoxGrid, type ColourMatch } from '../cv/placement';
+import { orientSpots, SPOT_THUMB_CELL, straightenQuad } from '../cv/openSpots';
 import { puzzleQuad, readAssembledGrid, SEAM_OK, type AssembledGrid } from '../cv/assembledGrid';
-import type { FreeScanOptions, FreeScanReply, PieceToPlace, PlaceReply, ScanOptions, ScanReply, TableSetupReply } from '../shared/apis';
+import type { FreeScanOptions, FreeScanReply, OpenSpotsInput, PieceToPlace, PlaceReply, ScanOptions, ScanReply, TableSetupReply } from '../shared/apis';
 import type { TableModel } from '../project/types';
 import { decodeAtMost, findBoxQuad, RECTIFIED_MAX_SIDE, rectifyQuad, type Point, type RectifyBoxResult } from '../cv/rectify';
 
@@ -233,6 +234,8 @@ async function thumbsAndPreview(
 let boxCache: { key: string; grid: BoxGrid } | null = null;
 /** The one-time colour match needs at least this many pieces (a handful would pull it toward their colours). */
 const MIN_COLOUR_PIECES = 20;
+/** …or, for leftover pieces matched to the empty spots, half as many pieces as spots, and at least this many. */
+const MIN_GAP_COLOUR_PIECES = 5;
 
 const api: ReaderApi = {
   async init(): Promise<WorkerInitInfo> {
@@ -393,7 +396,18 @@ const api: ReaderApi = {
         rgba,
         r.pieces.map((p) => p.bboxImg),
       );
+      // The finished puzzle straightened small: to turn its empty spots to match the box picture later.
+      let finishedThumb: Blob | null = null;
+      if (finishedRaw && finishedRaw.gaps.length) {
+        const W = finishedRaw.cols * SPOT_THUMB_CELL;
+        const H = finishedRaw.rows * SPOT_THUMB_CELL;
+        const st = straightenQuad(rgba, finishedRaw.cornersPx as Array<[number, number]>, W, H);
+        const canvas = new OffscreenCanvas(W, H);
+        canvas.getContext('2d')?.putImageData(new ImageData(new Uint8ClampedArray(st.data), W, H), 0, 0);
+        finishedThumb = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
+      }
       const finished: FreeScanReply['finished'] = finishedRaw && {
+        thumb: finishedThumb,
         cols: finishedRaw.cols,
         rows: finishedRaw.rows,
         colsExact: finishedRaw.colsExact,
@@ -596,7 +610,14 @@ const api: ReaderApi = {
     }
   },
 
-  async placePieces(box: Blob, boxKey: string, grid: { cols: number; rows: number }, pieces: PieceToPlace[], colour: ColourMatch | null): Promise<PlaceReply> {
+  async placePieces(
+    box: Blob,
+    boxKey: string,
+    grid: { cols: number; rows: number },
+    pieces: PieceToPlace[],
+    colour: ColourMatch | null,
+    open: OpenSpotsInput | null = null,
+  ): Promise<PlaceReply> {
     const t0 = performance.now();
     if (!boxCache || boxCache.key !== boxKey || boxCache.grid.cols !== grid.cols || boxCache.grid.rows !== grid.rows) {
       const reader = new PhotoReader(await decodeAtMost(box, await headerSize(box), 2048));
@@ -609,13 +630,34 @@ const api: ReaderApi = {
     }
     const bg = boxCache.grid;
     const patches = pieces.map((p) => ({ size: PATCH_SIZE, rgba: p.rgba }));
-    let cm = colour;
-    if (!cm && pieces.length >= MIN_COLOUR_PIECES) {
-      const st = patchStats(patches);
-      if (st) cm = { from: st, to: bg.stats };
+    // Leftover pieces of a nearly finished puzzle: only its empty spots (turned to match the box picture).
+    let spots: PlaceReply['open'] = null;
+    if (open) {
+      const reader = new PhotoReader(await decodeAtMost(open.thumb, await headerSize(open.thumb), 4096));
+      try {
+        const thumb = ensureRgba(await reader.read({ x: 0, y: 0, width: reader.width, height: reader.height }));
+        const o = orientSpots(bg, thumb, open.cols, open.rows, open.gaps);
+        spots = o ? { cells: o.cells, turn: o.turn, fit: o.fit, runnerUp: o.runnerUp } : { cells: [], turn: -1, fit: 0, runnerUp: 0 };
+      } finally {
+        reader.close();
+      }
     }
-    const results = pieces.map((p, i) => ({ id: p.id, placement: placePiece(bg, patches[i]!, { flats: p.flats, flatsSure: p.sure, colour: cm }) }));
-    return { results, colour: cm, ms: performance.now() - t0 };
+    const cells = spots?.cells.length ? spots.cells : null;
+    let cm = colour;
+    // The pieces' colours are matched to the picture's where they come from: the empty spots (a
+    // few pieces are enough, they all come from there), or else the whole picture (a big batch).
+    if (!cm && pieces.length >= (cells ? Math.min(MIN_COLOUR_PIECES, Math.max(MIN_GAP_COLOUR_PIECES, Math.ceil(cells.length / 2))) : MIN_COLOUR_PIECES)) {
+      const st = patchStats(patches);
+      const to = cells ? spotStats(bg, cells) : bg.stats;
+      if (st && to) cm = { from: st, to };
+    }
+    const inSpots = cells ? new Set(cells.map(([c, r]) => r * bg.cols + c)) : null;
+    const only = inSpots ? (c: number, r: number) => inSpots.has(r * bg.cols + c) : undefined;
+    const results = pieces.map((p, i) => ({
+      id: p.id,
+      placement: placePiece(bg, patches[i]!, { flats: p.flats, flatsSure: p.sure, colour: cm, only, full: Boolean(only) }),
+    }));
+    return { results, colour: cm, open: spots, ms: performance.now() - t0 };
   },
 
   memory(): WorkerMemory {

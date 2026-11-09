@@ -73,7 +73,7 @@ export async function deleteScan(projectId: string): Promise<number> {
     const old = readBin((await d.settings.get(scanBinKey(projectId)))?.value);
     if (old) {
       const keep = new Set(referencedBlobIds(project, snaps, pieces));
-      const free = referencedBlobIds({ ...project, box: null }, old.snaps, old.pieces).filter((id) => !keep.has(id));
+      const free = referencedBlobIds({ ...project, box: null, openSpots: null }, old.snaps, old.pieces).filter((id) => !keep.has(id));
       await d.blobs.bulkDelete(free);
     }
     const bin: ScanBin = { ts: Date.now(), pieces, snaps, project: { piecePitch: project.piecePitch, scaleSource: project.scaleSource } };
@@ -121,5 +121,5 @@ export async function scanBinBlobIds(projectId: string): Promise<string[]> {
   if (!bin) return [];
   const row = await db().projects.get(projectId);
   if (!row) return [];
-  return referencedBlobIds({ ...normalizeProject(row), box: null }, bin.snaps, bin.pieces);
+  return referencedBlobIds({ ...normalizeProject(row), box: null, openSpots: null }, bin.snaps, bin.pieces);
 }

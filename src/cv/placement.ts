@@ -82,6 +82,15 @@ export const PLACE = {
   keep0: 48,
   keep1: 12,
   shift0: 0,
+  /**
+   * Leftover pieces into the empty spots of a nearly finished puzzle (src/cv/openSpots.ts): a piece
+   * scoring below gapMinScore at every free spot stays unpaired; chances of the one-piece-per-spot
+   * pairing at temperature gapTemperature; Strong / Likely from those chances.
+   */
+  gapMinScore: -0.2,
+  gapTemperature: 0.04,
+  gapStrongP: 0.75,
+  gapLikelyP: 0.55,
 };
 
 // ---- Colour --------------------------------------------------------------------------------------
@@ -271,12 +280,17 @@ function toLab(rgb: Float32Array): Float32Array {
   return out;
 }
 
+/** A picture resized (area average) to w × h, in Lab (w × h × 3). */
+export function labImage(picture: { data: ArrayLike<number>; width: number; height: number; stride: number }, w: number, h: number): Float32Array {
+  return toLab(resizeRgb(picture, w, h));
+}
+
 /** The straightened box picture (exactly the puzzle's picture) cut into cols × rows cells. */
 export function buildBoxGrid(picture: { data: ArrayLike<number>; width: number; height: number; stride: number }, cols: number, rows: number): BoxGrid {
   const levels = [8, 16, 32].map((cell) => {
     const w = cols * cell;
     const h = rows * cell;
-    return { cell, w, h, lab: toLab(resizeRgb(picture, w, h)) };
+    return { cell, w, h, lab: labImage(picture, w, h) };
   }) as [Level, Level, Level];
   return { cols, rows, levels, stats: labStats(levels[2].lab, null)! };
 }
@@ -307,6 +321,21 @@ export function patchStats(patches: PiecePatch[]): { mean: [number, number, numb
     for (let i = 0; i < keep.length; i++) if (keep[i]) all.push(lab[i * 3]!, lab[i * 3 + 1]!, lab[i * 3 + 2]!);
   }
   return all.length >= 300 ? labStats(Float32Array.from(all), null) : null;
+}
+
+/**
+ * Mean and spread of the box picture's Lab over some cells only (e.g. the empty spots of a nearly
+ * finished puzzle: the leftover pieces come from there, so their colours should be matched to those
+ * cells' colours, not the whole picture's).
+ */
+export function spotStats(box: BoxGrid, cells: Array<[number, number]>): ColourMatch['to'] | null {
+  const lv = box.levels[2];
+  const keep = new Uint8Array(lv.w * lv.h);
+  for (const [col, row] of cells) {
+    if (col < 0 || row < 0 || col >= box.cols || row >= box.rows) continue;
+    for (let y = row * lv.cell; y < (row + 1) * lv.cell; y++) keep.fill(1, y * lv.w + col * lv.cell, y * lv.w + (col + 1) * lv.cell);
+  }
+  return labStats(lv.lab, keep);
 }
 
 /** Mean and spread per Lab channel of a packed Lab array (optionally only where keep[i]). */
@@ -485,6 +514,11 @@ export interface PlaceOptions {
   topN?: number;
   /** Only these cells are candidates (e.g. a zone of the picture); default every cell. */
   only?: (col: number, row: number) => boolean;
+  /**
+   * Score every candidate cell in full detail and return them all (best turn each), best first:
+   * for a short list of spots (the empty spots of a nearly finished puzzle).
+   */
+  full?: boolean;
 }
 
 /** Where a piece goes on the box picture: the best spots with probabilities, and a verdict. */
@@ -522,11 +556,12 @@ export function placePiece(box: BoxGrid, patch: PiecePatch, opts: PlaceOptions =
       }
     }
   cands.sort((a, b) => b.s - a.s);
-  cands = cands.slice(0, PLACE.keep0);
+  const all = opts.full ? cands.length : 0;
+  cands = cands.slice(0, Math.max(all, PLACE.keep0));
   // Levels 1 and 2: refine with ±2 px shifts.
   for (const [li, keep] of [
-    [1, PLACE.keep1],
-    [2, PLACE.keep1],
+    [1, Math.max(all, PLACE.keep1)],
+    [2, Math.max(all, PLACE.keep1)],
   ] as const) {
     const lv = box.levels[li];
     const pl = pls[li]!;
@@ -561,7 +596,9 @@ export function placePiece(box: BoxGrid, patch: PiecePatch, opts: PlaceOptions =
   const ex = finals.map((c) => Math.exp((c.s - best) / T));
   const exElse = Math.exp(-PLACE.elseBelow / T) * Math.max(1, cols * rows - finals.length) ** 0.25;
   const Z = ex.reduce((a, b) => a + b, 0) + exElse;
-  const top = finals.slice(0, opts.topN ?? 5).map((c, i) => ({ col: c.col, row: c.row, rot: c.rot as 0 | 1 | 2 | 3, score: c.s, p: ex[i]! / Z }));
+  const top = finals
+    .slice(0, opts.full ? finals.length : (opts.topN ?? 5))
+    .map((c, i) => ({ col: c.col, row: c.row, rot: c.rot as 0 | 1 | 2 | 3, score: c.s, p: ex[i]! / Z }));
   const p1 = top[0]?.p ?? 0;
   return { top, verdict: p1 >= PLACE.strongP ? 'strong' : p1 >= PLACE.likelyP ? 'likely' : 'several' };
 }

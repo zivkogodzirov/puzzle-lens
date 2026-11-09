@@ -35,24 +35,37 @@ test.setTimeout(180_000);
 // Blobs in IndexedDB need a persistent WebKit context (as in scan-bin.spec.ts).
 test.use({ persistentStorage: true });
 
-test('pieces are placed on the box picture; tapping one shows its spot', async ({ page }) => {
-  const c = createCanvas(art.width, art.height);
-  const ctx = c.getContext('2d');
-  const id = ctx.createImageData(art.width, art.height);
+/** The art as a JPEG (base64), optionally turned 180° and shrunk to w × h. */
+function jpeg(turn180: boolean, w = art.width, h = art.height): string {
+  const full = createCanvas(art.width, art.height);
+  const fctx = full.getContext('2d');
+  const id = fctx.createImageData(art.width, art.height);
   id.data.set(art.rgba);
-  ctx.putImageData(id, 0, 0);
-  const boxJpeg = c.encodeSync('jpeg', 92).toString('base64');
-  const patches = ids.map((pid, i) => ({ id: pid, b64: patchFor(pid, i % 4) }));
+  fctx.putImageData(id, 0, 0);
+  const c = createCanvas(w, h);
+  const ctx = c.getContext('2d');
+  if (turn180) {
+    ctx.translate(w, h);
+    ctx.rotate(Math.PI);
+  }
+  ctx.drawImage(full, 0, 0, w, h);
+  return c.encodeSync('jpeg', 92).toString('base64');
+}
 
+/** A puzzle with the box picture and the pieces (patches) in IndexedDB; `open`: empty spots from a finished-puzzle photo. */
+async function seed(page: import('@playwright/test').Page, open: { gaps: Array<[number, number]>; thumb: string } | null): Promise<void> {
+  const patches = ids.map((pid, i) => ({ id: pid, b64: patchFor(pid, i % 4) }));
   await gotoScreen(page, '');
   const seeded = await page.evaluate(
-    async ([box, ps, w, h]) => {
+    async ([box, ps, w, h, spots]) => {
       const bytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
       const req = indexedDB.open('puzzle-lens');
       const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
       await new Promise<void>((res) => {
         const tx = dbh.transaction(['projects', 'pieces', 'blobs'], 'readwrite');
         tx.objectStore('blobs').put({ id: 'e2e-place:box-rect', ts: 1, kind: 'box', blob: new Blob([bytes(box)], { type: 'image/jpeg' }) });
+        if (spots)
+          tx.objectStore('blobs').put({ id: 'e2e-place:open-spots', ts: 1, kind: 'open-spots', blob: new Blob([bytes(spots.thumb)], { type: 'image/jpeg' }) });
         tx.objectStore('projects').put({
           id: 'e2e-place',
           name: 'Placement test',
@@ -80,6 +93,7 @@ test('pieces are placed on the box picture; tapping one shows its spot', async (
           setupStep: 6,
           tracking: 'pieces',
           scaleSource: 'coin',
+          openSpots: spots ? { cols: 10, rows: 8, gaps: spots.gaps, thumbBlobId: 'e2e-place:open-spots', ts: 3 } : null,
         });
         ps.forEach((p, i) => {
           tx.objectStore('blobs').put({ id: `e2e-place:patch-${p.id}`, ts: 1, kind: 'patch', blob: new Blob([bytes(p.b64)]) });
@@ -106,14 +120,14 @@ test('pieces are placed on the box picture; tapping one shows its spot', async (
       dbh.close();
       return 'ok';
     },
-    [boxJpeg, patches, art.width, art.height] as const,
+    [jpeg(false), patches, art.width, art.height, open] as const,
   );
   expect(seeded).toBe('ok');
   await page.evaluate(() => (location.hash = '#/puzzle/e2e-place'));
-  await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
-  await expect(page.getByTestId('place-summary')).not.toContainText('not placed');
-  // Each piece's own cell is its best spot.
-  // The catalog lists pieces in id order.
+}
+
+/** Each piece's own cell is its best spot (the catalog lists pieces in id order). */
+async function eachPieceAtItsCell(page: import('@playwright/test').Page): Promise<void> {
   const shown = [...ids].sort();
   for (const pid of shown) {
     const [row, col] = pid.slice(1).split('c').map(Number);
@@ -121,5 +135,29 @@ test('pieces are placed on the box picture; tapping one shows its spot', async (
     await expect(page.getByTestId('spot-verdict')).toContainText(`Column ${col! + 1}, row ${row! + 1}`);
     await expect(page.getByTestId('spot-box').locator('rect.spot-best')).toHaveCount(1);
   }
+}
+
+test('pieces are placed on the box picture; tapping one shows its spot', async ({ page }) => {
+  await seed(page, null);
+  await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
+  await expect(page.getByTestId('place-summary')).not.toContainText('not placed');
+  await expect(page.getByTestId('open-spots')).toHaveCount(0);
+  await eachPieceAtItsCell(page);
   await page.screenshot({ path: test.info().outputPath('box-placement.png'), fullPage: true });
+});
+
+test('with empty spots from an upside-down finished-puzzle photo: pieces go only there, one per spot', async ({ page }) => {
+  // The pieces' own cells and two more, counted in the photo (turned 180°: column 9 − col, row 7 − row).
+  const cells: Array<[number, number]> = [...ids.map((pid) => pid.slice(1).split('c').map(Number).reverse() as [number, number]), [0, 7], [9, 0]];
+  const gaps = cells.map(([c, r]) => [9 - c, 7 - r] as [number, number]);
+  await seed(page, { gaps, thumb: jpeg(true, 10 * 8, 8 * 8) });
+  await expect(page.getByTestId('open-spots')).toContainText('8 empty spots', { timeout: 60_000 });
+  await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
+  await eachPieceAtItsCell(page);
+  await expect(page.getByTestId('spot-box').locator('rect.spot-open')).toHaveCount(8);
+  await page.screenshot({ path: test.info().outputPath('box-placement-open-spots.png'), fullPage: true });
+  // Back to the whole picture.
+  await page.getByTestId('whole-picture').click();
+  await expect(page.getByTestId('open-spots')).toHaveCount(0);
+  await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
 });

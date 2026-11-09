@@ -44,6 +44,14 @@ export interface PatchForCatalog {
   sure: boolean;
 }
 
+/** The empty spots of a nearly finished puzzle as found in a photo of it (see Project.openSpots). */
+export interface OpenSpotsInput {
+  cols: number;
+  rows: number;
+  gaps: Array<[number, number]>;
+  thumb: Blob;
+}
+
 /** A piece to place on the box picture. */
 export interface PieceToPlace {
   id: string;
@@ -54,6 +62,8 @@ export interface PieceToPlace {
 
 /** A finished (or nearly finished) puzzle seen in an overview: its rows × columns and gaps. */
 export interface FinishedCheck {
+  /** The puzzle straightened small (SPOT_THUMB_CELL px per cell, JPEG), when it has gaps: kept to turn them to match the box picture. */
+  thumb: Blob | null;
   cols: number;
   rows: number;
   colsExact: number;
@@ -141,13 +151,28 @@ export interface ReaderApi {
    * Box placement (M4): where each piece goes on the straightened box picture (`box`, cached in the
    * helper under `boxKey`). `colour`: the one-time colour match to use; when null and there are
    * enough pieces, it is measured from these pieces and returned (store it and pass it next time).
+   * `open`: only the empty spots of a nearly finished puzzle are candidates (each piece is scored at
+   * every one of them); they are turned to match the box picture and returned.
    */
-  placePieces(box: Blob, boxKey: string, grid: { cols: number; rows: number }, pieces: PieceToPlace[], colour: ColourMatch | null): Promise<PlaceReply>;
+  placePieces(
+    box: Blob,
+    boxKey: string,
+    grid: { cols: number; rows: number },
+    pieces: PieceToPlace[],
+    colour: ColourMatch | null,
+    open?: OpenSpotsInput | null,
+  ): Promise<PlaceReply>;
 }
 
 export interface PlaceReply {
   results: Array<{ id: string; placement: Placement }>;
   colour: ColourMatch | null;
+  /**
+   * The empty spots used, in box-picture columns and rows, the quarter turns from the photo to the
+   * box picture and how alike they looked (best and next best turn). No cells (turn −1) when the
+   * photo's grid fits the box's in no turn. Null when no empty spots were given.
+   */
+  open: { cells: Array<[number, number]>; turn: number; fit: number; runnerUp: number } | null;
   ms: number;
 }
 

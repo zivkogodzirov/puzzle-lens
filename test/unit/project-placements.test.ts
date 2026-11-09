@@ -7,10 +7,10 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db, eraseAllData } from '../../src/db/db';
 import { createProject, getProject, projectBlobId, putBlob, updateProject } from '../../src/project/store';
-import { readPlacements, updatePlacements } from '../../src/project/placements';
+import { readPlacements, shownPlacements, updatePlacements } from '../../src/project/placements';
 import { planMerge } from '../../src/project/catalog';
 import type { PieceRow } from '../../src/project/types';
-import type { PieceToPlace, PlaceReply } from '../../src/shared/apis';
+import type { OpenSpotsInput, PieceToPlace, PlaceReply } from '../../src/shared/apis';
 
 beforeEach(async () => {
   await eraseAllData();
@@ -22,14 +22,38 @@ const colour = {
 };
 
 function fakeReader() {
-  const calls: Array<{ ids: string[]; colour: unknown }> = [];
+  const calls: Array<{ ids: string[]; colour: unknown; open: OpenSpotsInput | null }> = [];
   return {
     calls,
-    async placePieces(_box: Blob, _key: string, _grid: { cols: number; rows: number }, pieces: PieceToPlace[], c: unknown): Promise<PlaceReply> {
-      calls.push({ ids: pieces.map((p) => p.id), colour: c });
+    async placePieces(
+      _box: Blob,
+      _key: string,
+      _grid: { cols: number; rows: number },
+      pieces: PieceToPlace[],
+      c: unknown,
+      open: OpenSpotsInput | null = null,
+    ): Promise<PlaceReply> {
+      calls.push({ ids: pieces.map((p) => p.id), colour: c, open });
+      if (open) {
+        // Among empty spots: every piece scored at every spot; piece i likes spot i best, but p0 and p1 both like spot 0 most.
+        const cells = open.gaps;
+        return {
+          results: pieces.map((p, i) => ({
+            id: p.id,
+            placement: {
+              top: cells.map(([col, row], j) => ({ col, row, rot: 0 as const, score: j === Math.max(0, i - 1) ? 0.8 : j === i ? 0.6 : 0, p: 0 })),
+              verdict: 'several' as const,
+            },
+          })),
+          colour: (c as typeof colour | null) ?? colour,
+          open: { cells, turn: 0, fit: 0.9, runnerUp: 0.1 },
+          ms: 1,
+        };
+      }
       return {
         results: pieces.map((p, i) => ({ id: p.id, placement: { top: [{ col: i, row: 0, rot: 0, score: 1, p: 0.9 }], verdict: 'strong' as const } })),
         colour: (c as typeof colour | null) ?? colour,
+        open: null,
         ms: 1,
       };
     },
@@ -123,6 +147,38 @@ describe('box placements', () => {
     expect(r.calls).toHaveLength(2);
     expect(r.calls[1]!.ids.sort()).toEqual(['p0', 'p1']);
     expect(r.calls[1]!.colour).toBeNull();
+  });
+
+  it('with empty spots: they go to the photo helper, all pieces are placed again, and each spot takes one piece', async () => {
+    let project = await setup(3);
+    const r = fakeReader();
+    const pieces = await db().pieces.toArray();
+    await updatePlacements(project, pieces, r);
+    expect(r.calls[0]!.open).toBeNull();
+    const thumb = await putBlob(projectBlobId(project.id, 'open-spots'), 'open-spots', new Blob([new Uint8Array([9])]));
+    const gaps: Array<[number, number]> = [
+      [5, 0],
+      [6, 0],
+      [5, 1],
+      [9, 9],
+    ];
+    project = await updateProject(project.id, { openSpots: { cols: 28, rows: 36, gaps, thumbBlobId: thumb, ts: 1 } });
+    const c = await updatePlacements(project, pieces, r);
+    expect(r.calls).toHaveLength(2);
+    expect(r.calls[1]!.ids.sort()).toEqual(['p0', 'p1', 'p2']);
+    expect(r.calls[1]!.colour).toBeNull();
+    expect(r.calls[1]!.open?.gaps).toEqual(gaps);
+    expect(c!.open?.cells).toEqual(gaps);
+    // p0 and p1 both like spot 0 best: one gets it, the other its own next best.
+    const shown = shownPlacements(c, pieces);
+    const spot = (id: string) => shown.get(id)!.placement.top[0]!;
+    expect([spot('p0'), spot('p1'), spot('p2')].map((t) => `${t.col},${t.row}`)).toEqual(['5,0', '6,0', '5,1']);
+    // Colour match now known: nothing to do. New empty spots (a newer photo): start over.
+    await updatePlacements(project, pieces, r);
+    expect(r.calls).toHaveLength(2);
+    project = await updateProject(project.id, { openSpots: { ...project.openSpots!, ts: 2 } });
+    await updatePlacements(project, pieces, r);
+    expect(r.calls).toHaveLength(3);
   });
 
   it("a scan stores each piece's patch with its flat sides (and keeps the id when photographed again sharper)", () => {

@@ -5,11 +5,16 @@
  * lid), and compare with the true cell. Opt-in (minutes):
  *
  *   PLACE_ACCURACY=1 [PLACE_SETS=val48,val300] [PLACE_BOX=clean|photo] [PLACE_SET='{"keep0":48}'] [SEG_SET='{…}'] npx vitest run --project unit test/unit/cv-placement-accuracy.test.ts
+ *
+ * PLACE_GAPS=1 instead places the pieces only among "empty spots" (as for the leftover pieces of a
+ * nearly finished puzzle): every piece's true cell plus PLACE_GAPS_EXTRA (default 20 %) more spots
+ * whose pieces weren't scanned, one piece per spot (src/cv/openSpots.ts).
  */
 import { describe, expect, it } from 'vitest';
 import { scanMarkerless } from '../../src/cv/scanMarkerless';
 import { readShape, READ_OK } from '../../src/cv/shapeRead';
-import { buildBoxGrid, extractPatch, patchStats, placePiece, PLACE, type PiecePatch } from '../../src/cv/placement';
+import { buildBoxGrid, extractPatch, patchStats, placePiece, spotStats, PLACE, type PiecePatch } from '../../src/cv/placement';
+import { chooseSpots } from '../../src/cv/openSpots';
 import { SEG } from '../../src/cv/pieceFinder';
 import type { Vec2 } from '../../src/project/types';
 import { getCv } from '../helpers/cv';
@@ -68,6 +73,7 @@ describe.skipIf(!RUN)('box placement accuracy (synthetic)', () => {
       const set = ALL_SETS[setName];
       const keys = [...new Set(set.items.map((i) => i.puzzleKey))].slice(0, Number(process.env.PLACE_PUZZLES ?? 99));
       const dump: Array<{ s: number[]; right: number; cells: number }> = [];
+      const gapDump: Array<{ cells: Array<[number, number]>; pieces: Array<{ truth: number; scores: Array<number | null> }> }> = [];
       const res = { n: 0, top1: 0, top5: 0, strong: 0, strongOk: 0, likely: 0, likelyOk: 0, several: 0, ms: 0, border: 0, borderTop1: 0 };
       for (const key of keys) {
         const items = set.items.filter((i) => i.puzzleKey === key && i.name.includes('-b0-'));
@@ -97,6 +103,62 @@ describe.skipIf(!RUN)('box placement accuracy (synthetic)', () => {
             const sure = Boolean(rd.kind) && rd.quality >= READ_OK;
             pieces.push({ id: m.id, patch, flats: rd.sides.map((sd) => sd.kind === 'flat'), sure });
           }
+        }
+        if (process.env.PLACE_GAPS === '1') {
+          // One entry per piece (as in the app's catalog: a piece seen in an overview and a close-up
+          // is one piece; the close-up's patch, which comes later, is kept).
+          const byId = new Map(pieces.map((p) => [p.id, p]));
+          pieces.length = 0;
+          pieces.push(...byId.values());
+          // Empty spots: the pieces' own cells plus some whose pieces weren't scanned.
+          const cellOf = (id: string) => id.slice(1).split('c').map(Number).reverse() as [number, number];
+          const cells = pieces.map((p) => cellOf(p.id));
+          const have = new Set(cells.map(([c, r]) => `${c},${r}`));
+          let seed = 7 + keys.indexOf(key);
+          const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
+          const extra = Math.round(cells.length * Number(process.env.PLACE_GAPS_EXTRA ?? 0.2));
+          for (let k = 0; k < extra * 20 && cells.length < pieces.length + extra; k++) {
+            const c = Math.floor(rnd() * pz.cols);
+            const r = Math.floor(rnd() * pz.rows);
+            if (!have.has(`${c},${r}`)) (have.add(`${c},${r}`), cells.push([c, r]));
+          }
+          const only = (c: number, r: number) => have.has(`${c},${r}`);
+          const st = patchStats(pieces.map((p) => p.patch));
+          const colour = st ? { from: st, to: spotStats(box, cells)! } : null;
+          const t0 = performance.now();
+          const placed = pieces.map((p) => ({
+            id: p.id,
+            placement: placePiece(box, p.patch, { flats: p.flats, flatsSure: p.sure, colour, only, full: true }),
+          }));
+          res.ms += performance.now() - t0;
+          const chosen = chooseSpots(placed, cells);
+          if (process.env.PLACE_DUMP)
+            gapDump.push({
+              cells,
+              pieces: pieces.map((p, i) => {
+                const [col, row] = cellOf(p.id);
+                const t = placed[i]!.placement.top;
+                return {
+                  truth: cells.findIndex(([c, r]) => c === col && r === row),
+                  scores: cells.map(([c, r]) => t.find((x) => x.col === c && x.row === r)?.score ?? null),
+                };
+              }),
+            });
+          for (const p of pieces) {
+            const [col, row] = cellOf(p.id);
+            const ch = chosen.get(p.id)!;
+            const top0 = placed.find((q) => q.id === p.id)!.placement.top[0];
+            const ok1 = ch.fits && ch.placement.top[0]!.col === col && ch.placement.top[0]!.row === row;
+            if (process.env.PLACE_DUMP) dump.push({ s: [ch.placement.top[0]?.p ?? 0], right: ok1 ? 0 : -1, cells: cells.length });
+            res.n++;
+            if (ok1) res.top1++;
+            if (top0 && top0.col === col && top0.row === row) res.top5++;
+            if (!ch.fits) res.border++;
+            if (ch.placement.verdict === 'strong') (res.strong++, ok1 && res.strongOk++);
+            else if (ch.placement.verdict === 'likely') (res.likely++, ok1 && res.likelyOk++);
+            else res.several++;
+          }
+          continue;
         }
         // One-time colour match over the whole batch (RESEARCH §9.5).
         const ps = patchStats(pieces.map((p) => p.patch));
@@ -129,11 +191,18 @@ describe.skipIf(!RUN)('box placement accuracy (synthetic)', () => {
         }
       }
       const pc = (a: number, b: number) => `${((100 * a) / Math.max(1, b)).toFixed(1)} %`;
-      console.log(
-        `${setName} ${BOX}: ${res.n} pieces; top-1 ${pc(res.top1, res.n)}, top-5 ${pc(res.top5, res.n)}; border pieces top-1 ${pc(res.borderTop1, res.border)}; ` +
-          `Strong ${pc(res.strong, res.n)} of pieces (right ${pc(res.strongOk, res.strong)}), Likely ${pc(res.likely, res.n)} (right ${pc(res.likelyOk, res.likely)}), Several ${pc(res.several, res.n)}; ${(res.ms / Math.max(1, res.n)).toFixed(0)} ms per piece`,
-      );
-      if (process.env.PLACE_DUMP) (await import('node:fs')).writeFileSync(`${process.env.PLACE_DUMP}-${setName}.json`, JSON.stringify(dump));
+      if (process.env.PLACE_GAPS === '1')
+        console.log(
+          `${setName} ${BOX} EMPTY SPOTS: ${res.n} pieces; right spot (one per spot) ${pc(res.top1, res.n)}, best spot alone ${pc(res.top5, res.n)}, left unpaired ${pc(res.border, res.n)}; ` +
+            `Strong ${pc(res.strong, res.n)} (right ${pc(res.strongOk, res.strong)}), Likely ${pc(res.likely, res.n)} (right ${pc(res.likelyOk, res.likely)}), Several ${pc(res.several, res.n)}; ${(res.ms / Math.max(1, res.n)).toFixed(0)} ms per piece`,
+        );
+      else
+        console.log(
+          `${setName} ${BOX}: ${res.n} pieces; top-1 ${pc(res.top1, res.n)}, top-5 ${pc(res.top5, res.n)}; border pieces top-1 ${pc(res.borderTop1, res.border)}; ` +
+            `Strong ${pc(res.strong, res.n)} of pieces (right ${pc(res.strongOk, res.strong)}), Likely ${pc(res.likely, res.n)} (right ${pc(res.likelyOk, res.likely)}), Several ${pc(res.several, res.n)}; ${(res.ms / Math.max(1, res.n)).toFixed(0)} ms per piece`,
+        );
+      if (process.env.PLACE_DUMP)
+        (await import('node:fs')).writeFileSync(`${process.env.PLACE_DUMP}-${setName}.json`, JSON.stringify(gapDump.length ? gapDump : dump));
       expect(res.n).toBeGreaterThan(0);
     }, 3_600_000);
 });

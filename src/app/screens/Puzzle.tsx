@@ -14,7 +14,8 @@ import type { PieceRow, Project } from '../../project/types';
 import { db } from '../../db/db';
 import { readShape, READ_OK, type PieceKind } from '../../cv/shapeRead';
 import type { Placement } from '../../cv/placement';
-import { boxKeyOf, readPlacements, stalePieces, updatePlacements, type PlacementCache } from '../../project/placements';
+import { placeKeyOf, readPlacements, shownPlacements, stalePieces, updatePlacements, type PlacementCache } from '../../project/placements';
+import type { SpotChoice } from '../../cv/openSpots';
 import { readerWorker } from '../workers';
 import { canShareFile, downloadUrl, revokeDownloadUrls, shareOrDownload } from '../../report/share';
 import { formatBytes } from '../../report/collect';
@@ -352,7 +353,7 @@ export function PuzzleScreen() {
           <button class="btn btn-primary btn-block" data-testid="scan-pieces" onClick={() => go('scan', p.id)}>
             📷 Scan pieces
           </button>
-          <Catalog projectId={p.id} version={pieces} markers={p.tracking === 'markers'} grid={p.grid} pitch={p.piecePitch} project={p} />
+          <Catalog projectId={p.id} version={pieces} markers={p.tracking === 'markers'} grid={p.grid} pitch={p.piecePitch} project={p} onProject={setProject} />
           {scanNote && (
             <div class="notice notice-good" role="status" data-testid="scan-bin-note">
               {scanNote}
@@ -517,6 +518,7 @@ function Catalog({
   grid,
   pitch,
   project,
+  onProject,
 }: {
   projectId: string;
   version: unknown;
@@ -524,6 +526,7 @@ function Catalog({
   grid: Project['grid'];
   pitch: Project['piecePitch'];
   project: Project;
+  onProject: (p: Project) => void;
 }) {
   const [rows, setRows] = useState<PieceRow[]>([]);
   const [show, setShow] = useState<'all' | 'border' | 'interior' | 'unsure'>('all');
@@ -531,7 +534,7 @@ function Catalog({
   const [placing, setPlacing] = useState<{ done: number; total: number } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const boxUrl = useBlobUrl(project.box?.rectifiedBlobId, project.box);
-  const boxKey = boxKeyOf(project);
+  const placeKey = placeKeyOf(project);
   useEffect(() => {
     let live = true;
     void (async () => {
@@ -539,10 +542,10 @@ function Catalog({
       if (!live) return;
       setRows(ps);
       // Box placement (M4): show what is known, then place pieces that are new or photographed again.
-      if (!boxKey) return;
+      if (!placeKey) return;
       const cached = await readPlacements(projectId);
-      if (live && cached?.boxKey === boxKey) setPlaces(cached);
-      const todo = stalePieces(cached, boxKey, ps).length;
+      if (live) setPlaces(cached?.boxKey === placeKey ? cached : null);
+      const todo = stalePieces(cached, placeKey, ps).length;
       if (!todo) return;
       try {
         const rw = readerWorker();
@@ -551,7 +554,13 @@ function Catalog({
         setPlacing({ done: 0, total: todo });
         const next = await updatePlacements(project, ps, rw.api, (done, total) => live && setPlacing({ done, total }));
         if (live) setPlaces(next);
-        logInfo('place', `Placed ${todo} pieces on the box picture`);
+        logInfo(
+          'place',
+          `Placed ${todo} pieces on the box picture` +
+            (next?.open
+              ? `, among ${next.open.cells.length} empty spots (turn ${next.open.turn}, fit ${next.open.fit.toFixed(2)} vs ${next.open.runnerUp.toFixed(2)})`
+              : ''),
+        );
       } catch (err) {
         logError('place', 'Box placement failed', err);
       } finally {
@@ -561,7 +570,8 @@ function Catalog({
     return () => {
       live = false;
     };
-  }, [projectId, version, boxKey]);
+  }, [projectId, version, placeKey]);
+  const shownPlaces = useMemo(() => shownPlacements(places, rows), [places, rows]);
   const cell: [number, number] | null = pitch ? [pitch.wMm, pitch.hMm] : null;
   const groups = useMemo(() => new Map(rows.map((r) => [r.id, pieceGroup(r, cell)])), [rows, cell?.[0], cell?.[1]]);
   if (!rows.length)
@@ -606,14 +616,27 @@ function Catalog({
           wrong. Check?
         </div>
       )}
-      {project.box && <PlaceSummary places={places} rows={rows} placing={placing} />}
+      {project.box && (
+        <PlaceSummary
+          shown={shownPlaces}
+          open={places?.open ?? null}
+          hasSpots={Boolean(project.openSpots)}
+          rows={rows}
+          placing={placing}
+          onWholePicture={() => {
+            void updateProject(projectId, { openSpots: null })
+              .then(onProject)
+              .catch((err) => logError('place', 'Could not switch to the whole picture', err));
+          }}
+        />
+      )}
       <div class="catalog-grid" data-testid="catalog">
         {shown.slice(0, SHOW_MAX).map((r) => (
           <PieceThumb
             key={r.id}
             piece={r}
             group={groups.get(r.id)!}
-            place={places?.byPiece[r.id]?.placement ?? null}
+            place={shownPlaces.get(r.id)?.placement ?? null}
             selected={selected === r.id}
             onSelect={() => setSelected(selected === r.id ? null : r.id)}
           />
@@ -622,7 +645,8 @@ function Catalog({
       {selected && project.grid && rows.some((r) => r.id === selected) && (
         <PieceSpots
           piece={rows.find((r) => r.id === selected)!}
-          place={places?.byPiece[selected]?.placement ?? null}
+          choice={shownPlaces.get(selected) ?? null}
+          spots={places?.open?.cells.length ? places.open.cells : null}
           boxUrl={boxUrl}
           grid={project.grid}
           aspect={project.box ? project.box.width / project.box.height : project.grid.cols / project.grid.rows}
@@ -665,50 +689,92 @@ function PieceThumb({
 }
 
 const VERDICT_WORDS: Record<Placement['verdict'], string> = { strong: 'Strong', likely: 'Likely', several: 'Several spots look alike' };
+/** A chance in whole percent, never shown as a certain 100 %. */
+const pct = (p: number): number => Math.min(99, Math.round(p * 100));
 
 /** How many pieces have a spot on the box picture, and progress while placing. */
-function PlaceSummary({ places, rows, placing }: { places: PlacementCache | null; rows: PieceRow[]; placing: { done: number; total: number } | null }) {
-  const n = { strong: 0, likely: 0, several: 0 };
+function PlaceSummary({
+  shown,
+  open,
+  hasSpots,
+  rows,
+  placing,
+  onWholePicture,
+}: {
+  shown: Map<string, SpotChoice>;
+  open: PlacementCache['open'];
+  hasSpots: boolean;
+  rows: PieceRow[];
+  placing: { done: number; total: number } | null;
+  onWholePicture: () => void;
+}) {
+  const n = { strong: 0, likely: 0, several: 0, nofit: 0 };
   for (const r of rows) {
-    const v = places?.byPiece[r.id]?.placement.verdict;
-    if (v) n[v]++;
+    const c = shown.get(r.id);
+    if (!c) continue;
+    if (!c.fits) n.nofit++;
+    else n[c.placement.verdict]++;
   }
-  const none = rows.length - n.strong - n.likely - n.several;
+  const none = rows.length - n.strong - n.likely - n.several - n.nofit;
+  const spots = open?.cells.length ?? 0;
   return (
-    <p class="small" data-testid="place-summary">
-      {placing ? (
-        <span data-testid="placing">
-          Finding spots on the box picture… {placing.done} of {placing.total}
-        </span>
-      ) : (
-        <>
-          On the box picture: <span class="legend-strong">{n.strong} strong</span> · <span class="legend-likely">{n.likely} likely</span> · {n.several} several
-          spots look alike
-          {none > 0 ? <span class="muted"> · {none} not placed yet (scanned before this version: scan again)</span> : null}. Tap a piece to see where it goes.
-        </>
+    <>
+      {hasSpots && (
+        <div class="notice notice-good small" data-testid="open-spots">
+          {open && !spots ? (
+            <p>Your finished-puzzle photo doesn’t line up with the box picture (its grid is a different size), so the whole picture is used.</p>
+          ) : (
+            <p>
+              Leftover pieces are matched only to the <strong>{spots || '…'} empty spots</strong> from your finished-puzzle photo, one piece per spot. Put some
+              in? Photograph the puzzle again to update the spots.
+            </p>
+          )}
+          <button class="btn btn-small" data-testid="whole-picture" onClick={onWholePicture}>
+            Use the whole picture instead
+          </button>
+        </div>
       )}
-    </p>
+      <p class="small" data-testid="place-summary">
+        {placing ? (
+          <span data-testid="placing">
+            Finding spots on the box picture… {placing.done} of {placing.total}
+          </span>
+        ) : (
+          <>
+            On the box picture: <span class="legend-strong">{n.strong} strong</span> · <span class="legend-likely">{n.likely} likely</span> · {n.several}{' '}
+            several spots look alike
+            {n.nofit > 0 ? <span> · {n.nofit} fit none of the empty spots</span> : null}
+            {none > 0 ? <span class="muted"> · {none} not placed yet (scanned before this version: scan again)</span> : null}. Tap a piece to see where it goes.
+          </>
+        )}
+      </p>
+    </>
   );
 }
 
 /** One piece's best spots on the box picture (column, row from the top-left, 1-based). */
 function PieceSpots({
   piece,
-  place,
+  choice,
+  spots,
   boxUrl,
   grid,
   aspect,
   onClose,
 }: {
   piece: PieceRow;
-  place: Placement | null;
+  choice: SpotChoice | null;
+  /** The empty spots pieces are matched to (drawn faintly), or null for the whole picture. */
+  spots: Array<[number, number]> | null;
   boxUrl: string | null;
   grid: { cols: number; rows: number };
   aspect: number;
   onClose: () => void;
 }) {
   const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
+  const place = choice?.placement ?? null;
   const best = place?.top[0];
+  const fits = choice?.fits ?? true;
   return (
     <div class="card piece-spots" data-testid="piece-spots">
       <div class="row">
@@ -716,28 +782,39 @@ function PieceSpots({
         <div class="grow">
           {best ? (
             <>
-              <p data-testid="spot-verdict">
-                <strong>
-                  Column {best.col + 1}, row {best.row + 1}
-                </strong>{' '}
-                <span class={`legend-${place!.verdict}`}>
-                  ({VERDICT_WORDS[place!.verdict]}, {Math.round(best.p * 100)} %)
-                </span>
-              </p>
-              <p class="muted small">Counted from the top-left corner of the box picture.</p>
+              {fits ? (
+                <p data-testid="spot-verdict">
+                  <strong>
+                    Column {best.col + 1}, row {best.row + 1}
+                  </strong>{' '}
+                  <span class={`legend-${place!.verdict}`}>
+                    ({VERDICT_WORDS[place!.verdict]}, {pct(best.p)} %)
+                  </span>
+                </p>
+              ) : (
+                <p data-testid="spot-verdict">
+                  <strong>Fits none of the empty spots well.</strong> It may not be a piece (a label, a shadow), or it may come from somewhere else. Closest:
+                  column {best.col + 1}, row {best.row + 1}.
+                </p>
+              )}
+              <p class="muted small">Counted from the top-left corner of the box picture.{spots ? ` Grey squares: the ${spots.length} empty spots.` : ''}</p>
               {place!.top.slice(1).some((t) => t.p >= 0.01) && (
                 <p class="small" data-testid="spot-others">
                   Also possible:{' '}
                   {place!.top
                     .slice(1)
                     .filter((t) => t.p >= 0.01)
-                    .map((t) => `column ${t.col + 1}, row ${t.row + 1} (${Math.round(t.p * 100)} %)`)
+                    .map((t) => `column ${t.col + 1}, row ${t.row + 1} (${pct(t.p)} %)`)
                     .join('; ')}
                 </p>
               )}
             </>
           ) : (
-            <p data-testid="spot-verdict">No spot yet: scan this piece again (overview or close-up).</p>
+            <p data-testid="spot-verdict">
+              {choice && spots
+                ? 'Fits none of the empty spots (by its shape or its picture). It may not be a piece, or it may come from somewhere else.'
+                : 'No spot yet: scan this piece again (overview or close-up).'}
+            </p>
           )}
         </div>
         <button class="btn btn-small" onClick={onClose}>
@@ -753,6 +830,9 @@ function PieceSpots({
           data-testid="spot-box"
         >
           <image href={boxUrl} x={0} y={0} width={grid.cols} height={grid.rows} preserveAspectRatio="none" />
+          {spots?.map(([c, r]) => (
+            <rect key={`open-${c},${r}`} x={c} y={r} width={1} height={1} class="spot-open" vector-effect="non-scaling-stroke" />
+          ))}
           {place.top
             .filter((t, i) => i === 0 || t.p >= 0.01)
             .reverse()

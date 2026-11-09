@@ -206,6 +206,7 @@ function remapIds(m: BackupManifest): BackupManifest {
     box: m.project.box ? { ...m.project.box, photoBlobId: blob(m.project.box.photoBlobId)!, rectifiedBlobId: blob(m.project.box.rectifiedBlobId)! } : null,
     markerMap: m.project.markerMap ? { ...m.project.markerMap, snapId: snapId(m.project.markerMap.snapId) } : null,
     tableModel: m.project.tableModel ? { ...m.project.tableModel, snapId: snapId(m.project.tableModel.snapId) } : null,
+    openSpots: m.project.openSpots ? { ...m.project.openSpots, thumbBlobId: blob(m.project.openSpots.thumbBlobId)! } : null,
   };
   return {
     ...m,
@@ -222,6 +223,7 @@ function remapIds(m: BackupManifest): BackupManifest {
       id: pieceIds.get(p.id)!,
       projectId: newPid,
       thumbBlobId: blob(p.thumbBlobId),
+      patch: p.patch ? { ...p.patch, blobId: blob(p.patch.blobId)! } : p.patch,
       table: p.table ? { ...p.table, snapId: snapId(p.table.snapId) } : p.table,
     })),
     blobs: m.blobs.map((b) => ({ ...b, id: blobIds.get(b.id)! })),

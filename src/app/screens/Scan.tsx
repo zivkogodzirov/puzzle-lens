@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { go, routeArg } from '../router';
 import { readerWorker, restartReader } from '../workers';
 import { TableCamera, type CaptureMeta } from '../components/TableCamera';
-import { deleteBlob, getProject, newId, projectBlobId, updateProject } from '../../project/store';
+import { deleteBlob, getProject, newId, projectBlobId, putBlob, updateProject } from '../../project/store';
 import { measurePitch, planMerge } from '../../project/catalog';
 import { Coverage, sortingArea, type Area } from '../../scan/coverage';
 import { FREE_RULES, markerCentres, type CaptureKind } from '../../scan/autoCapture';
@@ -286,7 +286,14 @@ export function ScanScreen() {
             `Finished puzzle: ${f.finished.cols} × ${f.finished.rows} (${f.finished.colsExact.toFixed(2)} × ${f.finished.rowsExact.toFixed(2)}), ${f.finished.gaps.length} gaps, seams ${f.finished.seamStrength.toFixed(2)}`,
           );
           setAutoPaused(true);
-          setNote({ ok: true, lines: finishedLines(f.finished, project) });
+          let next = project;
+          try {
+            next = await saveOpenSpots(project, f.finished);
+            setProject(next);
+          } catch (err) {
+            logError('scan', 'The empty spots could not be saved', err);
+          }
+          setNote({ ok: true, lines: finishedLines(f.finished, next) });
           return;
         }
         if (f.isNewFrame && f.pieces.filter((p) => !p.flags.cut).length < 5) {
@@ -655,8 +662,26 @@ export function ScanScreen() {
   );
 }
 
+/**
+ * Keeps the empty spots of a nearly finished puzzle (with its picture straightened small): the
+ * leftover pieces are then placed only there. A photo with no gaps clears them.
+ */
+export async function saveOpenSpots(project: Project, fin: FinishedCheck): Promise<Project> {
+  const id = projectBlobId(project.id, 'open-spots');
+  if (fin.gaps.length && fin.thumb) {
+    await putBlob(id, 'open-spots', fin.thumb);
+    return updateProject(project.id, { openSpots: { cols: fin.cols, rows: fin.rows, gaps: fin.gaps, thumbBlobId: id, ts: Date.now() } });
+  }
+  if (!fin.gaps.length && project.openSpots) {
+    const next = await updateProject(project.id, { openSpots: null });
+    await deleteBlob(id);
+    return next;
+  }
+  return project;
+}
+
 /** The finished-puzzle check in plain words. */
-export function finishedLines(fin: FinishedCheck, project: Pick<Project, 'grid' | 'pieceCount'>): string[] {
+export function finishedLines(fin: FinishedCheck, project: Pick<Project, 'grid' | 'pieceCount' | 'box' | 'openSpots'>): string[] {
   const n = fin.cols * fin.rows;
   const lines = [`Finished puzzle: ${fin.cols} across × ${fin.rows} down = ${n.toLocaleString('en')} pieces, counted from the seams.`];
   const g = project.grid;
@@ -677,6 +702,12 @@ export function finishedLines(fin: FinishedCheck, project: Pick<Project, 'grid' 
     lines.push(
       `${fin.gaps.length === 1 ? '1 possible gap' : `${fin.gaps.length} possible gaps`} (red squares on the last photo; counted from the top left): ${list}${fin.gaps.length > 6 ? '; …' : ''}.`,
     );
+    if (project.openSpots && project.openSpots.gaps.length === fin.gaps.length)
+      lines.push(
+        project.box
+          ? `Saved: your leftover pieces will now be matched only to these ${fin.gaps.length} empty spots, one piece per spot. Scan the leftover pieces (or open Pieces on the puzzle's page).`
+          : `Saved these ${fin.gaps.length} empty spots: add the box picture and your leftover pieces will be matched only to them.`,
+      );
   }
   lines.push('This photo is not added to your pieces.');
   return lines;

@@ -911,3 +911,4 @@ pre.logbox {
 .spot-box { display: block; width: 100%; height: auto; margin-top: 8px; border-radius: 8px; }
 .spot-best { fill: rgba(60, 207, 122, 0.35); stroke: #3ccf7a; stroke-width: 3; }
 .spot-other { fill: rgba(255, 216, 74, 0.2); stroke: #ffd84a; stroke-width: 1.5; stroke-dasharray: 3 2; }
+.spot-open { fill: rgba(255, 255, 255, 0.12); stroke: rgba(255, 255, 255, 0.7); stroke-width: 1; }

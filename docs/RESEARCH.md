@@ -455,6 +455,13 @@ So I'm designing and testing this from scratch.
 - A batch of pieces from only two areas makes the one-time colour match (step 5.2) wrong. Self-calibration from the most confident placements didn't help (they reinforce themselves).
 - Next candidates: restrict candidates to known-empty spots or a zone (the finished check now lists gaps), one-piece-per-cell assignment (step 6), and a learned embedding (§12) for real lighting and sheen.
 
+**Leftover pieces into the empty spots (2026-11-09, M4 part 2).** When most of the puzzle is done, the finished-puzzle check's gaps are the candidate list:
+1. The puzzle is straightened to 8 px per cell and compared with the box picture's coarse level in each quarter turn that fits the grid (Lab correlation, gaps left out); the best turn maps the gaps to box cells. On the owner's holes photo: right turn as taken and upside down, with a clear margin.
+2. Each piece is scored at every gap (all turns, full coarse-to-fine refinement, no pruning), with the colour match taken from the box colours *of the gaps*. This is the "oracle" colour statistics above, which are legitimately known here.
+3. One piece per spot: the Hungarian method on (score − m), where a piece or spot may stay unpaired (m = −0.2), and chances from Sinkhorn balancing of exp(score / 0.04) with "unpaired" rows/columns (the dustbin of SuperGlue-style matching). Strong ≥ 0.75, Likely ≥ 0.55 of that chance.
+4. Real result, owner's 21 patches (19 pieces + a bottle label + a table patch) vs the 21 holes, box picture from the app screenshot, truth = one-to-one matching against the finished-puzzle photo IMG_9272 with the pieces in place: best spot alone 13 of 19, with one-per-spot 14 of 19; Strong 9 (all right), Likely 2 (both right), no wrong Strong or Likely; the table patch is left unpaired. Errors are plain wall pieces exchanged within the top-right holes, which also have the least reliable truth.
+5. Synthetic (val48 / val300, scanned end to end, photographed-lid box picture; gaps = every scanned piece's cell + 20 % unscanned): right 95.1 % / 86.9 % (best spot alone 90.7 % / 83.2 %); Strong 73 % / 23 % of pieces, right 99.7 % / 100 %; Likely right 100 % / 99.2 %. Time grows with the number of gaps (24 ms per piece at ~60 gaps, 306 ms at ~360 on the Mac).
+
 ---
 
 ## 10. Grid size

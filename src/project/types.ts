@@ -89,6 +89,24 @@ export interface Project {
   coin?: string | null;
   /** Where sizes in mm come from: a measured coin, printed markers, or the typical-piece estimate. */
   scaleSource?: 'coin' | 'markers' | 'estimate';
+  /**
+   * The empty spots of the nearly finished puzzle, from the last photo of it with gaps (M4): the
+   * leftover pieces are placed only there. Null when none (or the owner chose the whole picture).
+   */
+  openSpots?: OpenSpots | null;
+}
+
+/** The empty spots seen in a photo of the nearly finished puzzle. */
+export interface OpenSpots {
+  /** Columns × rows as counted in the photo (it may show the puzzle turned compared with the box picture). */
+  cols: number;
+  rows: number;
+  /** The empty spots: column, row from the photo's top-left (0-based). */
+  gaps: Array<[number, number]>;
+  /** blobs id of the puzzle straightened small (to turn the spots to match the box picture). */
+  thumbBlobId: string;
+  /** When the photo was read (placements are redone when this changes). */
+  ts: number;
 }
 
 export type PieceStatus = 'table' | 'tray' | 'placed' | 'missing' | 'pending';

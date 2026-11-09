@@ -60,6 +60,7 @@ export function normalizeProject(row: Partial<Project> & { id: string }): Projec
     coin: typeof row.coin === 'string' ? row.coin : null,
     // A coin measurement wins; marker puzzles are measured by their markers; otherwise estimated.
     scaleSource: row.scaleSource === 'coin' ? 'coin' : row.tracking === 'markers' || row.markerMap ? 'markers' : 'estimate',
+    openSpots: row.openSpots && Array.isArray(row.openSpots.gaps) ? row.openSpots : null,
   };
 }
 
@@ -119,6 +120,7 @@ export function referencedBlobIds(project: Project, snaps: SnapRow[], pieces: Pi
     ids.add(project.box.photoBlobId);
     ids.add(project.box.rectifiedBlobId);
   }
+  if (project.openSpots) ids.add(project.openSpots.thumbBlobId);
   for (const s of snaps) if (s.blobId) ids.add(s.blobId);
   for (const p of pieces) {
     if (p.thumbBlobId) ids.add(p.thumbBlobId);

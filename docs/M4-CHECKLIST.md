@@ -1,4 +1,4 @@
-# M4 (part 1 and 1b) checklist for your iPhone: where does each piece go?
+# M4 (parts 1, 1b and 2) checklist for your iPhone: where does each piece go?
 
 M4 part 1 suggests, for every scanned piece, **where it goes on the box picture**: the best spot (column and row, counted from the top-left), how sure it is (**Strong**, **Likely**, or **Several spots look alike**) and up to 4 other possible spots. Allow about 20 minutes. Screenshots of anything wrong help.
 
@@ -28,7 +28,19 @@ This tells us exactly how well it works on your pieces:
 2. Under Pieces, most should now say **Several spots look alike** (honest), a few **Strong**. Tap a Strong one: its green spot should be one of the holes (top-right corner, or around the faces).
 3. Scan the holes photo (IMG_9280): the finished-puzzle check should list **21 gaps**, with red squares exactly on the holes.
 
+## Part F: leftover pieces into the empty spots (part 2)
+With most of the puzzle done, the app now uses your photo of the puzzle with its holes: the leftover pieces are matched **only to the empty spots**, and **each spot takes one piece**.
+1. Update the app (Part A). Settings should show the version I sent you.
+2. Open *The Kiss* → **📷 Scan pieces** → **🖼 Choose a photo** → your holes photo (IMG_9280). It should say **21 possible gaps** and then **"Saved: your leftover pieces will now be matched only to these 21 empty spots"**.
+3. If your Pieces list has pieces other than the 21 leftovers (from earlier tests), tap **Delete scanned pieces… → Delete and scan again** and choose your 21-piece photo (IMG_9276). Otherwise just go back to the puzzle page.
+4. Under Pieces you should see a green box: **"Leftover pieces are matched only to the 21 empty spots…"**, then a count such as "9 strong · 2 likely · 8 several spots look alike · 1 fit none of the empty spots".
+5. **Tap a piece:** the box picture shows the 21 empty spots as light squares, its spot in **green**, other possible spots in yellow. Check the **Strong** ones against the real holes: they should all be right.
+6. "Fit none of the empty spots" is for things that aren't pieces (the bottle's label, a patch of table) or pieces from somewhere else.
+7. Optional: **Use the whole picture instead** goes back to searching the whole picture; choosing the holes photo again brings the empty spots back. After putting pieces in, photograph the puzzle again so the empty spots are updated.
+
 ## Known limits (honest)
 - On computer-made test puzzles: right spot first for **91 %** of pieces (48-piece puzzles) and **83 %** (300-piece), in the top 5 for 97 % / 90 %. "Strong" was right 96–97 % of the time there.
 - On your real pieces (21 pieces, 2026-11-08): right spot first for **5 of 21**, in the top 5 for **7 of 21**. Plain areas (the wall) can't be told apart by colour and pattern; shiny pieces under a lamp look different from the box. The app now says "Several spots look alike" for most of them instead of a wrong "Strong".
-- Not yet in this part: Zones and Trays, "Fill this spot", one-piece-per-spot (two pieces can still claim the same spot), the box-border question and box-to-grid correction.
+- **Leftover pieces into the empty spots (part 2)**, on your 21 pieces (19 real pieces + the bottle's label and a patch of table, against the 21 holes): right spot for about **14 of 19**; **9 Strong, all right**; 2 Likely, both right; the rest "Several spots look alike". The 9 pieces around the faces: all right but one. The mistakes are plain wall pieces swapped among the top-right holes (they look the same). Checked against your finished-puzzle photo (IMG_9272) with the pieces still in place. On computer-made puzzles: 95 % right (48 pieces), 87 % (300 pieces with nearly every spot open); "Strong" right 99.7–100 %.
+- Without a finished-puzzle photo (searching the whole picture), real pieces stay hard: 5 of 21 first.
+- Not yet: Zones and Trays, "Fill this spot", using the knob shapes of neighbouring holes, the box-border question and box-to-grid correction.

@@ -4,6 +4,15 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M4 (part 2): leftover pieces go only into the empty spots (2026-11-09; not yet checked on your iPhone)
+- **Why:** your two screenshots showed "Strong" on wrong spots (column 28, row 28 by the steps; column 13, row 10 at the man's elbow). Neither is one of your 21 holes. With 987 pieces already in, searching the whole picture made no sense.
+- **Empty spots are saved:** a photo of the puzzle with its holes (the finished-puzzle check) now keeps those spots. It works even if the photo shows the puzzle sideways or upside down: the app turns it to match the box picture. A photo with no holes clears them.
+- **Leftover pieces go only there, one per spot:** each piece is compared only with the empty spots, its colours are matched to those spots' colours, and two pieces can't take the same spot. How sure ("Strong", "Likely") now also counts the other pieces competing for a spot. Something matching none of the spots (a label, a patch of table) says **"Fits none of the empty spots"**.
+- **On the puzzle page:** a green box says the pieces are matched to the N empty spots, with **Use the whole picture instead**. Tapping a piece shows all the empty spots as light squares, its spot in green.
+- **On your 21 pieces** (with your box picture taken from your screenshot): right spot for about **14 of 19 real pieces** (was 5 of 21); **9 Strong, all right**; 2 Likely, both right; no wrong Strong. Around the faces: 9 of 10 right. The mistakes are plain wall pieces swapped between top-right holes. Checked against your finished-puzzle photo (IMG_9272) with the pieces still in place.
+- On computer-made puzzles (every piece's spot plus 20 % more empty spots): right spot for **95 %** (48 pieces) and **87 %** (300 pieces, nearly every spot open); "Strong" right 99.7–100 %.
+- Chances are now shown as at most 99 %.
+
 ### M4 (part 1b): fixes from your real test with the 21 pieces (2026-11-08; not yet checked on your iPhone)
 - **What your test showed.** Your holes photo (IMG_9280) gives the true spots of your 21 pieces (IMG_9276): 10 from the top-right corner (columns 24–28, rows 1–2) and 11 around the faces (columns 17–20, rows 7–9). Your box picture lines up with the real puzzle to within about a tenth of a piece, so the box picture was fine. Three things went wrong on the piece side:
   1. **Pale pieces were outlined wrongly.** On your white table, the beige wall pieces are close to the table's colour, so their outline cut into the piece (9 of 21). Every straightened piece was then crooked. **Fixed:** where colour can't tell, the app now uses the print's fine linen texture (the table is smooth). All 21 pieces are now outlined along their real edge.
