@@ -111,6 +111,17 @@ test('pieces are grouped by colour, light up on the photo, go into a tray and ba
   expect(seeded).toBe('ok');
   await page.evaluate(() => (location.hash = '#/puzzle/e2e-trays'));
 
+  // The table view: every piece on the photo, outlined by its state (no box picture: none placed); tap one.
+  await expect(page.getByTestId('progress')).toContainText('9 found');
+  await expect(page.getByTestId('progress')).toContainText('0 placed on box');
+  await page.getByTestId('table-toggle').click();
+  await expect(page.getByTestId('table-photo-svg').locator('.lit-outline')).toHaveCount(9);
+  await page.getByTestId('table-photo-svg').locator('.lit-outline').first().click();
+  await expect(page.getByTestId('table-photo-info')).toBeVisible();
+  await page.getByTestId('table-photo-pick').click();
+  await expect(page.getByTestId('table-photo')).toHaveCount(0);
+  await expect(page.getByTestId('piece-spots')).toBeVisible();
+
   // Three colours, three groups (6 trays asked for, but only 3 colours): the darkest is A.
   await page.getByTestId('trays-toggle').click();
   await expect(page.getByTestId('tray-groups').locator('button')).toHaveCount(3);

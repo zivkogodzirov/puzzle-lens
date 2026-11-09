@@ -4,6 +4,13 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M4 (part 6): green outlines: your table at a glance (2026-11-09; tested in the app on the Mac, not yet on your iPhone)
+- **🗺 Show my table** (puzzle page, under Pieces): your scan photo with every piece outlined by what the app knows. **Green:** its spot on the box is known (Strong or Likely), labelled with the spot ("26·1" = column 26, row 1). **Blue:** its shape is read, but several spots look alike. **Grey:** found, but its shape couldn't be read yet.
+- **Tap a piece** to zoom in on it and see, e.g., "Column 26, row 1 (Strong, 87 %), top edge". **Show where it goes** opens its spot on the box picture; **Whole photo** zooms back out. Several photos? **Next photo**.
+- **Progress line** under the piece groups: "23 found · 21 shapes read · 18 placed on box".
+- **Frame sides:** a piece whose known spot is on the picture's edge shows an arrow on its picture (↑ top, → right, ↓ bottom, ← left, ↗ etc. for corners), and its details say "top edge" etc. The Border view counts them: "Side of the frame known: ↑ 4 · ↗ 1 · → 1".
+- **Tested in the app with your 21-piece photo:** 18 green (all labelled with their holes), 3 blue, 2 grey (the bottle's label and the table patch). The frame sides match your holes: 4 top-edge pieces, the top-right corner, and one right-edge piece. Readable on a phone-sized screen; zoomed in, the labels are large.
+
 ### M4 (part 5): Fill this spot (2026-11-09; tested in the app on the Mac and checked on your iPhone)
 - **🎯 Fill this spot** (puzzle page, under Pieces): the other way round from tapping a piece. Tap a spot on the box picture and see the pieces that may go there, each with its chance.
 - **With your holes photo** (empty spots): tap near a hole and the app picks that hole (the light squares). The piece chosen for it comes first, in a green frame with Strong / Likely and its %. Other possible pieces follow in yellow frames, each saying where its own best spot is. Pieces already in a tray say "in tray C".

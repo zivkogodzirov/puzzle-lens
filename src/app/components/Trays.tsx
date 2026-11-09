@@ -207,14 +207,15 @@ export function TraysPanel({
 interface PhotoView {
   snap: SnapRow;
   url: string;
-  /** The pieces' outlines in this photo (px, flat x, y), each in its colour. */
-  outlines: Array<{ pts: number[]; colour: string }>;
+  /** The pieces' outlines in this photo (px, flat x, y), each in its colour, with a label at its centre. */
+  outlines: Array<{ id: string; pts: number[]; colour: string; label: string | null; cx: number; cy: number; size: number }>;
   view: [number, number, number, number];
 }
 
 /**
- * The newest scan photos that show the pieces (up to 3, the fewest that show them all), with those
- * pieces lit up: everything else darkened, their outlines in the group's colour.
+ * The newest scan photos that show the pieces (the fewest that show them all, up to `maxPhotos`).
+ * 'lit': those pieces lit up (everything else darkened), outlined in their colour. 'all': every piece
+ * outlined in its colour, labelled, and tappable (`infoOf` says what a tapped piece is).
  */
 export function TablePhoto({
   projectId,
@@ -223,6 +224,12 @@ export function TablePhoto({
   colourOf,
   title,
   onClose,
+  mode = 'lit',
+  labelOf,
+  infoOf,
+  onPick,
+  maxPhotos = 3,
+  legend,
 }: {
   projectId: string;
   pieces: PieceRow[];
@@ -231,10 +238,20 @@ export function TablePhoto({
   colourOf?: (p: PieceRow) => string;
   title: string;
   onClose: () => void;
+  mode?: 'lit' | 'all';
+  labelOf?: (p: PieceRow) => string | null;
+  infoOf?: (p: PieceRow) => string;
+  /** "Show where it goes" for a tapped piece. */
+  onPick?: (p: PieceRow) => void;
+  maxPhotos?: number;
+  legend?: preact.ComponentChildren;
 }) {
   const [views, setViews] = useState<PhotoView[] | null>(null);
   const [missing, setMissing] = useState(0);
   const [k, setK] = useState(0);
+  const [tapped, setTapped] = useState<string | null>(null);
+  /** 'all' mode: tapping the photo zooms in around that point (pinch-zoom is off in the app), tapping again zooms out. */
+  const [focus, setFocus] = useState<[number, number] | null>(null);
   useEffect(() => {
     let live = true;
     const made: string[] = [];
@@ -249,7 +266,7 @@ export function TablePhoto({
         const [x, y] = applyH(H, [p.table.x, p.table.y]);
         return x >= 0 && y >= 0 && x < s.width && y < s.height;
       };
-      while (left.size && out.length < 3) {
+      while (left.size && out.length < maxPhotos) {
         let best: { s: SnapRow; H: number[]; ids: string[] } | null = null;
         for (const s of snaps) {
           if (out.some((v) => v.snap.id === s.id)) continue;
@@ -271,6 +288,8 @@ export function TablePhoto({
         for (const p of pieces.filter((q) => best!.ids.includes(q.id))) {
           const o = p.outlineMm;
           const pts: number[] = [];
+          let px0 = Infinity;
+          let px1 = -Infinity;
           for (let i = 0; i + 1 < o.length; i += 2) {
             const [x, y] = applyH(best.H, [p.table.x + o[i]!, p.table.y + o[i + 1]!]);
             pts.push(x, y);
@@ -278,8 +297,11 @@ export function TablePhoto({
             y0 = Math.min(y0, y);
             x1 = Math.max(x1, x);
             y1 = Math.max(y1, y);
+            px0 = Math.min(px0, x);
+            px1 = Math.max(px1, x);
           }
-          outlines.push({ pts, colour: colourOf?.(p) ?? colour });
+          const [cx, cy] = applyH(best.H, [p.table.x, p.table.y]);
+          outlines.push({ id: p.id, pts, colour: colourOf?.(p) ?? colour, label: labelOf?.(p) ?? null, cx, cy, size: px1 - px0 });
           left.delete(p.id);
         }
         // Show the part of the photo with these pieces (with room around them), at least a third of it.
@@ -305,23 +327,48 @@ export function TablePhoto({
     };
   }, [projectId, pieces]);
   const v = views?.[k];
+  const ZOOM = 2.5;
+  const viewBox = (): [number, number, number, number] => {
+    if (!v) return [0, 0, 1, 1];
+    if (!focus) return v.view;
+    const w = v.view[2] / ZOOM;
+    const h = v.view[3] / ZOOM;
+    return [Math.max(0, Math.min(v.snap.width - w, focus[0] - w / 2)), Math.max(0, Math.min(v.snap.height - h, focus[1] - h / 2)), w, h];
+  };
+  const onPhotoTap = (e: MouseEvent) => {
+    if (mode !== 'all') return;
+    if (focus) return setFocus(null);
+    const svg = (e.currentTarget as SVGElement).ownerSVGElement ?? (e.currentTarget as SVGSVGElement);
+    const m = svg.getScreenCTM();
+    if (!m) return;
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+    setFocus([p.x, p.y]);
+  };
   const pts = (o: number[]) => o.reduce((s, val, i) => s + (i % 2 ? `,${val.toFixed(0)} ` : `${val.toFixed(0)}`), '');
+  const tappedPiece = tapped ? (pieces.find((p) => p.id === tapped) ?? null) : null;
   return (
     <div class="photo-result table-photo" data-testid="table-photo">
       <div class="row table-photo-bar">
         <strong class="grow">
-          {title}: {pieces.length - missing} lit up
+          {title}
+          {mode === 'lit' ? `: ${pieces.length - missing} lit up` : ''}
           {views && views.length > 1 ? ` · photo ${k + 1} of ${views.length}` : ''}
         </strong>
         {views && views.length > 1 && (
-          <button class="btn btn-small" data-testid="table-photo-next" onClick={() => setK((k + 1) % views.length)}>
+          <button class="btn btn-small" data-testid="table-photo-next" onClick={() => (setFocus(null), setK((k + 1) % views.length))}>
             Next photo
+          </button>
+        )}
+        {focus && (
+          <button class="btn btn-small" data-testid="table-photo-out" onClick={() => setFocus(null)}>
+            Whole photo
           </button>
         )}
         <button class="btn btn-small" data-testid="table-photo-close" onClick={onClose}>
           Close
         </button>
       </div>
+      {legend && <div class="table-photo-legend small">{legend}</div>}
       {!views ? (
         <p class="muted">Loading your photo…</p>
       ) : !v ? (
@@ -329,21 +376,50 @@ export function TablePhoto({
           None of your saved scan photos shows these pieces (only the last 10 photos are kept). Scan the table again.
         </p>
       ) : (
-        <svg viewBox={v.view.join(' ')} preserveAspectRatio="xMidYMid meet" data-testid="table-photo-svg">
-          <defs>
-            <mask id="lit">
-              <rect x={0} y={0} width={v.snap.width} height={v.snap.height} fill="#fff" />
-              {v.outlines.map((o, i) => (
-                <polygon key={i} points={pts(o.pts)} fill="#000" stroke="#000" stroke-width={v.view[2] / 60} />
-              ))}
-            </mask>
-          </defs>
-          <image href={v.url} x={0} y={0} width={v.snap.width} height={v.snap.height} />
-          <rect x={0} y={0} width={v.snap.width} height={v.snap.height} fill="#000" fill-opacity="0.6" mask="url(#lit)" />
-          {v.outlines.map((o, i) => (
-            <polygon key={i} points={pts(o.pts)} fill="none" stroke={o.colour} stroke-width="4" vector-effect="non-scaling-stroke" class="lit-outline" />
+        <svg viewBox={viewBox().join(' ')} preserveAspectRatio="xMidYMid meet" data-testid="table-photo-svg" data-zoomed={focus ? 'yes' : 'no'}>
+          {mode === 'lit' && (
+            <defs>
+              <mask id="lit">
+                <rect x={0} y={0} width={v.snap.width} height={v.snap.height} fill="#fff" />
+                {v.outlines.map((o) => (
+                  <polygon key={o.id} points={pts(o.pts)} fill="#000" stroke="#000" stroke-width={v.view[2] / 60} />
+                ))}
+              </mask>
+            </defs>
+          )}
+          <image href={v.url} x={0} y={0} width={v.snap.width} height={v.snap.height} onClick={(e) => onPhotoTap(e as unknown as MouseEvent)} />
+          {mode === 'lit' && <rect x={0} y={0} width={v.snap.width} height={v.snap.height} fill="#000" fill-opacity="0.6" mask="url(#lit)" />}
+          {v.outlines.map((o) => (
+            <polygon
+              key={o.id}
+              points={pts(o.pts)}
+              fill={mode === 'all' ? 'rgba(0,0,0,0.001)' : 'none'}
+              stroke={o.colour}
+              stroke-width={tapped === o.id ? 7 : 4}
+              vector-effect="non-scaling-stroke"
+              class="lit-outline"
+              data-id={o.id}
+              onClick={mode === 'all' ? (e) => (e.stopPropagation(), setTapped(o.id), focus || setFocus([o.cx, o.cy])) : undefined}
+            />
           ))}
+          {v.outlines
+            .filter((o) => o.label)
+            .map((o) => (
+              <text key={`t${o.id}`} x={o.cx} y={o.cy} font-size={Math.max(o.size * 0.28, viewBox()[2] / 40)} class="photo-label" data-testid="photo-label">
+                {o.label}
+              </text>
+            ))}
         </svg>
+      )}
+      {tappedPiece && infoOf && (
+        <div class="row table-photo-info" data-testid="table-photo-info">
+          <span class="grow">{infoOf(tappedPiece)}</span>
+          {onPick && (
+            <button class="btn btn-small btn-primary" data-testid="table-photo-pick" onClick={() => onPick(tappedPiece)}>
+              Show where it goes
+            </button>
+          )}
+        </div>
       )}
       {missing > 0 && views && (
         <p class="muted small" data-testid="table-photo-missing">

@@ -17,7 +17,18 @@ import type { Placement } from '../../cv/placement';
 import { placeKeyOf, readPlacements, shownPlacements, stalePieces, unplacedStatus, updatePlacements, type PlacementCache } from '../../project/placements';
 import type { SpotChoice } from '../../cv/openSpots';
 import { readerWorker } from '../workers';
-import { TraysPanel, useColourGroups } from '../components/Trays';
+import { TablePhoto, TraysPanel, useColourGroups } from '../components/Trays';
+import {
+  pieceSide,
+  pieceState,
+  progressCounts,
+  SIDE_ARROW,
+  SIDE_WORDS,
+  spotLabel,
+  STATE_COLOUR,
+  type FrameSide,
+  type PieceState,
+} from '../../project/progress';
 import { FillSpot } from '../components/FillSpot';
 import type { Groups } from '../../project/groups';
 import { canShareFile, downloadUrl, revokeDownloadUrls, shareOrDownload } from '../../report/share';
@@ -555,6 +566,7 @@ function Catalog({
   const [allRows, setAllRows] = useState<PieceRow[]>([]);
   const [traysOpen, setTraysOpen] = useState(false);
   const [fillOpen, setFillOpen] = useState(false);
+  const [tableOpen, setTableOpen] = useState(false);
   const [trayGroup, setTrayGroup] = useState<number | null>(null);
   const [show, setShow] = useState<'all' | 'border' | 'interior' | 'unsure'>('all');
   const [places, setPlaces] = useState<PlacementCache | null>(null);
@@ -608,6 +620,58 @@ function Catalog({
   const cell: [number, number] | null = pitch ? [pitch.wMm, pitch.hMm] : null;
   const groups = useMemo(() => new Map(rows.map((r) => [r.id, pieceGroup(r, cell)])), [rows, cell?.[0], cell?.[1]]);
   const unplaced = useMemo(() => allRows.filter(unplacedStatus), [allRows]);
+  // Each piece's state (found / shape read / spot known) and frame side, for the table view and the progress line.
+  const states = useMemo(() => new Map(rows.map((r) => [r.id, pieceState(groups.get(r.id) !== 'unsure', shownPlaces.get(r.id))])), [rows, groups, shownPlaces]);
+  const sideOf = (id: string): FrameSide | null => (grid ? pieceSide(shownPlaces.get(id), grid) : null);
+  const progress = progressCounts([...states.values()]);
+  const infoOf = (p: PieceRow): string => {
+    const c = shownPlaces.get(p.id);
+    const st = states.get(p.id);
+    if (st === 'placed') {
+      const t = c!.placement.top[0]!;
+      const side = sideOf(p.id);
+      return `Column ${t.col + 1}, row ${t.row + 1} (${VERDICT_WORDS[c!.placement.verdict]}, ${pct(t.p)} %)${side ? `, ${SIDE_WORDS[side]}` : ''}.`;
+    }
+    const g = groups.get(p.id);
+    const shape = g === 'corner' ? 'a corner piece' : g === 'edge' ? 'an edge piece' : g === 'interior' ? 'an inside piece' : null;
+    if (c && !c.fits) return `${shape ? `Shape read (${shape}). ` : ''}Fits none of the empty spots.`;
+    if (shape) return `Shape read (${shape}). Its spot isn't sure yet${c ? ': several spots look alike' : ''}.`;
+    return 'Found, but its shape couldn’t be read yet (a close-up helps).';
+  };
+  const tableBlock = (
+    <>
+      <button class="btn btn-block" data-testid="table-toggle" onClick={() => setTableOpen(true)}>
+        🗺 Show my table
+      </button>
+      {tableOpen && (
+        <TablePhoto
+          projectId={projectId}
+          pieces={rows}
+          mode="all"
+          colour={STATE_COLOUR.found}
+          colourOf={(p) => STATE_COLOUR[states.get(p.id) ?? 'found']}
+          labelOf={(p) => spotLabel(shownPlaces.get(p.id))}
+          infoOf={infoOf}
+          onPick={(p) => {
+            setTableOpen(false);
+            setSelected(p.id);
+            setTimeout(() => document.querySelector('[data-testid="piece-spots"]')?.scrollIntoView({ block: 'center' }), 50);
+          }}
+          maxPhotos={6}
+          title="Your table"
+          legend={
+            <>
+              <span class="state-dot" style={{ background: STATE_COLOUR.placed }} />
+              spot known (column·row) <span class="state-dot" style={{ background: STATE_COLOUR.shape }} />
+              shape read <span class="state-dot" style={{ background: STATE_COLOUR.found }} />
+              found. Tap a piece to zoom in and see where it goes.
+            </>
+          }
+          onClose={() => setTableOpen(false)}
+        />
+      )}
+    </>
+  );
   // Fill this spot (M4): from a spot on the box picture to the pieces that may go there.
   const fillBlock =
     project.box && project.grid && boxUrl && places ? (
@@ -660,6 +724,11 @@ function Catalog({
   const want = borderCounts(grid ?? { cols: 0, rows: 0 });
   const tooMany = grid && (n.corner > want.corners || n.edge > want.edges);
   if (show === 'unsure' && !count.unsure) setShow('all');
+  const sideCounts = new Map<FrameSide, number>();
+  for (const r of rows) {
+    const s = sideOf(r.id);
+    if (s) sideCounts.set(s, (sideCounts.get(s) ?? 0) + 1);
+  }
   const trayOf = (id: string) => (traysOpen && colourGroups ? colourGroups.of.get(id) : undefined);
   const shown = rows
     .filter((r) => {
@@ -681,11 +750,23 @@ function Catalog({
             </button>
           ))}
       </div>
+      <p class="small" data-testid="progress">
+        <span class="state-dot" style={{ background: STATE_COLOUR.found }} />
+        {progress.found} found · <span class="state-dot" style={{ background: STATE_COLOUR.shape }} />
+        {progress.shape} shapes read · <span class="state-dot" style={{ background: STATE_COLOUR.placed }} />
+        {progress.placed} placed on box
+      </p>
       {show === 'border' && (
         <p class="small" data-testid="border-counts">
           <span class="legend-corner">Corners {grid ? `${n.corner} of ${want.corners}` : n.corner}</span> ·{' '}
           <span class="legend-edge">Edges {grid ? `${n.edge} of ${want.edges}` : n.edge}</span>
           {n.unsure ? <span class="muted"> · {n.unsure} not sure yet (a close-up helps)</span> : null}
+          {sideCounts.size > 0 && (
+            <span data-testid="side-counts">
+              <br />
+              Side of the frame known: {[...sideCounts].map(([s, k]) => `${SIDE_ARROW[s]} ${k}`).join(' · ')}
+            </span>
+          )}
         </p>
       )}
       {tooMany && (
@@ -708,6 +789,7 @@ function Catalog({
           }}
         />
       )}
+      {tableBlock}
       {fillBlock}
       {traysBlock}
       <div class="catalog-grid" data-testid="catalog">
@@ -720,6 +802,7 @@ function Catalog({
             selected={selected === r.id}
             onSelect={() => setSelected(selected === r.id ? null : r.id)}
             tray={trayTag(colourGroups, trayOf(r.id))}
+            side={sideOf(r.id)}
           />
         ))}
       </div>
@@ -731,6 +814,7 @@ function Catalog({
           boxUrl={boxUrl}
           grid={project.grid}
           aspect={project.box ? project.box.width / project.box.height : project.grid.cols / project.grid.rows}
+          side={sideOf(selected)}
           onClose={() => setSelected(null)}
         />
       )}
@@ -757,6 +841,7 @@ function PieceThumb({
   onSelect,
   selected,
   tray,
+  side,
 }: {
   piece: PieceRow;
   group: ShapeGroup;
@@ -764,6 +849,7 @@ function PieceThumb({
   onSelect: () => void;
   selected: boolean;
   tray?: { letter: string; hex: string; ink: string; also: string | null } | null;
+  side?: FrameSide | null;
 }) {
   const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
   const cls = [
@@ -778,6 +864,11 @@ function PieceThumb({
     <button class="thumb-btn" onClick={onSelect} data-group={group} data-place={place?.verdict ?? 'none'} aria-label={`${title}: show where it goes`}>
       {url ? <img src={url} class={cls} alt={title} title={title} loading="lazy" /> : <div class={`catalog-empty ${cls}`} title={title} />}
       {place && place.verdict !== 'several' && <span class={`place-dot place-${place.verdict}`} />}
+      {side && (
+        <span class="side-tag" title={SIDE_WORDS[side]} data-testid="side-tag">
+          {SIDE_ARROW[side]}
+        </span>
+      )}
       {tray && (
         <span class="tray-tag" style={{ background: tray.hex, color: tray.ink }} data-testid="tray-tag">
           {tray.letter}
@@ -877,6 +968,7 @@ function PieceSpots({
   boxUrl,
   grid,
   aspect,
+  side,
   onClose,
 }: {
   piece: PieceRow;
@@ -886,6 +978,8 @@ function PieceSpots({
   boxUrl: string | null;
   grid: { cols: number; rows: number };
   aspect: number;
+  /** The side of the frame its known spot is on. */
+  side: FrameSide | null;
   onClose: () => void;
 }) {
   const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
@@ -907,6 +1001,7 @@ function PieceSpots({
                   <span class={`legend-${place!.verdict}`}>
                     ({VERDICT_WORDS[place!.verdict]}, {pct(best.p)} %)
                   </span>
+                  {side ? <span data-testid="spot-side"> · {SIDE_WORDS[side]}</span> : null}
                 </p>
               ) : (
                 <p data-testid="spot-verdict">
