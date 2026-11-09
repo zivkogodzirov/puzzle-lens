@@ -38,6 +38,12 @@ export interface PlacementSpot {
   p: number;
   /** With `full`: the score in each of the 4 turns (−Infinity where a turn isn't allowed). */
   rotScores?: number[];
+  /**
+   * Where the piece fits best on the box picture relative to the spot (cells, ±0.19): the box
+   * picture's misfit there (box-to-grid correction, src/cv/boxFit.ts).
+   */
+  ox?: number;
+  oy?: number;
 }
 
 export interface Placement {
@@ -615,7 +621,16 @@ export function placePiece(box: BoxGrid, patch: PiecePatch, opts: PlaceOptions =
       rotScores.set(k, r);
     }
   const top = finals.slice(0, opts.full ? finals.length : (opts.topN ?? 5)).map((c, i) => {
-    const spot: PlacementSpot = { col: c.col, row: c.row, rot: c.rot as 0 | 1 | 2 | 3, score: c.s, p: ex[i]! / Z };
+    const fine = box.levels[2].cell;
+    const spot: PlacementSpot = {
+      col: c.col,
+      row: c.row,
+      rot: c.rot as 0 | 1 | 2 | 3,
+      score: c.s,
+      p: ex[i]! / Z,
+      ox: Math.round((c.dx / fine) * 1000) / 1000,
+      oy: Math.round((c.dy / fine) * 1000) / 1000,
+    };
     if (opts.full) spot.rotScores = rotScores.get(c.row * cols + c.col)!;
     return spot;
   });

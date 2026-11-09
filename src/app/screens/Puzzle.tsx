@@ -30,6 +30,8 @@ import {
   type PieceState,
 } from '../../project/progress';
 import { FillSpot } from '../components/FillSpot';
+import { TableContrast } from '../components/TableContrast';
+import { BoxFitNotice } from '../components/BoxFitNotice';
 import type { Groups } from '../../project/groups';
 import { canShareFile, downloadUrl, revokeDownloadUrls, shareOrDownload } from '../../report/share';
 import { formatBytes } from '../../report/collect';
@@ -756,6 +758,7 @@ function Catalog({
         {progress.shape} shapes read · <span class="state-dot" style={{ background: STATE_COLOUR.placed }} />
         {progress.placed} placed on box
       </p>
+      {boxUrl && project.grid && <TableContrast project={project} pieces={allRows} boxUrl={boxUrl} />}
       {show === 'border' && (
         <p class="small" data-testid="border-counts">
           <span class="legend-corner">Corners {grid ? `${n.corner} of ${want.corners}` : n.corner}</span> ·{' '}
@@ -789,6 +792,7 @@ function Catalog({
           }}
         />
       )}
+      {project.box && !placing && <BoxFitNotice project={project} shown={shownPlaces} onProject={onProject} />}
       {tableBlock}
       {fillBlock}
       {traysBlock}

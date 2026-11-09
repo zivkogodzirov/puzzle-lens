@@ -50,6 +50,16 @@ export interface BoxPicture {
   /** Size of the rectified picture (px). */
   width: number;
   height: number;
+  /**
+   * Does the box picture show exactly the puzzle (the owner's answer, M4)? 'exact'; 'frame' (it had
+   * a frame or white border: the corners were put inside it); 'differs' (the box shows a little
+   * more or less than the puzzle); 'unsure'. Absent: not asked yet.
+   */
+  border?: 'exact' | 'frame' | 'differs' | 'unsure';
+  /** The owner said "Not now" to a box-to-grid correction for this box picture (asked again after a new one). */
+  fitDismissed?: boolean;
+  /** Box-to-grid corrections applied to this box photo so far. */
+  fitted?: number;
 }
 
 /** What the empty table looks like (learned from one photo; RESEARCH §6). */

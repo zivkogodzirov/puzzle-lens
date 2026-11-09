@@ -179,3 +179,28 @@ export function makeGroups(project: Pick<Project, 'trays'>, pieces: PieceRow[], 
   }
   return { groups, fixed: Boolean(fixed), of };
 }
+
+/** The table's typical colour around the pieces (sRGB, median), or null before any is measured. */
+export async function tableLight(pieces: PieceRow[]): Promise<Rgb | null> {
+  await lightsFromPhotos(pieces);
+  const lights = pieces.map(lightOf).filter((l): l is Rgb => Boolean(l));
+  if (lights.length < 3) return null;
+  const median = (c: number) => lights.map((l) => l[c] as number).sort((a, b) => a - b)[lights.length >> 1]!;
+  return [median(0), median(1), median(2)];
+}
+
+/** The pieces' straightened patches (RGBA), read once and kept. */
+export async function loadPatches(pieces: PieceRow[]): Promise<Uint8Array[]> {
+  const out: Uint8Array[] = [];
+  for (const p of pieces) {
+    if (!p.patch) continue;
+    const key = keyOf(p);
+    if (!patchCache.has(key)) {
+      const b = await getBlob(p.patch.blobId);
+      patchCache.set(key, b ? new Uint8Array(await b.arrayBuffer()) : null);
+    }
+    const rgba = patchCache.get(key);
+    if (rgba) out.push(rgba);
+  }
+  return out;
+}

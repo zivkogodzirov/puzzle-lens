@@ -138,6 +138,16 @@ test('new puzzle: steps 0–4, resume after reload, puzzle screen, backup export
   await page.reload();
   await expectStep(page, 2);
   await expect(page.getByTestId('box-rectified')).toBeVisible({ timeout: 20_000 });
+  // The border question: a frame → put the corners inside it; not sure → measured later. The answer is kept.
+  await page.getByTestId('border-frame').click();
+  await expect(page.getByTestId('border-advice')).toContainText('inside the frame');
+  await expect(page.getByTestId('border-adjust')).toBeVisible();
+  await page.getByTestId('border-unsure').click();
+  await expect(page.getByTestId('border-advice')).toContainText('offers a correction');
+  await page.reload();
+  await expect(page.getByTestId('border-unsure')).toHaveAttribute('aria-pressed', 'true', { timeout: 20_000 });
+  await page.getByTestId('border-exact').click();
+  await expect(page.getByTestId('border-advice')).toHaveCount(0);
   await page.getByTestId('wizard-next').click();
 
   // Step 3: the grid from 1000 pieces and a portrait picture.

@@ -1,4 +1,4 @@
-# M4 (parts 1–6) checklist for your iPhone: where does each piece go, trays, Fill this spot, and your table at a glance
+# M4 (parts 1–7) checklist for your iPhone: where does each piece go, trays, Fill this spot, your table at a glance, and box setup checks
 
 M4 part 1 suggests, for every scanned piece, **where it goes on the box picture**: the best spot (column and row, counted from the top-left), how sure it is (**Strong**, **Likely**, or **Several spots look alike**) and up to 4 other possible spots. Allow about 20 minutes. Screenshots of anything wrong help.
 
@@ -83,6 +83,12 @@ Part 4b (after your screenshot): colours are now evened out for the lamp. Your p
 4. **Tap a green piece:** the photo zooms in on it and a line at the bottom says e.g. "Column 26, row 1 (Strong, 87 %), top edge". Tap **Show where it goes**: the photo closes and the piece's spot shows on the box picture. Tap **Whole photo** to zoom back out.
 5. Tap **Border** among the piece groups: the top-right pieces show small arrows (↑ top edge, ↗ the corner, → right edge), and a line counts them.
 
+## Part K: box setup checks (part 7)
+1. Update the app (Part A). Settings should show the version I sent you.
+2. Open *The Kiss*. Under the piece groups: **"Table contrast ✓ Only about 1 % of the picture is close to your table's colour…"**. Tap **Show where**: a few spots on the white lace sleeve and the collar are marked in pink. Do those look like the pieces that are hardest to see on your table?
+3. You won't see a "Box picture check" for *The Kiss*: your box picture already fits the real puzzle (within 0.15 of a piece). It appears only when the pieces show the box picture is a little bigger or smaller than the puzzle.
+4. Optional, to see the border question: on the Home screen start **a new puzzle** (any name), take or choose a photo of a box and straighten it. Under the picture you'll be asked **"Does this picture show exactly the puzzle?"**. Try "It has a frame or white border": it tells you to put the dots inside the frame. You can delete that test puzzle afterwards.
+
 ## Known limits (honest)
 - On computer-made test puzzles: right spot first for **91 %** of pieces (48-piece puzzles) and **83 %** (300-piece), in the top 5 for 97 % / 90 %. "Strong" was right 96–97 % of the time there.
 - On your real pieces (21 pieces, 2026-11-08): right spot first for **5 of 21**, in the top 5 for **7 of 21**. Plain areas (the wall) can't be told apart by colour and pattern; shiny pieces under a lamp look different from the box. The app now says "Several spots look alike" for most of them instead of a wrong "Strong".
@@ -93,4 +99,4 @@ Part 4b (after your screenshot): colours are now evened out for the lamp. Your p
 - **Zones of the box picture** were measured and not built: right zone for 60 % of finished-puzzle spots and 8 of 19 loose pieces. The AI picture model (DINOv2-small) didn't help and isn't in the app.
 - **Fill this spot (part 5)** is only as good as the pieces' spots: very good among the empty spots of a nearly finished puzzle, weak on the whole picture (a spot often has no piece listed).
 - **Your table at a glance (part 6)** shows pieces where they were when photographed: after moving pieces, scan again to update it. It works on your scan photos, not yet on the live camera (that comes with M5).
-- Not yet: the box-border question, table-contrast check and box-to-grid correction.
+- **Box setup checks (part 7):** the box picture correction needs at least 15 pieces the app is sure about, spread over the picture, so it shows up only once a good part of a new puzzle is scanned. The contrast check needs some scanned pieces (it measures your table around them).

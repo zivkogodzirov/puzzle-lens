@@ -178,14 +178,7 @@ export function NewPuzzleScreen() {
       <WizardTop title={project?.name ?? 'New puzzle'} onBack={back} onClose={() => (project ? go('puzzle', project.id) : go('home'))} />
       {step >= 1 && <StepDots step={step} reached={project?.setupStep ?? 1} />}
       {step === 0 && <StepInstall onContinue={() => setStep(1)} />}
-      {step === 1 && (
-        <StepNameCount
-          project={project ?? null}
-          ensureProject={ensureProject}
-          save={save}
-          onNext={async (p) => advance(2, p)}
-        />
-      )}
+      {step === 1 && <StepNameCount project={project ?? null} ensureProject={ensureProject} save={save} onNext={async (p) => advance(2, p)} />}
       {step === 2 && project && <StepBox project={project} save={save} onNext={() => advance(3)} />}
       {step === 3 && project && <StepGrid project={project} save={save} onNext={() => advance(4)} />}
       {step === 4 && project && project.tracking !== 'markers' && (
@@ -244,9 +237,7 @@ function StepInstall({ onContinue }: { onContinue: () => void }) {
           You're in a <strong>Safari tab</strong>. Safari and the Home Screen app keep <strong>separate</strong> puzzles: a puzzle you start here will{' '}
           <strong>not</strong> appear in the Home Screen app. Safari may also delete it after 7 days without a visit.
         </p>
-        <p>
-          So it's best to install first and start your puzzle in the Home Screen app.
-        </p>
+        <p>So it's best to install first and start your puzzle in the Home Screen app.</p>
       </div>
       <ol class="steps">
         <li>
@@ -290,7 +281,10 @@ function StepNameCount({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!project && !name) void nextProjectName().then((n) => setName((cur) => cur || n)).catch(() => setName((cur) => cur || 'Puzzle 1'));
+    if (!project && !name)
+      void nextProjectName()
+        .then((n) => setName((cur) => cur || n))
+        .catch(() => setName((cur) => cur || 'Puzzle 1'));
   }, []);
 
   const parsed = Number(count);
@@ -535,6 +529,8 @@ function StepBox({ project, save, onNext }: { project: Project; save: (patch: Pr
           photoHeight: r.photoHeight,
           width: r.width,
           height: r.height,
+          // Re-straightening (new corners, a turn) keeps the answer about a frame.
+          ...(project.box?.border ? { border: project.box.border } : {}),
         },
       });
       // The corners are in project.box now; the working copy is no longer needed.
@@ -574,11 +570,26 @@ function StepBox({ project, save, onNext }: { project: Project; save: (patch: Pr
     <div class="stack">
       <label class="btn btn-primary btn-block file-btn" data-testid="box-take-photo">
         📷 Take a photo of the box
-        <input ref={cameraInput} class="hidden-input" type="file" accept="image/*" capture="environment" data-testid="box-file-camera" onChange={() => void onFile(cameraInput.current)} />
+        <input
+          ref={cameraInput}
+          class="hidden-input"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          data-testid="box-file-camera"
+          onChange={() => void onFile(cameraInput.current)}
+        />
       </label>
       <label class="btn btn-block file-btn" data-testid="box-choose-photo">
         🖼️ Choose from Photos
-        <input ref={photosInput} class="hidden-input" type="file" accept="image/*" data-testid="box-file-photos" onChange={() => void onFile(photosInput.current)} />
+        <input
+          ref={photosInput}
+          class="hidden-input"
+          type="file"
+          accept="image/*"
+          data-testid="box-file-photos"
+          onChange={() => void onFile(photosInput.current)}
+        />
       </label>
     </div>
   );
@@ -628,13 +639,29 @@ function StepBox({ project, save, onNext }: { project: Project; save: (patch: Pr
       {phase.kind === 'done' && project.box && (
         <>
           <div class="rectified">
-            {rectUrl ? <img src={rectUrl} alt="Your box picture, straightened" data-testid="box-rectified" /> : <div class="box-thumb-empty muted">Loading picture…</div>}
+            {rectUrl ? (
+              <img src={rectUrl} alt="Your box picture, straightened" data-testid="box-rectified" />
+            ) : (
+              <div class="box-thumb-empty muted">Loading picture…</div>
+            )}
           </div>
           <p class="small muted" data-testid="box-shape">
             The picture is {project.box.width >= project.box.height ? 'wider than tall' : 'taller than wide'}.
           </p>
           <p>Is the whole picture there, the right way up, with no table showing at the edges?</p>
-          <button class="btn btn-primary btn-block wizard-next" data-testid="wizard-next" onClick={() => void onNext().catch((err) => setError(errorWords(err)))}>
+          <BorderQuestion
+            answer={project.box.border ?? null}
+            onAnswer={(border) => {
+              void save({ box: { ...project.box!, border } }).catch((err) => setError(errorWords(err)));
+              logInfo('wizard', `Box picture border answer: ${border}`);
+            }}
+            onAdjust={() => void adjust()}
+          />
+          <button
+            class="btn btn-primary btn-block wizard-next"
+            data-testid="wizard-next"
+            onClick={() => void onNext().catch((err) => setError(errorWords(err)))}
+          >
             Yes, looks right · Next
           </button>
           <div class="row two-up">
@@ -651,6 +678,56 @@ function StepBox({ project, save, onNext }: { project: Project; save: (patch: Pr
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * "Does the box picture show exactly the puzzle?" (M4 box setup, RESEARCH §9): box art often has a
+ * frame, or shows a little more or less of the scene than the puzzle. A frame is fixed by putting
+ * the corners inside it; a small difference is measured and corrected later from the pieces.
+ */
+export function BorderQuestion({
+  answer,
+  onAnswer,
+  onAdjust,
+}: {
+  answer: NonNullable<Project['box']>['border'] | null;
+  onAnswer: (a: NonNullable<NonNullable<Project['box']>['border']>) => void;
+  onAdjust: () => void;
+}) {
+  const options: Array<[NonNullable<NonNullable<Project['box']>['border']>, string]> = [
+    ['exact', 'Yes, exactly the puzzle'],
+    ['frame', 'It has a frame or white border'],
+    ['differs', 'The box shows a bit more or less'],
+    ['unsure', 'Not sure'],
+  ];
+  return (
+    <div class="card border-question" data-testid="border-question">
+      <p>
+        <strong>Does this picture show exactly the puzzle?</strong>{' '}
+        <span class="small muted">(compare with the picture on the side of the box, if it has one)</span>
+      </p>
+      <div class="chips">
+        {options.map(([k, label]) => (
+          <button key={k} class="chip border-chip" aria-pressed={answer === k} data-testid={`border-${k}`} onClick={() => onAnswer(k)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {answer === 'frame' && (
+        <p class="small" data-testid="border-advice">
+          Put the 4 dots on the corners of the <strong>picture inside the frame</strong>, not on the frame.{' '}
+          <button class="btn btn-small" data-testid="border-adjust" onClick={onAdjust}>
+            Adjust corners
+          </button>
+        </p>
+      )}
+      {(answer === 'differs' || answer === 'unsure') && (
+        <p class="small" data-testid="border-advice">
+          No problem: once your first pieces are scanned, the app measures how the box picture lines up with the real pieces and offers a correction.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -743,11 +820,27 @@ function StepGrid({ project, save, onNext }: { project: Project; save: (patch: P
           <div class="row two-up">
             <label class="field">
               <span>Across (along the width)</span>
-              <input class="text-input" type="text" inputMode="numeric" pattern="[0-9]*" value={cols} data-testid="grid-cols" onInput={(e) => setCols((e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 3))} />
+              <input
+                class="text-input"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={cols}
+                data-testid="grid-cols"
+                onInput={(e) => setCols((e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 3))}
+              />
             </label>
             <label class="field">
               <span>Down (along the height)</span>
-              <input class="text-input" type="text" inputMode="numeric" pattern="[0-9]*" value={rows} data-testid="grid-rows" onInput={(e) => setRows((e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 3))} />
+              <input
+                class="text-input"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={rows}
+                data-testid="grid-rows"
+                onInput={(e) => setRows((e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 3))}
+              />
             </label>
           </div>
           <button class="btn btn-block" data-testid="grid-manual-use" onClick={() => void useManual()}>
@@ -788,8 +881,8 @@ function StepTracking({ onPieces, onMarkers }: { onPieces: () => void; onMarkers
       <details class="small" style={{ marginTop: '16px' }}>
         <summary>I have a printer and want extra precision</summary>
         <p class="muted">
-          With 8 printed marker cards around the pieces, positions are a little more exact and the outlines can follow the pieces live. You can switch any time by
-          starting a new puzzle.
+          With 8 printed marker cards around the pieces, positions are a little more exact and the outlines can follow the pieces live. You can switch any time
+          by starting a new puzzle.
         </p>
         <button class="btn btn-block" data-testid="use-markers" onClick={onMarkers}>
           Use printed markers instead
@@ -920,7 +1013,12 @@ function StepMarkers({ project, onNext }: { project: Project; onNext: () => Prom
           {error}
         </div>
       )}
-      <button class="btn btn-primary btn-block wizard-next" data-testid="wizard-next" disabled={!scale} onClick={() => void onNext().catch((err) => setError(errorWords(err)))}>
+      <button
+        class="btn btn-primary btn-block wizard-next"
+        data-testid="wizard-next"
+        disabled={!scale}
+        onClick={() => void onNext().catch((err) => setError(errorWords(err)))}
+      >
         Next
       </button>
       {!scale && scale !== undefined && <p class="small muted center">Measure the bar first, then tap Next.</p>}

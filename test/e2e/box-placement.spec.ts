@@ -53,16 +53,42 @@ function jpeg(turn180: boolean, w = art.width, h = art.height): string {
 }
 
 /** A puzzle with the box picture and the pieces (patches) in IndexedDB; `open`: empty spots from a finished-puzzle photo. */
-async function seed(page: import('@playwright/test').Page, open: { gaps: Array<[number, number]>; thumb: string } | null): Promise<void> {
+/**
+ * Extra pieces (no patch, so never placed again) whose stored placements are Strong and show a box
+ * picture 4 % too big across and down: offsets (a − 1)·(x + 0.5) + b with a = 0.96, b = 0.2.
+ */
+function misfitCache(w: number, h: number): { key: string; value: unknown } {
+  const byPiece: Record<string, unknown> = {};
+  for (let k = 0; k < 20; k++) {
+    const col = (k * 3) % 10;
+    const row = (k * 5) % 8;
+    byPiece[`x${k}`] = {
+      ts: 1,
+      placement: {
+        top: [{ col, row, rot: 0, score: 0.5, p: 0.9, ox: -0.04 * (col + 0.5) + 0.2, oy: -0.04 * (row + 0.5) + 0.2 }],
+        verdict: 'strong',
+      },
+    };
+  }
+  const placeKey = `e2e-place:box-rect|0,0;${w},0;${w},${h};0,${h}|10x8`;
+  return { key: 'placement:e2e-place', value: { boxKey: placeKey, colour: null, open: null, byPiece } };
+}
+
+async function seed(
+  page: import('@playwright/test').Page,
+  open: { gaps: Array<[number, number]>; thumb: string } | null,
+  cache: { key: string; value: unknown } | null = null,
+): Promise<void> {
   const patches = ids.map((pid, i) => ({ id: pid, b64: patchFor(pid, i % 4) }));
   await gotoScreen(page, '');
   const seeded = await page.evaluate(
-    async ([box, ps, w, h, spots]) => {
+    async ([box, ps, w, h, spots, cacheRow]) => {
       const bytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
       const req = indexedDB.open('puzzle-lens');
       const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
       await new Promise<void>((res) => {
-        const tx = dbh.transaction(['projects', 'pieces', 'blobs'], 'readwrite');
+        const tx = dbh.transaction(['projects', 'pieces', 'blobs', 'settings'], 'readwrite');
+        if (cacheRow) tx.objectStore('settings').put(cacheRow);
         tx.objectStore('blobs').put({ id: 'e2e-place:box-rect', ts: 1, kind: 'box', blob: new Blob([bytes(box)], { type: 'image/jpeg' }) });
         if (spots)
           tx.objectStore('blobs').put({ id: 'e2e-place:open-spots', ts: 1, kind: 'open-spots', blob: new Blob([bytes(spots.thumb)], { type: 'image/jpeg' }) });
@@ -115,12 +141,33 @@ async function seed(page: import('@playwright/test').Page, open: { gaps: Array<[
             patch: { blobId: `e2e-place:patch-${p.id}`, flats: [false, false, false, false], sure: false, ts: 5 },
           });
         });
+        if (cacheRow) {
+          const extra = Object.keys((cacheRow.value as { byPiece: Record<string, unknown> }).byPiece);
+          extra.forEach((id, k) =>
+            tx.objectStore('pieces').put({
+              id,
+              projectId: 'e2e-place',
+              createdAt: 1,
+              updatedAt: 1,
+              status: 'table',
+              table: { x: 300 + k * 30, y: 100, angleDeg: 0, lastSeen: 1, snapId: 's1' },
+              outlineMm: [0, 0, 1, 0, 1, 1],
+              areaMm2: 345,
+              sizeMm: [18, 19],
+              colour: { meanLab: [50, 0, 0], hueHist: [0, 0, 0, 0, 0, 0, 0, 0] },
+              thumbBlobId: null,
+              seen: 1,
+              bestPxPerMm: 5,
+              flags: {},
+            }),
+          );
+        }
         tx.oncomplete = () => res();
       });
       dbh.close();
       return 'ok';
     },
-    [jpeg(false), patches, art.width, art.height, open] as const,
+    [jpeg(false), patches, art.width, art.height, open, cache] as const,
   );
   expect(seeded).toBe('ok');
   await page.evaluate(() => (location.hash = '#/puzzle/e2e-place'));
@@ -195,4 +242,44 @@ test('with empty spots from an upside-down finished-puzzle photo: pieces go only
   await page.getByTestId('whole-picture').click();
   await expect(page.getByTestId('open-spots')).toHaveCount(0);
   await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
+});
+
+test('a box picture that is too big: the pieces show it, and the app corrects it (or not, on "Not now")', async ({ page }) => {
+  await seed(page, null, misfitCache(art.width, art.height));
+  await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
+  await expect(page.getByTestId('box-fit')).toContainText('bigger than the real puzzle', { timeout: 30_000 });
+  await expect(page.getByTestId('box-fit')).toContainText('up to 0.2');
+  await page.screenshot({ path: test.info().outputPath('box-fit.png'), fullPage: true });
+  await page.getByTestId('box-fit-apply').click();
+  await expect(page.getByTestId('box-fit')).toHaveCount(0, { timeout: 60_000 });
+  const box = await page.evaluate(async () => {
+    const req = indexedDB.open('puzzle-lens');
+    const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
+    const p = await new Promise<{ box: { corners: number[][]; fitted?: number } }>((res) => {
+      const q = dbh.transaction('projects').objectStore('projects').get('e2e-place');
+      q.onsuccess = () => res(q.result);
+    });
+    dbh.close();
+    return p.box;
+  });
+  expect(box.fitted).toBe(1);
+  // The puzzle covers cells [0.2, 9.8] × [0.2, 7.88] of the old picture: the corners move in.
+  const cw = art.width / 10;
+  const ch = art.height / 8;
+  expect(box.corners[0]![0]).toBeCloseTo(0.2 * cw, -1);
+  expect(box.corners[0]![1]).toBeCloseTo(0.2 * ch, -1);
+  expect(box.corners[2]![0]).toBeCloseTo(9.8 * cw, -1);
+  expect(box.corners[2]![1]).toBeCloseTo(7.88 * ch, -1);
+  // The real pieces are placed again on the corrected picture.
+  await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
+});
+
+test('"Not now" on the box picture correction is remembered', async ({ page }) => {
+  await seed(page, null, misfitCache(art.width, art.height));
+  await expect(page.getByTestId('box-fit')).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId('box-fit-dismiss').click();
+  await expect(page.getByTestId('box-fit')).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
+  await expect(page.getByTestId('box-fit')).toHaveCount(0);
 });

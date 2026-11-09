@@ -15,6 +15,7 @@ import { scanMarkerless } from '../../src/cv/scanMarkerless';
 import { readShape, READ_OK } from '../../src/cv/shapeRead';
 import { buildBoxGrid, extractPatch, patchStats, placePiece, spotStats, PLACE, type PiecePatch } from '../../src/cv/placement';
 import { chooseSpots, type SpotShapes } from '../../src/cv/openSpots';
+import { fitBoxCorrection, fitMatters, refitPicture } from '../../src/cv/boxFit';
 import { SEG } from '../../src/cv/pieceFinder';
 import type { Vec2 } from '../../src/project/types';
 import { getCv } from '../helpers/cv';
@@ -29,6 +30,29 @@ const BOX = process.env.PLACE_BOX ?? 'photo';
 if (process.env.PLACE_SET) Object.assign(PLACE, JSON.parse(process.env.PLACE_SET));
 if (process.env.SEG_SET) Object.assign(SEG, JSON.parse(process.env.SEG_SET));
 const buf = (s: SynthScene) => ({ data: s.rgba, width: s.width, height: s.height, stride: s.stride });
+
+/**
+ * PLACE_BOXEXT: a box picture that shows more of the scene than the puzzle (e > 0: the puzzle fills
+ * only the middle 1 − 2e of each axis, the rest continues mirrored) or less (e < 0: cropped by |e|
+ * each side), as box art often does. The test still takes the box picture's own edges as the puzzle's.
+ */
+function misfit(pic: { data: Uint8Array; width: number; height: number; stride: number }, e: number) {
+  if (!e) return pic;
+  const { width: W, height: H, data } = pic;
+  const out = new Uint8Array(data.length);
+  const src = (v: number, n: number) => {
+    let u = e > 0 ? (v / n - e) / (1 - 2 * e) : v / n * (1 + 2 * e) - e;
+    u = Math.abs(u);
+    if (u > 1) u = 2 - u;
+    return Math.min(n - 1, Math.max(0, Math.floor(u * n)));
+  };
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const k = (src(y + 0.5, H) * W + src(x + 0.5, W)) * 4;
+      out.set(data.subarray(k, k + 4), (y * W + x) * 4);
+    }
+  return { data: out, width: W, height: H, stride: W * 4 };
+}
 
 /** The art as a photographed box lid: slightly blurred, warmer and less saturated, a little darker. */
 function boxPicture(art: SynthArt): { data: Uint8Array; width: number; height: number; stride: number } {
@@ -79,7 +103,9 @@ describe.skipIf(!RUN)('box placement accuracy (synthetic)', () => {
         const items = set.items.filter((i) => i.puzzleKey === key && i.name.includes('-b0-'));
         const opts0 = sceneOptions(items[0]!);
         const pz = opts0.puzzle;
-        const box = buildBoxGrid(boxPicture(pz.art), pz.cols, pz.rows);
+        const ext = Number(process.env.PLACE_BOXEXT ?? 0);
+        let pic = misfit(boxPicture(pz.art), ext);
+        let box = buildBoxGrid(pic, pz.cols, pz.rows);
         const pieces: Array<{ id: string; patch: PiecePatch; flats: boolean[] | null; sure: boolean; sides: string; conf: number[] }> = [];
         for (const item of items) {
           const opts = sceneOptions(item);
@@ -213,6 +239,25 @@ describe.skipIf(!RUN)('box placement accuracy (synthetic)', () => {
         }
         // One-time colour match over the whole batch (RESEARCH §9.5).
         const ps = patchStats(pieces.map((p) => p.patch));
+        // PLACE_BOXFIT=1: box-to-grid correction from the confident placements (up to 3 rounds), as the app offers it.
+        if (process.env.PLACE_BOXFIT === '1')
+          for (let round = 0; round < 3; round++) {
+            const c0 = ps ? { from: ps, to: box.stats } : null;
+            const samples = pieces
+              .map((p) => placePiece(box, p.patch, { flats: p.flats, flatsSure: p.sure, colour: c0 }))
+              .filter((pl) => pl.verdict === 'strong')
+              .map((pl) => ({ col: pl.top[0]!.col, row: pl.top[0]!.row, ox: pl.top[0]!.ox ?? 0, oy: pl.top[0]!.oy ?? 0 }));
+            const fit = fitBoxCorrection(samples, pz.cols, pz.rows);
+            console.log(
+              `  ${key} round ${round}: ${samples.length} strong; ` +
+                (fit
+                  ? `fit x a ${fit.x.a.toFixed(4)} b ${fit.x.b.toFixed(3)} (n ${fit.x.n}), y a ${fit.y.a.toFixed(4)} b ${fit.y.b.toFixed(3)} (n ${fit.y.n}), edge shift ${fit.edgeShift.toFixed(3)}; true a ${(1 - 2 * ext).toFixed(4)} b x ${(ext * pz.cols).toFixed(3)} y ${(ext * pz.rows).toFixed(3)}`
+                  : 'no fit'),
+            );
+            if (!fitMatters(fit)) break;
+            pic = refitPicture(pic, pz.cols, pz.rows, fit!);
+            box = buildBoxGrid(pic, pz.cols, pz.rows);
+          }
         const colour = ps ? { from: ps, to: box.stats } : null;
         for (const p of pieces) {
           const t0 = performance.now();
