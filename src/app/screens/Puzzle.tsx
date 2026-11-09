@@ -1076,11 +1076,18 @@ function Catalog({
           </button>
         </div>
       )}
-      {(project.answers?.length ?? 0) + (project.pairAnswers?.length ?? 0) > 0 && (
-        <a class="btn btn-small" href={`#/accuracy/${encodeURIComponent(projectId)}`} data-testid="accuracy-link">
-          📊 How often is the app right?
-        </a>
-      )}
+      <div class="row" style={{ gap: '8px', flexWrap: 'wrap' }}>
+        {project.grid && (
+          <a class="btn btn-small" href={`#/progress/${encodeURIComponent(projectId)}`} data-testid="progress-link">
+            📈 Progress
+          </a>
+        )}
+        {(project.answers?.length ?? 0) + (project.pairAnswers?.length ?? 0) > 0 && (
+          <a class="btn btn-small" href={`#/accuracy/${encodeURIComponent(projectId)}`} data-testid="accuracy-link">
+            📊 How often is the app right?
+          </a>
+        )}
+      </div>
       {boxUrl && project.grid && <TableContrast project={project} pieces={allRows} boxUrl={boxUrl} />}
       {show === 'border' && (
         <p class="small" data-testid="border-counts">

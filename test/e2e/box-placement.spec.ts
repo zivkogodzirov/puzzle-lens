@@ -439,3 +439,25 @@ test('which pieces join (M6): a square of 4 first, then a pair; They fit / Donâ€
   await expect(page.getByTestId('acc-pairs-all')).toContainText('4 of 4');
   await page.screenshot({ path: test.info().outputPath('accuracy-pairs.png'), fullPage: true });
 });
+
+test('progress page (M7 part 2): in the puzzle, known spots on the box picture, pieces by status, accuracy', async ({ page }) => {
+  await seed(page, null);
+  await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
+  await expect(page.getByTestId('place-summary')).not.toContainText('not placed');
+  // r1c2 (first in id order) goes in.
+  await page.locator('[data-testid="catalog"] .thumb-btn').nth(0).click();
+  await page.getByTestId('spot-fits').click();
+  await expect(page.getByTestId('in-puzzle')).toContainText('1 in the puzzle');
+  await page.getByTestId('progress-link').click();
+  await expect(page.getByTestId('progress-done')).toContainText('1 of 80 pieces in the puzzle');
+  await expect(page.getByTestId('progress-source')).toContainText('The pieces you said fit');
+  // The five pieces left show their spots; the rest of the picture is dark.
+  await expect(page.getByTestId('progress-map').locator('ellipse')).toHaveCount(5);
+  await expect(page.getByTestId('progress-table')).toContainText('5');
+  await expect(page.getByTestId('progress-placed')).toContainText('1');
+  await expect(page.getByTestId('progress-left')).toContainText('79 spots still empty');
+  await expect(page.getByTestId('progress-left')).toContainText('the piece is known for 5');
+  await expect(page.getByTestId('progress-accuracy')).toContainText('First choice of spot right 1 of 1');
+  await expect(page.getByTestId('progress-batch')).toContainText('Batch 1');
+  await page.screenshot({ path: test.info().outputPath('progress.png'), fullPage: true });
+});

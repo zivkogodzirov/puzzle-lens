@@ -1,4 +1,6 @@
-# M7, part 1: a new batch (and M6, M5, still to check)
+# M7, parts 1–2: a new batch, and the progress page (and M6, M5, still to check)
+
+**New in M7 part 2: 📈 Progress** on the puzzle page (next to 📊 How often is the app right?). It shows how many pieces are in the puzzle, the box picture filled in (bright = done, a **yellow dot** = the piece for that spot is on your table or in a tray, dark = still to find), the pieces by where they are, corners and edges left, how often the app was right, and the batch. I tested it in the app with your photos: **987 of 1008 in the puzzle (98 %)**, and 17 of your 21 holes have their piece on the table.
 
 **New in M7 part 1:** on your puzzle's page, under Pieces, **🔄 Start a new batch…**. Before, once you swept the pieces together (or put them back in the box) and spread out a new lot, no photo could be matched to the old table any more. Now a new batch sets the table's pieces aside (kept in the list), leaves the pieces in the puzzle and in trays where they are, and the next photo starts a fresh table.
 
@@ -6,11 +8,17 @@
 
 **I tested it myself** with a simulated camera in Safari's engine: the re-spread table wasn't matched, then after **Start a new batch** the next photo read all the pieces, and the counts showed them on the table and set aside.
 
-Allow about 15 minutes for M6, 45 minutes for the M5 steps if you haven't done them yet, and 10 minutes for M7 part 1 (last). These steps are for version **{version}** (Settings shows the version).
+Allow about 5 minutes for the progress page, 15 minutes for M6, 45 minutes for the M5 steps if you haven't done them yet, and 10 minutes for M7 part 1 (last). These steps are for version **{version}** (Settings shows the version).
 
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## M7 part 2: the progress page
+1. On *The Kiss*, tap **📈 Progress** (on the puzzle page, under the piece groups and buttons).
+2. It should say about **987 of 1008 pieces in the puzzle**, from your photo of the puzzle.
+3. On the box picture, your holes are dark; most have a **yellow dot** (their piece is on your table). Does that match your table?
+4. Put a piece in (✓ Fits on the puzzle page), then open Progress again: one more in, one dot fewer.
 
 ## M6: which pieces join (still to check)
 1. Under Pieces tap **🧩 Which pieces join**. The first card, **What next**, should be a **square of 4** (or a pair), with its spots marked on a small piece of the box picture.
@@ -79,6 +87,7 @@ Allow about 15 minutes for M6, 45 minutes for the M5 steps if you haven't done t
 - Your answers are kept with the puzzle, and in backups.
 
 ## Please tell me
+- M7 part 2: does the progress page match your puzzle and table? Anything you'd like it to show?
 - M7 part 1: did the new batch work? How do you usually work: leftovers back in the box, or left on the table?
 - M6: did the squares of 4 and the pairs fit? Any pair the app was 90 % or more sure of that didn't fit (a screenshot of its card helps). Was **📷 Point them out** easy to follow?
 - Part 4: does the live view keep up when you move the phone? Did the red dashed "moved?" outlines appear for pieces you took away, and only for those?

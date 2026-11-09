@@ -7,9 +7,25 @@
  */
 import { signal } from '@preact/signals';
 
-export type Route = 'home' | 'live' | 'device' | 'settings' | 'report' | 'help' | 'log' | 'new' | 'puzzle' | 'markers' | 'scan' | 'trays' | 'accuracy';
+export type Route =
+  'home' | 'live' | 'device' | 'settings' | 'report' | 'help' | 'log' | 'new' | 'puzzle' | 'markers' | 'scan' | 'trays' | 'accuracy' | 'progress';
 
-export const ROUTES: Route[] = ['home', 'live', 'device', 'settings', 'report', 'help', 'log', 'new', 'puzzle', 'markers', 'scan', 'trays', 'accuracy'];
+export const ROUTES: Route[] = [
+  'home',
+  'live',
+  'device',
+  'settings',
+  'report',
+  'help',
+  'log',
+  'new',
+  'puzzle',
+  'markers',
+  'scan',
+  'trays',
+  'accuracy',
+  'progress',
+];
 
 export function parseHash(hash: string): Route {
   const name = hash.replace(/^#\/?/, '').split(/[/?]/)[0] ?? '';

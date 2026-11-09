@@ -1023,3 +1023,13 @@ pre.logbox {
 .piece-partners { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
 .piece-partners .row { align-items: center; gap: 8px; margin-top: 4px; }
 .piece-partners p { margin: 0; }
+
+/* ---------- Progress (M7 part 2) ---------- */
+.progress-big { font-size: 18px; margin: 0 0 8px; }
+.progress-big strong { font-size: 26px; }
+.progress-bar { height: 10px; border-radius: 5px; background: var(--panel-2); overflow: hidden; }
+.progress-bar span { display: block; height: 100%; background: var(--good); }
+.progress-map { display: block; width: 100%; height: auto; margin-top: 10px; border-radius: 8px; }
+.progress-left { fill: rgba(10, 14, 20, 0.72); }
+.progress-known { fill: #ffd84a; stroke: rgba(0, 0, 0, 0.6); stroke-width: 0.06; }
+.progress-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ffd84a; vertical-align: middle; }

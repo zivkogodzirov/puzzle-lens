@@ -4,6 +4,13 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M7 (part 2): progress page (2026-11-09; tested in the app with your Kiss photos, not yet on your iPhone)
+- **New: 📈 Progress** on the puzzle page (next to 📊 How often is the app right?).
+- **How many pieces are in the puzzle**, with a bar. With a photo of the nearly finished puzzle it counts everything but its empty spots (plus the pieces you said fit since); without one, the pieces you said fit.
+- **The box picture, filled in:** bright where the puzzle is done, a **yellow dot** where the piece for an empty spot is on your table or in a tray, dark where it's still to find.
+- **Pieces by where they are** (on the table, in trays with each tray's count, in the puzzle, set aside), **how many spots are still empty** and for how many the piece is known, **corners and edge pieces** among the pieces left, **how often the app was right**, and **which batch** you're on.
+- Tested in the app with your photos (box picture, IMG_9280 holes, IMG_9276 pieces): **987 of 1008 in the puzzle (98 %)**, the 21 holes dark at the top right and by the faces, **17 of them with their piece on your table**, 4 still to find (in fact 2 holes have no loose piece among your 21).
+
 ### M7 (part 1): batches (2026-11-09; tested on the Mac with your photos, not yet on your iPhone)
 - **The problem:** once you swept the pieces together (or put them back in the box) and spread out a new lot, no photo could be matched to the old table any more ("This photo could not be matched…"). The only way out was deleting the scanned pieces.
 - **New: 🔄 Start a new batch** on the puzzle page. The pieces on the table are **set aside** (kept in the list); pieces in the puzzle and in trays stay where they are; the next photo starts a fresh table. "Pieces read" now says how many are on the table, in trays, in the puzzle and set aside, and which batch you're on.

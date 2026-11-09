@@ -13,6 +13,7 @@ import { PuzzleScreen } from './screens/Puzzle';
 import { TrayLabelsScreen } from './screens/TrayLabels';
 import { TestSteps } from './components/TestSteps';
 import { AccuracyScreen } from './screens/Accuracy';
+import { ProgressScreen } from './screens/Progress';
 
 export function App() {
   const r = route.value;
@@ -32,6 +33,7 @@ export function App() {
       {r === 'scan' && <ScanScreen />}
       {r === 'trays' && <TrayLabelsScreen />}
       {r === 'accuracy' && <AccuracyScreen />}
+      {r === 'progress' && <ProgressScreen />}
       <TestSteps />
     </div>
   );

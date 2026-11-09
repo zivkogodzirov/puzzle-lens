@@ -25,3 +25,11 @@ Allow about 10 minutes. Settings should show the version I sent you.
 ### Please tell me
 - Did the new batch work as described? Was the explanation in the box clear?
 - How do you usually work: do you put the leftovers back in the box, or leave them on the table?
+
+## Part 2: the progress page
+
+**New:** **📈 Progress** on the puzzle page. It shows how many pieces are in the puzzle, the box picture filled in (bright = done, a yellow dot = the piece for that spot is on your table or in a tray, dark = still to find), the pieces by where they are, corners and edges left, how often the app was right, and the batch.
+
+1. On *The Kiss*, tap **📈 Progress**. It should say about **987 of 1008 pieces in the puzzle**, from your photo of the puzzle.
+2. On the box picture, your holes are dark; most have a yellow dot. Does that match your table?
+3. Put a piece in (✓ Fits), then open Progress again: one more in, one dot fewer.
