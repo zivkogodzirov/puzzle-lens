@@ -17,6 +17,7 @@ import type { ColourMatch, Placement } from '../cv/placement';
 import { chooseSpots, type SpotChoice, type SpotShapes } from '../cv/openSpots';
 import type { OpenSpotsInput, PieceToPlace, PlaceReply, ReaderApi } from '../shared/apis';
 import { getBlob, placementKey } from './store';
+import { placementWithAnswers, spotSidesWithNeighbours, type AnswerView } from './answers';
 import type { PieceRow, Project } from './types';
 
 export { placementKey };
@@ -111,19 +112,42 @@ export async function updatePlacements(
  * What to show for each piece: its own placement, or, among empty spots, the spot it gets when each
  * spot takes at most one piece (with `fits` false for a piece that matches none of them well). Pass
  * every piece not yet in the puzzle, those in trays too: they still compete for the empty spots.
+ *
+ * With `answers` (M5 part 2): spots taken by pieces that fit are left out, spots a piece doesn't
+ * fit are ruled out for it, and placed pieces' knobs tell their neighbouring spots what they need.
  */
-export function shownPlacements(cache: PlacementCache | null, pieces: PieceRow[]): Map<string, SpotChoice> {
+export function shownPlacements(
+  cache: PlacementCache | null,
+  pieces: PieceRow[],
+  answers: { view: AnswerView; placed: Map<string, PieceRow> } | null = null,
+): Map<string, SpotChoice> {
   const out = new Map<string, SpotChoice>();
   if (!cache) return out;
-  const placed = pieces.filter((p) => cache.byPiece[p.id]).map((p) => ({ id: p.id, placement: cache.byPiece[p.id]!.placement }));
+  const view = answers?.view;
+  const placed = pieces
+    .filter((p) => cache.byPiece[p.id])
+    .map((p) => {
+      let placement = cache.byPiece[p.id]!.placement;
+      const not = view?.notHere.get(p.id);
+      if (cache.open?.cells.length) {
+        if (not) placement = { ...placement, top: placement.top.filter((t) => !not.has(`${t.col},${t.row}`)) };
+      } else if (view && answers) placement = placementWithAnswers(p, placement, view, answers.placed);
+      return { id: p.id, placement };
+    });
   if (cache.open?.cells.length) {
+    // Spots already filled by a piece that fits are no longer empty.
+    const keep = cache.open.cells.map(([c, r]) => !view?.taken.has(`${c},${r}`));
+    const cells = cache.open.cells.filter((_, j) => keep[j]);
+    const sides0 = cache.open.sides?.length === cache.open.cells.length ? cache.open.sides.filter((_, j) => keep[j]) : null;
+    const sides = view && answers ? spotSidesWithNeighbours(cells, sides0, view, answers.placed) : sides0;
+    if (!cells.length) return out;
     // Knob fit (M4 part 3): pieces scanned since then carry their sides; an unsure shape read counts less.
-    const shapes: SpotShapes = { pieces: new Map(), spots: cache.open.sides?.length === cache.open.cells.length ? cache.open.sides : null };
+    const shapes: SpotShapes = { pieces: new Map(), spots: sides };
     for (const p of pieces)
       if (p.patch?.sides && p.patch.sideConf)
         shapes.pieces.set(p.id, { sides: p.patch.sides, conf: p.patch.sideConf.map((c) => c * (p.patch!.sure ? 1 : UNSURE_SHAPE_WEIGHT)) });
-    return chooseSpots(placed, cache.open.cells, shapes);
+    return chooseSpots(placed, cells, shapes);
   }
-  for (const p of placed) out.set(p.id, { placement: p.placement, fits: true });
+  for (const p of placed) out.set(p.id, { placement: p.placement, fits: p.placement.top.length > 0 });
   return out;
 }

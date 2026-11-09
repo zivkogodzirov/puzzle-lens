@@ -12,6 +12,7 @@ import { MarkerSheetsScreen, NewPuzzleScreen } from './screens/NewPuzzle';
 import { PuzzleScreen } from './screens/Puzzle';
 import { TrayLabelsScreen } from './screens/TrayLabels';
 import { TestSteps } from './components/TestSteps';
+import { AccuracyScreen } from './screens/Accuracy';
 
 export function App() {
   const r = route.value;
@@ -30,6 +31,7 @@ export function App() {
       {r === 'markers' && <MarkerSheetsScreen />}
       {r === 'scan' && <ScanScreen />}
       {r === 'trays' && <TrayLabelsScreen />}
+      {r === 'accuracy' && <AccuracyScreen />}
       <TestSteps />
     </div>
   );

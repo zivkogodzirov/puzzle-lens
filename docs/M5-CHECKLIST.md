@@ -1,4 +1,4 @@
-# M5 checklist for your iPhone: live view and re-identification
+# M5 checklist for your iPhone: live view, Fits / Doesn't fit, and re-identification
 
 The steps for the newest part are also inside the app: tap the small **🧪 Test** tab on the right edge of any screen.
 
@@ -32,3 +32,25 @@ Allow about 10 minutes. Settings should show the version I sent you.
 - Did the outlines sit on the right pieces? Roughly how far off, if at all?
 - Does it feel smooth? The small number after "Tracking" (e.g. **15/s**) is how many times per second it finds the table.
 - If outlines drift or jump, a short screen recording helps (Control Centre → Screen Recording).
+
+## Part 2: Fits / Doesn't fit (M5 part 2)
+Set-up as in Part 1 ("Get ready"): your leftover pieces scanned, with their spots among your holes.
+
+1. Under Pieces, tap a piece with a green dot. Under its spot it now asks **"Tried it in column X, row Y?"** with **✓ Fits** and **✗ Doesn't fit**.
+2. Try that piece in that hole on your real puzzle.
+   - It fits: tap **✓ Fits**. A green note says **"In the puzzle at column X, row Y"** with **Undo**; the piece leaves the list, and the line under the piece groups ends with **"✓ 1 in the puzzle"**.
+   - It doesn't: tap **✗ Doesn't fit**. Its next best spot shows (or "You said it doesn't fit any of its suggested spots" with **Ask again**).
+3. Tap **Undo** once: the piece comes back to the list. Then tap it and **✓ Fits** again.
+4. In **🎯 Fill this spot**, tap a hole: each piece offered has **✓ Fits** and **✗ No**. After ✓ Fits the hole says **"✓ This spot is filled"**.
+5. In **📷 Live view of my table**, tap a piece: the box at the bottom asks **"Tried it in column X, row Y?"** with the same two buttons.
+6. Go on with as many pieces as you can (ideally all your holes): the more answers, the more the Accuracy page tells.
+7. Tap **📊 How often is the app right?** (on the puzzle page, or in Settings): for Strong, Likely and Several, how many of its first choices were right, with a range that narrows as you answer more.
+
+### Good to know (part 2)
+- ✓ Fits puts the piece into the puzzle in the app: it isn't outlined on your table any more. Tapped by mistake? **Undo** puts it back on the table, or back into its tray.
+- After a piece fits, the holes next to it only get pieces whose knob or hole matches it (when the app has read both shapes clearly).
+- Your answers are kept with the puzzle, and in backups.
+
+### Please tell me (part 2)
+- A screenshot of the 📊 page after you've answered for your pieces.
+- Any piece the app called **Strong** that didn't fit (a screenshot of the piece's spot helps).

@@ -4,6 +4,15 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M5 (part 2): Fits / Doesn't fit, and how often the app is right (2026-11-09; tested in the app on the Mac, not yet on your iPhone)
+- **✓ Fits / ✗ Doesn't fit** wherever the app suggests a spot: under a piece's spot ("Tried it in column X, row Y?"), on each piece offered in 🎯 Fill this spot, and in the 📷 live view when you tap a piece.
+- **Fits:** the piece goes into the puzzle in the app (status "in the puzzle"): it leaves the table list and the live view, its hole counts as filled (no other piece is offered there), and the line under the piece groups counts "✓ N in the puzzle". **Undo** puts it back on the table or into its tray.
+- **Doesn't fit:** that spot is ruled out for the piece; its other spots move up, each chance divided by what is left (e.g. 35 % with 60 % ruled out becomes 87 %, Strong). **Ask again** takes those answers back.
+- **Neighbours:** a piece that fits tells the spots next to it what they need: among your holes, the hole beside it must get a piece with the opposite knob there (knob out against knob in); on the whole picture, spots next to it are dropped for pieces whose clearly read knob can't meet it.
+- **📊 How often is the app right?** (puzzle page, once you've answered, and Settings → Accuracy): how many of its first choices were right for Strong, Likely and "Several spots look alike", each with a 95 % range; what it said vs what happened (by its percentage); how many tries a piece took on average. Undone answers are left out.
+- Answers are kept with the puzzle and in backups (a backup imported as a copy keeps them with its pieces).
+- Fixed on the way: the puzzle page counted pieces in the puzzle as still on the table, and the box picture reloaded (closing Fill this spot) whenever anything about the puzzle changed.
+
 ### M5 (part 1b): live view tested on your real photos, matching improved (2026-11-09; tested on the Mac with your photos, not yet on your iPhone)
 - **Tested on your photos** (you couldn't test on the phone yet): IMG_9263 → IMG_9264 (the same 26 pieces from another place): every outline within **0.3 mm**. A simulated moving phone over IMG_9276 (your 21 pieces; turning, tilting, blur, light changes, 3 pieces moved by hand): table found in every frame, pieces typically within **0.3 mm**, 95 % within 1.5 mm, a rare frame up to ~5–8 mm.
 - **Better matching:** after the first fit, a second, guided pass compares each feature only with the ones the fit puts near it. It finds many more right matches: on the finished puzzle (IMG_9272 → IMG_9280) the grid now lands on the 21 holes within **5 mm** typically (worst 8 mm), instead of 21 mm (worst 46 mm); the steep shots IMG_9225 and IMG_9226 now match with 250 and 151 points instead of 88 and 39.

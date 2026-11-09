@@ -30,6 +30,8 @@ export function FillSpot({
   shown,
   spots,
   pieces,
+  onAnswer,
+  filled,
 }: {
   project: Project;
   boxUrl: string;
@@ -39,6 +41,10 @@ export function FillSpot({
   spots: Array<[number, number]> | null;
   /** Pieces not yet in the puzzle (on the table or in trays). */
   pieces: PieceRow[];
+  /** Fits / Doesn't fit (M5 part 2) for a piece at the chosen spot. */
+  onAnswer?: (piece: PieceRow, spot: { col: number; row: number; rot: 0 | 1 | 2 | 3 }, fits: boolean) => void;
+  /** Spots already filled with a piece that fits ("c,r"). */
+  filled?: Set<string>;
 }) {
   const grid = project.grid!;
   const [sel, setSel] = useState<[number, number] | null>(null);
@@ -97,6 +103,10 @@ export function FillSpot({
   const best = cands.find((c) => c.chosen) ?? null;
   const others = cands.filter((c) => c !== best);
   const onTable = cands.map((c) => byId.get(c.id)!).filter((p) => p.status === 'table');
+  const rotAt = (id: string): 0 | 1 | 2 | 3 => shown.get(id)?.placement.top.find((t) => sel && t.col === sel[0] && t.row === sel[1])?.rot ?? 0;
+  const answer =
+    onAnswer && sel ? (c: SpotCandidate, fits: boolean) => onAnswer(byId.get(c.id)!, { col: sel[0], row: sel[1], rot: rotAt(c.id) }, fits) : undefined;
+  const isFilled = Boolean(sel && filled?.has(`${sel[0]},${sel[1]}`));
   return (
     <div class="card fill-spot" data-testid="fill-spot">
       <p class="small">
@@ -135,7 +145,11 @@ export function FillSpot({
               </button>
             </div>
           )}
-          {!cands.length ? (
+          {isFilled ? (
+            <p class="small notice notice-good" data-testid="fill-filled">
+              ✓ This spot is filled: you said a piece fits here.
+            </p>
+          ) : !cands.length ? (
             <p class="small" data-testid="fill-none">
               {spots
                 ? 'No scanned piece fits this spot well. Its piece may not be scanned yet (or is still in the box).'
@@ -152,7 +166,7 @@ export function FillSpot({
                     {cands
                       .filter((c) => c.chosen)
                       .map((c) => (
-                        <Candidate key={c.id} c={c} piece={byId.get(c.id)!} colour={BEST} />
+                        <Candidate key={c.id} c={c} piece={byId.get(c.id)!} colour={BEST} onAnswer={answer} />
                       ))}
                   </div>
                 </div>
@@ -166,7 +180,7 @@ export function FillSpot({
                     {others
                       .filter((c) => !c.chosen)
                       .map((c) => (
-                        <Candidate key={c.id} c={c} piece={byId.get(c.id)!} colour={OTHER} />
+                        <Candidate key={c.id} c={c} piece={byId.get(c.id)!} colour={OTHER} onAnswer={answer} />
                       ))}
                   </div>
                 </div>
@@ -191,6 +205,14 @@ export function FillSpot({
             return c ? `${c.chosen ? `${WORDS[c.verdict]}, ` : ''}${pct(c.p)} % for column ${sel[0] + 1}, row ${sel[1] + 1}.` : 'A possible piece.';
           }}
           find={onTable.map((p) => p.id)}
+          answer={
+            onAnswer
+              ? {
+                  labelOf: () => `column ${sel[0] + 1}, row ${sel[1] + 1}`,
+                  onAnswer: (p, fits) => onAnswer(p, { col: sel[0], row: sel[1], rot: rotAt(p.id) }, fits),
+                }
+              : undefined
+          }
           title={`Pieces for column ${sel[0] + 1}, row ${sel[1] + 1}`}
           legend={<>Green: the best piece for this spot; yellow: also possible.</>}
           onClose={() => setLive(false)}
@@ -210,7 +232,17 @@ export function FillSpot({
   );
 }
 
-function Candidate({ c, piece, colour }: { c: SpotCandidate; piece: PieceRow; colour: string }) {
+function Candidate({
+  c,
+  piece,
+  colour,
+  onAnswer,
+}: {
+  c: SpotCandidate;
+  piece: PieceRow;
+  colour: string;
+  onAnswer?: (c: SpotCandidate, fits: boolean) => void;
+}) {
   const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
   return (
     <div class="fill-cand" data-testid="fill-cand" style={{ borderColor: colour }}>
@@ -222,6 +254,16 @@ function Candidate({ c, piece, colour }: { c: SpotCandidate; piece: PieceRow; co
       {c.best && (
         <div class="muted small">
           Best: col. {c.best.col + 1}, row {c.best.row + 1}
+        </div>
+      )}
+      {onAnswer && (
+        <div class="fill-answer">
+          <button class="btn btn-small btn-fits" data-testid="fill-fits" aria-label="It fits here" onClick={() => onAnswer(c, true)}>
+            ✓ Fits
+          </button>
+          <button class="btn btn-small" data-testid="fill-not" aria-label="It doesn't fit here" onClick={() => onAnswer(c, false)}>
+            ✗ No
+          </button>
         </div>
       )}
     </div>

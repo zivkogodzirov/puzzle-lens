@@ -283,3 +283,50 @@ test('"Not now" on the box picture correction is remembered', async ({ page }) =
   await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
   await expect(page.getByTestId('box-fit')).toHaveCount(0);
 });
+
+test('Fits / Doesn’t fit (M5 part 2): ruled-out spots, a piece into the puzzle and back, Fill this spot, the Accuracy page', async ({ page }) => {
+  await seed(page, null);
+  await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
+  const thumbs = page.locator('[data-testid="catalog"] .thumb-btn');
+  await expect(thumbs).toHaveCount(6);
+  // r1c2 (first in id order): its spot is column 3, row 2.
+  await thumbs.nth(0).click();
+  await expect(page.getByTestId('spot-verdict')).toContainText('Column 3, row 2');
+  await expect(page.getByTestId('spot-answer')).toContainText('Tried it in column 3, row 2?');
+  await page.getByTestId('piece-spots').screenshot({ path: test.info().outputPath('spot-answer.png') });
+  // Doesn't fit: that spot is ruled out; "Ask again" brings it back.
+  await page.getByTestId('spot-not').click();
+  await expect(page.getByTestId('spot-ruled-out')).toContainText('1 spot ruled out');
+  await expect(page.getByTestId('spot-verdict')).not.toContainText('Column 3, row 2');
+  await page.getByTestId('spot-clear').click();
+  await expect(page.getByTestId('spot-verdict')).toContainText('Column 3, row 2');
+  // Fits: the piece goes into the puzzle (off the table), with Undo.
+  await page.getByTestId('spot-fits').click();
+  await expect(page.getByTestId('placed-note')).toContainText('In the puzzle at column 3, row 2');
+  await expect(page.getByTestId('in-puzzle')).toContainText('1 in the puzzle');
+  await expect(thumbs).toHaveCount(5);
+  await page.screenshot({ path: test.info().outputPath('fits.png'), fullPage: true });
+  await page.getByTestId('placed-undo').click();
+  await expect(page.getByTestId('in-puzzle')).toHaveCount(0);
+  await expect(thumbs).toHaveCount(6);
+  await thumbs.nth(0).click();
+  await page.getByTestId('spot-fits').click();
+  await expect(page.getByTestId('in-puzzle')).toContainText('1 in the puzzle');
+
+  // Fill this spot: r3c7's spot (column 8, row 4); "Fits" there fills it.
+  await page.getByTestId('fill-toggle').click();
+  await tapCell(page, 'fill-picture', 7, 3);
+  await expect(page.getByTestId('fill-best').getByTestId('fill-cand')).toHaveCount(1);
+  await page.getByTestId('fill-best').getByTestId('fill-fits').click();
+  await expect(page.getByTestId('fill-filled')).toBeVisible();
+  await expect(page.getByTestId('in-puzzle')).toContainText('2 in the puzzle');
+  // The filled spot of r1c2 offers nobody either.
+  await tapCell(page, 'fill-picture', 2, 1);
+  await expect(page.getByTestId('fill-filled')).toBeVisible();
+
+  // Accuracy: two first-choice answers, both right (the undone one and the taken-back "doesn't fit" are left out).
+  await page.getByTestId('accuracy-link').click();
+  await expect(page.getByTestId('accuracy')).toContainText('2 answers');
+  await expect(page.getByTestId('acc-all')).toContainText('2 of 2');
+  await page.screenshot({ path: test.info().outputPath('accuracy.png'), fullPage: true });
+});

@@ -31,6 +31,7 @@ import {
 } from '../../project/progress';
 import { FillSpot } from '../components/FillSpot';
 import { LiveTable } from '../components/LiveTable';
+import { answerSpot, answerView, clearNotHere, placedPieces, undoFits } from '../../project/answers';
 import { TableContrast } from '../components/TableContrast';
 import { BoxFitNotice } from '../components/BoxFitNotice';
 import type { Groups } from '../../project/groups';
@@ -80,6 +81,14 @@ export function useBlobUrl(blobId: string | null | undefined, version: unknown =
   return url;
 }
 
+/**
+ * What changes when the box picture is straightened again (same blob id, new corners or size), so a
+ * picture reloads then, and not on every other change of the puzzle (answers, trays).
+ */
+export function boxVersion(box: Project['box'] | null | undefined): string | null {
+  return box ? `${box.rectifiedBlobId}|${box.width}x${box.height}|${box.corners.map((c) => c.join(',')).join(';')}|${box.fitted ?? 0}` : null;
+}
+
 /** "Set-up: step 3 of 5 (Grid)" or "Set-up finished". */
 export function setupStatus(p: Project): string {
   if (p.setupStep >= LAST_SETUP_STEP) return 'Set-up finished';
@@ -101,10 +110,11 @@ export function PuzzleScreen() {
   const [bin, setBin] = useState<ScanBinSummary | null>(null);
   const [missingN, setMissingN] = useState(0);
   const [trayN, setTrayN] = useState(0);
+  const [tableN, setTableN] = useState(0);
   const [scanAction, setScanAction] = useState<'none' | 'confirm-delete' | 'confirm-restore' | 'busy'>('none');
   const [scanNote, setScanNote] = useState<string | null>(null);
   const mounted = useRef(true);
-  const thumb = useBlobUrl(project?.box?.rectifiedBlobId, project?.box);
+  const thumb = useBlobUrl(project?.box?.rectifiedBlobId, boxVersion(project?.box));
 
   useEffect(() => {
     mounted.current = true;
@@ -130,6 +140,7 @@ export function PuzzleScreen() {
           setPieces(c.all);
           setMissingN(c.missing);
           setTrayN(c.tray);
+          setTableN(c.table);
           setBin(await scanBinSummary(p.id));
         }
       })
@@ -231,6 +242,7 @@ export function PuzzleScreen() {
     setPieces(c.all);
     setMissingN(c.missing);
     setTrayN(c.tray);
+    setTableN(c.table);
     setBin(b);
   };
 
@@ -381,7 +393,7 @@ export function PuzzleScreen() {
           </button>
           <Catalog
             projectId={p.id}
-            version={`${pieces}|${trayN}`}
+            version={`${pieces}|${trayN}|${tableN}`}
             markers={p.tracking === 'markers'}
             grid={p.grid}
             pitch={p.piecePitch}
@@ -576,7 +588,8 @@ function Catalog({
   const [places, setPlaces] = useState<PlacementCache | null>(null);
   const [placing, setPlacing] = useState<{ done: number; total: number } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const boxUrl = useBlobUrl(project.box?.rectifiedBlobId, project.box);
+  const [justPlaced, setJustPlaced] = useState<{ id: string; col: number; row: number } | null>(null);
+  const boxUrl = useBlobUrl(project.box?.rectifiedBlobId, boxVersion(project.box));
   const placeKey = placeKeyOf(project);
   useEffect(() => {
     let live = true;
@@ -618,7 +631,28 @@ function Catalog({
       live = false;
     };
   }, [projectId, version, placeKey]);
-  const shownPlaces = useMemo(() => shownPlacements(places, allRows.filter(unplacedStatus)), [places, allRows]);
+  // Fits / Doesn't fit (M5 part 2): taken spots, ruled-out spots, and placed pieces' knobs.
+  const answersCtx = useMemo(() => ({ view: answerView(project), placed: placedPieces(allRows) }), [project.answers, project.grid, allRows]);
+  const shownPlaces = useMemo(() => shownPlacements(places, allRows.filter(unplacedStatus), answersCtx), [places, allRows, answersCtx]);
+  const openCells = places?.open?.cells.length ? places.open.cells.filter(([c, r]) => !answersCtx.view.taken.has(`${c},${r}`)) : null;
+  const inPuzzle = allRows.filter((r) => r.status === 'placed').length;
+  const answer = (piece: PieceRow, spot: { col: number; row: number; rot: 0 | 1 | 2 | 3 }, fits: boolean, from: 'piece' | 'fill' | 'live') => {
+    void answerSpot(projectId, piece, spot, fits, shownPlaces.get(piece.id) ?? null, from)
+      .then((next) => {
+        logInfo('answer', `${fits ? 'Fits' : "Doesn't fit"}: piece at column ${spot.col + 1}, row ${spot.row + 1} (from ${from})`);
+        onProject(next);
+        if (fits) {
+          setJustPlaced({ id: piece.id, col: spot.col, row: spot.row });
+          if (selected === piece.id) setSelected(null);
+          onPiecesChanged();
+        }
+      })
+      .catch((err) => logError('answer', 'The answer could not be saved', err));
+  };
+  const bestSpot = (p: PieceRow) => {
+    const t = shownPlaces.get(p.id)?.placement.top[0];
+    return t ? { col: t.col, row: t.row, rot: t.rot } : null;
+  };
   // Trays by colour (M4): read only when the owner opens it.
   const { groups: colourGroups, uneven } = useColourGroups(traysOpen, project, allRows);
   const cell: [number, number] | null = pitch ? [pitch.wMm, pitch.hMm] : null;
@@ -657,6 +691,16 @@ function Catalog({
           colourOf={(p) => STATE_COLOUR[states.get(p.id) ?? 'found']}
           labelOf={(p) => spotLabel(shownPlaces.get(p.id))}
           infoOf={infoOf}
+          answer={{
+            labelOf: (p) => {
+              const b = bestSpot(p);
+              return project.grid && b ? `column ${b.col + 1}, row ${b.row + 1}` : null;
+            },
+            onAnswer: (p, fits) => {
+              const b = bestSpot(p);
+              if (b) answer(p, b, fits, 'live');
+            },
+          }}
           onPick={(p) => {
             setLiveOpen(false);
             setSelected(p.id);
@@ -711,7 +755,15 @@ function Catalog({
           🎯 Fill this spot
         </button>
         {fillOpen && (
-          <FillSpot project={project} boxUrl={boxUrl} shown={shownPlaces} spots={places.open?.cells.length ? places.open.cells : null} pieces={unplaced} />
+          <FillSpot
+            project={project}
+            boxUrl={boxUrl}
+            shown={shownPlaces}
+            spots={openCells}
+            pieces={unplaced}
+            onAnswer={(p, spot, fits) => answer(p, spot, fits, 'fill')}
+            filled={new Set(answersCtx.view.taken.keys())}
+          />
         )}
       </>
     ) : null;
@@ -786,7 +838,38 @@ function Catalog({
         {progress.found} found · <span class="state-dot" style={{ background: STATE_COLOUR.shape }} />
         {progress.shape} shapes read · <span class="state-dot" style={{ background: STATE_COLOUR.placed }} />
         {progress.placed} placed on box
+        {inPuzzle > 0 && <span data-testid="in-puzzle"> · ✓ {inPuzzle} in the puzzle</span>}
       </p>
+      {justPlaced && (
+        <div class="notice notice-good row" role="status" data-testid="placed-note" style={{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span class="grow">
+            ✓ In the puzzle at column {justPlaced.col + 1}, row {justPlaced.row + 1}.
+          </span>
+          <button
+            class="btn btn-small"
+            data-testid="placed-undo"
+            onClick={() =>
+              void undoFits(projectId, justPlaced.id)
+                .then((next) => {
+                  onProject(next);
+                  setJustPlaced(null);
+                  onPiecesChanged();
+                })
+                .catch((err) => logError('answer', 'Could not take the piece out again', err))
+            }
+          >
+            Undo
+          </button>
+          <button class="btn btn-small" onClick={() => setJustPlaced(null)}>
+            OK
+          </button>
+        </div>
+      )}
+      {(project.answers?.length ?? 0) > 0 && (
+        <a class="btn btn-small" href={`#/accuracy/${encodeURIComponent(projectId)}`} data-testid="accuracy-link">
+          📊 How often is the app right?
+        </a>
+      )}
       {boxUrl && project.grid && <TableContrast project={project} pieces={allRows} boxUrl={boxUrl} />}
       {show === 'border' && (
         <p class="small" data-testid="border-counts">
@@ -843,11 +926,22 @@ function Catalog({
         <PieceSpots
           piece={rows.find((r) => r.id === selected)!}
           choice={shownPlaces.get(selected) ?? null}
-          spots={places?.open?.cells.length ? places.open.cells : null}
+          spots={openCells}
           boxUrl={boxUrl}
           grid={project.grid}
           aspect={project.box ? project.box.width / project.box.height : project.grid.cols / project.grid.rows}
           side={sideOf(selected)}
+          onAnswer={(fits) => {
+            const p = rows.find((r) => r.id === selected)!;
+            const b = bestSpot(p);
+            if (b) answer(p, b, fits, 'piece');
+          }}
+          ruledOut={answersCtx.view.notHere.get(selected)?.size ?? 0}
+          onClearRuledOut={() =>
+            void clearNotHere(projectId, selected)
+              .then(onProject)
+              .catch((err) => logError('answer', 'Could not clear the answers', err))
+          }
           onClose={() => setSelected(null)}
         />
       )}
@@ -1002,10 +1096,18 @@ function PieceSpots({
   grid,
   aspect,
   side,
+  onAnswer,
+  ruledOut = 0,
+  onClearRuledOut,
   onClose,
 }: {
   piece: PieceRow;
   choice: SpotChoice | null;
+  /** Fits / Doesn't fit at the first spot shown (M5 part 2). */
+  onAnswer?: (fits: boolean) => void;
+  /** Spots the owner said it doesn't fit, and a way to take those answers back. */
+  ruledOut?: number;
+  onClearRuledOut?: () => void;
   /** The empty spots pieces are matched to (drawn faintly), or null for the whole picture. */
   spots: Array<[number, number]> | null;
   boxUrl: string | null;
@@ -1042,6 +1144,19 @@ function PieceSpots({
                   column {best.col + 1}, row {best.row + 1}.
                 </p>
               )}
+              {onAnswer && (
+                <div class="row spot-answer" data-testid="spot-answer">
+                  <span class="small">
+                    Tried it in column {best.col + 1}, row {best.row + 1}?
+                  </span>
+                  <button class="btn btn-small btn-fits" data-testid="spot-fits" onClick={() => onAnswer(true)}>
+                    ✓ Fits
+                  </button>
+                  <button class="btn btn-small" data-testid="spot-not" onClick={() => onAnswer(false)}>
+                    ✗ Doesn't fit
+                  </button>
+                </div>
+              )}
               <p class="muted small">Counted from the top-left corner of the box picture.{spots ? ` Grey squares: the ${spots.length} empty spots.` : ''}</p>
               {place!.top.slice(1).some((t) => t.p >= 0.01) && (
                 <p class="small" data-testid="spot-others">
@@ -1056,9 +1171,19 @@ function PieceSpots({
             </>
           ) : (
             <p data-testid="spot-verdict">
-              {choice && spots
-                ? 'Fits none of the empty spots (by its shape or its picture). It may not be a piece, or it may come from somewhere else.'
-                : 'No spot yet: scan this piece again (overview or close-up).'}
+              {ruledOut > 0
+                ? 'You said it doesn’t fit any of its suggested spots.'
+                : choice && spots
+                  ? 'Fits none of the empty spots (by its shape or its picture). It may not be a piece, or it may come from somewhere else.'
+                  : 'No spot yet: scan this piece again (overview or close-up).'}
+            </p>
+          )}
+          {ruledOut > 0 && onClearRuledOut && (
+            <p class="small" data-testid="spot-ruled-out">
+              {ruledOut === 1 ? '1 spot' : `${ruledOut} spots`} ruled out by your answers.{' '}
+              <button class="btn btn-small" data-testid="spot-clear" onClick={onClearRuledOut}>
+                Ask again
+              </button>
             </p>
           )}
         </div>

@@ -6,10 +6,10 @@ import { listProjects } from '../../project/store';
 import { importBackup } from '../../project/backup';
 import type { Project } from '../../project/types';
 import { logError, logInfo } from '../../log/logger';
-import { errorWords, setupStatus, useBlobUrl } from './Puzzle';
+import { boxVersion, errorWords, setupStatus, useBlobUrl } from './Puzzle';
 
 function PuzzleCard({ p }: { p: Project }) {
-  const thumb = useBlobUrl(p.box?.rectifiedBlobId, p.box);
+  const thumb = useBlobUrl(p.box?.rectifiedBlobId, boxVersion(p.box));
   return (
     <a class="puzzle-card" href={`#/puzzle/${encodeURIComponent(p.id)}`} data-testid="puzzle-card">
       <span class="puzzle-thumb">{thumb ? <img src={thumb} alt="" /> : <span aria-hidden="true">🧩</span>}</span>
@@ -116,8 +116,8 @@ export function HomeScreen() {
         <div class="notice notice-warn" data-testid="install-banner">
           <strong>Install first, then start your puzzle there.</strong>
           <p class="small">
-            You're in a Safari tab. Puzzle data saved here is <em>not</em> shared with the Home Screen app, and Safari may delete it after 7 days
-            without a visit.
+            You're in a Safari tab. Puzzle data saved here is <em>not</em> shared with the Home Screen app, and Safari may delete it after 7 days without a
+            visit.
           </p>
           <ol class="steps small">
             <li>
@@ -147,8 +147,8 @@ export function HomeScreen() {
       ) : (
         previousEndedUnexpectedly.value && (
           <div class="notice notice-bad" data-testid="crash-notice">
-            The last visit may have ended unexpectedly: iOS may have closed the app, for example if it used too much memory. This is noted in the
-            log and goes into the next report automatically.
+            The last visit may have ended unexpectedly: iOS may have closed the app, for example if it used too much memory. This is noted in the log and goes
+            into the next report automatically.
           </div>
         )
       )}
@@ -194,9 +194,11 @@ export function HomeScreen() {
         </a>
       </div>
 
-
       <p class="muted small" style={{ marginTop: '24px' }}>
-        Version {APP_VERSION} · <a href="#/log" style={{ color: 'inherit' }}>Activity log</a>
+        Version {APP_VERSION} ·{' '}
+        <a href="#/log" style={{ color: 'inherit' }}>
+          Activity log
+        </a>
       </p>
     </main>
   );

@@ -52,6 +52,7 @@ export function LiveTable({
   infoOf,
   onPick,
   find = [],
+  answer,
   title,
   legend,
   onClose,
@@ -66,6 +67,8 @@ export function LiveTable({
   onPick?: (p: PieceRow) => void;
   /** Pieces to point out (pulsing, with an arrow when out of view). */
   find?: string[];
+  /** Fits / Doesn't fit (M5 part 2): the spot to ask about for a piece (words), and what to do with the answer. */
+  answer?: { labelOf: (p: PieceRow) => string | null; onAnswer: (p: PieceRow, fits: boolean) => void };
   title: string;
   legend?: ComponentChildren;
   onClose: () => void;
@@ -74,6 +77,7 @@ export function LiveTable({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [refs, setRefs] = useState<RefState>({ kind: 'loading' });
   const [tapped, setTapped] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [targets, setTargets] = useState<string[]>(find);
   const [status, setStatus] = useState<{ kind: 'looking' | 'good' | 'weak' | 'lost'; inView: number; perSec: number }>({
     kind: 'looking',
@@ -400,12 +404,46 @@ export function LiveTable({
       )}
 
       <div class="live-table-bottom">
+        {note && (
+          <p class="chip live-note" data-testid="live-note">
+            {note}
+          </p>
+        )}
         {tp ? (
           <div class="live-table-info" data-testid="live-info">
             <div class="grow">
               {labelOf?.(tp) && <strong>{labelOf(tp)} · </strong>}
               {infoOf ? infoOf(tp) : 'A scanned piece.'}
             </div>
+            {answer?.labelOf(tp) && (
+              <div class="row" style={{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span class="small">Tried it in {answer.labelOf(tp)}?</span>
+                <button
+                  class="btn btn-small btn-fits"
+                  data-testid="live-fits"
+                  onClick={() => {
+                    const where = answer.labelOf(tp);
+                    answer.onAnswer(tp, true);
+                    setTapped(null);
+                    setNote(`✓ In the puzzle at ${where}.`);
+                    setTimeout(() => setNote(null), 4000);
+                  }}
+                >
+                  ✓ Fits
+                </button>
+                <button
+                  class="btn btn-small"
+                  data-testid="live-not"
+                  onClick={() => {
+                    answer.onAnswer(tp, false);
+                    setNote('Noted: the next best spot is shown now.');
+                    setTimeout(() => setNote(null), 4000);
+                  }}
+                >
+                  ✗ Doesn't fit
+                </button>
+              </div>
+            )}
             <div class="row" style={{ gap: '8px', flexWrap: 'wrap' }}>
               {!targets.includes(tp.id) && (
                 <button class="btn btn-small" data-testid="live-find" onClick={() => setTargets([tp.id])}>

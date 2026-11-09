@@ -207,6 +207,8 @@ function remapIds(m: BackupManifest): BackupManifest {
     markerMap: m.project.markerMap ? { ...m.project.markerMap, snapId: snapId(m.project.markerMap.snapId) } : null,
     tableModel: m.project.tableModel ? { ...m.project.tableModel, snapId: snapId(m.project.tableModel.snapId) } : null,
     openSpots: m.project.openSpots ? { ...m.project.openSpots, thumbBlobId: blob(m.project.openSpots.thumbBlobId)! } : null,
+    // Fits / Doesn't fit answers follow their pieces' new ids.
+    answers: (m.project.answers ?? []).map((a) => ({ ...a, pieceId: pieceIds.get(a.pieceId) ?? a.pieceId })),
   };
   return {
     ...m,

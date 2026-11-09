@@ -981,3 +981,12 @@ pre.logbox {
 .test-step input { width: 22px; height: 22px; margin: 1px 0 0; flex: none; }
 .test-step.is-done > span { opacity: 0.55; }
 @media print { .test-tab, .test-sheet { display: none !important; } }
+
+/* ---------- Fits / Doesn't fit and Accuracy (M5 part 2) ---------- */
+.btn-fits { border-color: var(--good); }
+.spot-answer { gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+.fill-answer { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.live-note { display: inline-flex; align-items: center; margin: 0 0 8px; pointer-events: none; }
+.accuracy-table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+.accuracy-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.nw { white-space: nowrap; }

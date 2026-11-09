@@ -106,6 +106,33 @@ export interface Project {
   openSpots?: OpenSpots | null;
   /** Sorting into trays by colour (M4): how many groups, and their colours once a tray is filled. */
   trays?: TraySetup | null;
+  /** Fits / Doesn't fit answers (M5 part 2), oldest first (src/project/answers.ts). */
+  answers?: SpotAnswer[];
+}
+
+export type Verdict = 'strong' | 'likely' | 'several';
+
+/** One answer: the owner tried a piece in a spot (box-picture column and row, 0-based). */
+export interface SpotAnswer {
+  pieceId: string;
+  col: number;
+  row: number;
+  /** How the piece sat there (quarter turns, as in the placement). */
+  rot: 0 | 1 | 2 | 3;
+  fits: boolean;
+  at: number;
+  /** The grid it is for ("28x36"); answers for another grid are ignored. */
+  grid: string;
+  /** What the app said for the piece then: its verdict, this spot's chance, and the spot's rank (0 = first choice, −1 = not listed). */
+  verdict: Verdict;
+  p: number;
+  rank: number;
+  /** Where the answer was given. */
+  from: 'piece' | 'fill' | 'live';
+  /** Among empty spots, or on the whole picture. */
+  mode: 'open' | 'whole';
+  /** Taken back (a mistake): left out everywhere. */
+  undone?: boolean;
 }
 
 /** Trays by colour: one colour group per tray (src/cv/colourGroups.ts). */
@@ -177,6 +204,8 @@ export interface PieceRow {
   patch?: PiecePatchInfo | null;
   /** With status 'tray': the tray's letter (A–L). */
   tray?: string | null;
+  /** With status 'placed' (M5 part 2): where it went in, and where it came from (to take it out again). */
+  placedAt?: { col: number; row: number; rot: 0 | 1 | 2 | 3; at: number; from: 'table' | 'tray'; tray: string | null } | null;
 }
 
 export interface PiecePatchInfo {

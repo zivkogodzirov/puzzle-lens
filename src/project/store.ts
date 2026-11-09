@@ -65,6 +65,7 @@ export function normalizeProject(row: Partial<Project> & { id: string }): Projec
       row.trays && Number.isFinite(row.trays.count)
         ? { count: row.trays.count, colours: Array.isArray(row.trays.colours) && row.trays.colours.length ? row.trays.colours : null }
         : null,
+    answers: Array.isArray(row.answers) ? row.answers : [],
   };
 }
 
@@ -195,12 +196,13 @@ export async function deleteBlob(id: string): Promise<void> {
   await db().blobs.delete(id);
 }
 
-/** Pieces catalogued for a puzzle: on the table now, put into trays, and no longer seen at their spot (missing). */
-export async function countPiecesByStatus(projectId: string): Promise<{ table: number; missing: number; tray: number; all: number }> {
+/** Pieces catalogued for a puzzle: on the table now, put into trays, in the puzzle (M5 part 2), and no longer seen at their spot (missing). */
+export async function countPiecesByStatus(projectId: string): Promise<{ table: number; missing: number; tray: number; placed: number; all: number }> {
   const rows = await db().pieces.where('projectId').equals(projectId).toArray();
   const missing = rows.filter((p) => p.status === 'missing').length;
   const tray = rows.filter((p) => p.status === 'tray').length;
-  return { table: rows.length - missing - tray, missing, tray, all: rows.length };
+  const placed = rows.filter((p) => p.status === 'placed').length;
+  return { table: rows.length - missing - tray - placed, missing, tray, placed, all: rows.length };
 }
 
 /** Number of pieces catalogued for a puzzle. */

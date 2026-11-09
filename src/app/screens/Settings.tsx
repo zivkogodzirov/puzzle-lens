@@ -37,6 +37,12 @@ export function SettingsScreen() {
     <main class="screen">
       <TopBar title="Settings" />
 
+      <h2>Accuracy</h2>
+      <a class="btn btn-block" href="#/accuracy" data-testid="settings-accuracy">
+        📊 How often is the app right?
+      </a>
+      <p class="muted small">From your ✓ Fits / ✗ Doesn't fit answers.</p>
+
       <h2>Units</h2>
       <Segmented<Units>
         value={settings.units.value}
