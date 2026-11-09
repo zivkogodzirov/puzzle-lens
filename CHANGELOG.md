@@ -4,6 +4,16 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M4 (part 4): sort your pieces into trays by colour (2026-11-09; tested in the app on the Mac, not yet on your iPhone)
+- **Why colour and not zones of the box picture:** before building zones I measured them on your real photos. The right zone (out of 6) came out only **60 %** of the time for spots cut from your finished-puzzle photo, and for about **8 of 19** of your loose pieces (computer-made puzzles: 91 %). That would put many pieces in the wrong tray. The small AI picture model I then tried was no help either: even on spots cut from the box picture itself it found the right spot only 22 % of the time, and on your real spots almost never. It isn't added to the app.
+- **🎨 Sort into trays by colour** (puzzle page, under Pieces): your pieces grouped by their main colour, one group per tray (default 6; 2 to 12 with − and +). Each piece shows its group's letter; "+B" means it also has a lot of B's colour.
+- **Tap a group:** only its pieces show, and **Show on my table photo** lights them up on your scan photo (everything else darkened).
+- **These went into tray A:** those pieces leave the table list ("18 on the table, 5 in trays"). A new scan of the table won't call them missing, and the groups' colours stay fixed while any tray holds pieces, so the letters never move. **Put tray A back on the table** undoes it.
+- Pieces in trays still count for the empty spots of a nearly finished puzzle (without that, your 17 Strong dropped to 11 when the wall pieces went into a tray).
+- **🖨 Print tray labels:** one label per tray, 6 on an A4 page, with the big letter on the group's colour and photos of up to 8 of its pieces. Print from the iPhone, or **Send to my Mac**.
+- Not included: "where are these colours on the box picture". Your pieces' photo is much less yellow than your box photo, so it lit the right area for only 5–7 of 21 pieces' groups.
+- **Tested in the app with your 21 pieces:** 6 groups that make sense (very dark, dark reddish, the grey-brown wall pieces together, mid brown, light grey, and the bottle's label with the table patch). Lit up on your photo, into a tray and back, labels: all as described. Not yet tried with a big pile of pieces.
+
 ### M4 (part 3): knob shapes decide between look-alike pieces (2026-11-09; tested in the app on the Mac and checked on your iPhone)
 - **Holes' knobs from your holes photo:** where a hole borders a piece still in place, the app reads whether the missing piece had a knob out (the hole reaches into the neighbour) or a knob in (the neighbour's knob reaches into the hole). On your photo, all 33 readable sides were right (checked by eye and against the seams of your complete-puzzle photo); 3 were left unread.
 - **Pieces' knobs:** each scanned piece now keeps its four sides (knob out, knob in, flat).

@@ -51,11 +51,14 @@ export async function readPlacements(projectId: string): Promise<PlacementCache 
   return v && typeof v === 'object' && v.byPiece ? v : null;
 }
 
+/** Pieces still to be put in the puzzle: on the table, or sorted into a tray. */
+export const unplacedStatus = (p: Pick<PieceRow, 'status'>): boolean => p.status === 'table' || p.status === 'tray';
+
 /** Pieces whose placement is missing or older than their patch (or all, among empty spots, until the colour match is known). */
 export function stalePieces(cache: PlacementCache | null, placeKey: string, pieces: PieceRow[]): PieceRow[] {
   const fresh = cache && cache.boxKey === placeKey ? cache : null;
   const all = placeKey.includes('|open:') && !fresh?.colour;
-  return pieces.filter((p) => p.status === 'table' && p.patch && (all || !fresh || fresh.byPiece[p.id]?.ts !== p.patch.ts));
+  return pieces.filter((p) => unplacedStatus(p) && p.patch && (all || !fresh || fresh.byPiece[p.id]?.ts !== p.patch.ts));
 }
 
 /**
@@ -106,7 +109,8 @@ export async function updatePlacements(
 
 /**
  * What to show for each piece: its own placement, or, among empty spots, the spot it gets when each
- * spot takes at most one piece (with `fits` false for a piece that matches none of them well).
+ * spot takes at most one piece (with `fits` false for a piece that matches none of them well). Pass
+ * every piece not yet in the puzzle, those in trays too: they still compete for the empty spots.
  */
 export function shownPlacements(cache: PlacementCache | null, pieces: PieceRow[]): Map<string, SpotChoice> {
   const out = new Map<string, SpotChoice>();

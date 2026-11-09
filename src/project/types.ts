@@ -94,6 +94,19 @@ export interface Project {
    * leftover pieces are placed only there. Null when none (or the owner chose the whole picture).
    */
   openSpots?: OpenSpots | null;
+  /** Sorting into trays by colour (M4): how many groups, and their colours once a tray is filled. */
+  trays?: TraySetup | null;
+}
+
+/** Trays by colour: one colour group per tray (src/cv/colourGroups.ts). */
+export interface TraySetup {
+  /** How many groups (2–12). */
+  count: number;
+  /**
+   * The groups' colours (Lab, letter order), fixed when the first pieces go into a tray so the letters
+   * never move while trays are being filled. Used only while some piece is in a tray.
+   */
+  colours: Array<[number, number, number]> | null;
 }
 
 /** The empty spots seen in a photo of the nearly finished puzzle. */
@@ -152,6 +165,8 @@ export interface PieceRow {
    * when it was taken (placements are redone when this changes). Absent on pieces scanned before M4.
    */
   patch?: PiecePatchInfo | null;
+  /** With status 'tray': the tray's letter (A–L). */
+  tray?: string | null;
 }
 
 export interface PiecePatchInfo {

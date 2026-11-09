@@ -468,6 +468,15 @@ So I'm designing and testing this from scratch.
 3. Results: real 13 → 16 of 19 (box picture from a screenshot), in the app 17 Strong all right; synthetic two-group holes val300 89 → 98 %. A full outline match against the hole (chamfer to the complete puzzle's seams) was tried as ground truth and was too ambiguous: Ravensburger knobs are so uniform that one outline fits several holes within the grid's tenth-of-a-piece uncertainty; only the knob pattern is reliable.
 
 
+
+**Zones vs colour groups for trays (2026-11-09, M4 part 4).** The plan was zones: the box picture split into 2–12 rectangles of equal area, each piece's zone = the zone holding most of its placement chance (a zone is far bigger than a spot, so look-alike spots nearby still agree). Measured before building:
+1. Synthetic (val48 / val300, scanned end to end, 6 zones): best zone right 91.2 % / 87.1 %; "sure" (zone chance ≥ 0.75) on 82 % / 51 % of pieces, right 97 %; 12 zones similar.
+2. Real, box picture from the app screenshot (IMG_9294), 252 spots cut from the finished puzzle IMG_9272 (every other cell, as straight squares): right cell first 26 % (the 57 % above used the IMG_9288 screenshot and exact piece corners); best zone right **60 %** (4 zones 64 %, 9 zones 58 %, 12 zones 52 %); "sure" on 36 %, right 86 %; "probably" right 48 %. Only above a zone chance of 0.8 was it ~92 % right, for ~10 % of spots.
+3. Real loose pieces (IMG_9276, 19 pieces, all from one zone): best zone right 8 of 19; of 7 "sure", 3 right. Using the finished-puzzle photo itself as the box picture (the best reference possible) helped little: a hole first for 5 of 21 (box photo: 3), right zone 9 of 21. So the box photo isn't the limit: loose pieces under a lamp (shine, colour cast) look too different from the print, and many spots look alike.
+4. A colour-only zone vote (per-cell Lab histograms, Bhattacharyya, softmax) was worse: 37–43 % alone, no gain combined.
+5. Decision (owner, 2026-11-09): trays by **colour groups** instead. Each piece's main colour = the larger of a 2-means split of its patch pixels (Lab, lightness weighted 0.6 against shine; one colour when the two are < 8 apart); groups = k-means++ on the main colours (best of 5 seeded starts, darkest first so letters are stable); a second colour covering ≥ 35 % shows as "+B". On the owner's 21 pieces the 6 groups are coherent (very dark, dark reddish, grey-brown wall, mid brown, light grey, and the two non-pieces together).
+6. "Where are these colours on the box picture" was tried and dropped: the pieces' photo is far less yellow than the box photo (piece mean b* 4.8, the same holes on the box 26.5). With the colour match from the pieces to the exact spots they came from, only 5 of 21 pieces' groups lit their own area (whole-picture match 7 of 21; none 2 of 21). It would send the owner to the wrong places, so labels show the group's colour and photos of its pieces instead.
+
 ---
 
 ## 10. Grid size
@@ -557,6 +566,11 @@ I'll tell you the result in plain English before starting M6.
 **Plain English:**
 - A small AI image model *might* help match pieces to the box picture in tricky areas. The best candidate is a ~45 MB download that runs on the phone's graphics chip in a fraction of a second.
 - It's an experiment: I'll only keep it if it measurably improves accuracy on test puzzles and your real photos.
+
+**Measured 2026-11-09 (M4 part 4): DINOv2-small doesn't help here; not added.** fp32 ONNX (onnx-community/dinov2-small, onnxruntime-node 1.31, 42 ms per 224 px image on the Mac, 28 ms batched). Each box cell and each piece (4 turns) embedded as one 224 px image (mean of patch tokens or CLS, cosine):
+- Real spots cut from the finished puzzle vs the box picture: right cell first 0.4 % (the current method 26 %), right zone 21 % (current 60 %). As a shortlist (top 30) in front of the current method: 11.5 % first, zone 43 % (worse). With 1.75-cell windows (like the patch): worse still.
+- Sanity check, spots cut from the box picture itself (only resampling differs): 22 % first (current method 100 %). The model encodes what a scene shows, not the exact look of one small spot, and upsampling a 32–40 px cell to 224 px leaves it little to work with.
+- DINOv3 wasn't tried: its weights are gated and it is the same kind of model. Dense per-patch features would need context a single piece doesn't have.
 
 **Embedding models compared** (file sizes from Hugging Face):
 

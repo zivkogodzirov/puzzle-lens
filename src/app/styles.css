@@ -912,3 +912,19 @@ pre.logbox {
 .spot-best { fill: rgba(60, 207, 122, 0.35); stroke: #3ccf7a; stroke-width: 3; }
 .spot-other { fill: rgba(255, 216, 74, 0.2); stroke: #ffd84a; stroke-width: 1.5; stroke-dasharray: 3 2; }
 .spot-open { fill: rgba(255, 255, 255, 0.12); stroke: rgba(255, 255, 255, 0.7); stroke-width: 1; }
+
+/* Trays by colour (M4) */
+.btn-on { border-color: var(--accent); }
+.trays { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.tray-count { align-items: center; gap: 10px; }
+.tray-count strong { min-width: 1.5em; text-align: center; font-size: 18px; }
+.trays .chip { background: var(--panel-2); color: var(--text); border-color: var(--border); display: inline-flex; align-items: center; gap: 6px; }
+.trays .chip[aria-pressed='true'] { background: var(--text); color: var(--bg); }
+.swatch { display: inline-block; width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.5); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4); }
+.tray-detail { display: flex; flex-direction: column; gap: 8px; }
+.tray-summary .chips { margin-top: 6px; }
+.tray-tag { position: absolute; left: 4px; bottom: 4px; min-width: 18px; padding: 0 4px; height: 18px; border-radius: 9px; font-size: 11px; font-weight: 800; line-height: 18px; text-align: center; border: 1px solid rgba(0, 0, 0, 0.5); }
+.table-photo { justify-content: flex-start; padding-top: calc(var(--safe-top) + 12px); }
+.table-photo-bar { width: 100%; gap: 8px; align-items: center; color: #fff; margin-bottom: 8px; }
+.table-photo svg { width: 100%; max-height: 80vh; }
+.tray-labels .tl-pages { margin-top: 12px; }

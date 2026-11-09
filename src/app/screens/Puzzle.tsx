@@ -14,9 +14,11 @@ import type { PieceRow, Project } from '../../project/types';
 import { db } from '../../db/db';
 import { readShape, READ_OK, type PieceKind } from '../../cv/shapeRead';
 import type { Placement } from '../../cv/placement';
-import { placeKeyOf, readPlacements, shownPlacements, stalePieces, updatePlacements, type PlacementCache } from '../../project/placements';
+import { placeKeyOf, readPlacements, shownPlacements, stalePieces, unplacedStatus, updatePlacements, type PlacementCache } from '../../project/placements';
 import type { SpotChoice } from '../../cv/openSpots';
 import { readerWorker } from '../workers';
+import { TraysPanel, useColourGroups } from '../components/Trays';
+import type { Groups } from '../../project/groups';
 import { canShareFile, downloadUrl, revokeDownloadUrls, shareOrDownload } from '../../report/share';
 import { formatBytes } from '../../report/collect';
 import { logError, logInfo, logWarn } from '../../log/logger';
@@ -83,6 +85,7 @@ export function PuzzleScreen() {
   const [error, setError] = useState<string | null>(null);
   const [bin, setBin] = useState<ScanBinSummary | null>(null);
   const [missingN, setMissingN] = useState(0);
+  const [trayN, setTrayN] = useState(0);
   const [scanAction, setScanAction] = useState<'none' | 'confirm-delete' | 'confirm-restore' | 'busy'>('none');
   const [scanNote, setScanNote] = useState<string | null>(null);
   const mounted = useRef(true);
@@ -111,6 +114,7 @@ export function PuzzleScreen() {
           const c = await countPiecesByStatus(p.id);
           setPieces(c.all);
           setMissingN(c.missing);
+          setTrayN(c.tray);
           setBin(await scanBinSummary(p.id));
         }
       })
@@ -211,6 +215,7 @@ export function PuzzleScreen() {
     if (np) setProject(np);
     setPieces(c.all);
     setMissingN(c.missing);
+    setTrayN(c.tray);
     setBin(b);
   };
 
@@ -300,7 +305,13 @@ export function PuzzleScreen() {
           <dd data-testid="puzzle-grid">{p.grid ? `${p.grid.cols} across × ${p.grid.rows} down (${p.grid.cols * p.grid.rows} pieces)` : 'Not chosen yet'}</dd>
           <dt>Pieces read</dt>
           <dd data-testid="puzzle-pieces">
-            {pieces === null ? '—' : pieces - missingN}
+            {pieces === null ? '—' : pieces - missingN - trayN}
+            {trayN > 0 && (
+              <span class="muted small" data-testid="puzzle-tray-count">
+                {' '}
+                on the table, {trayN} in trays
+              </span>
+            )}
             {missingN > 0 && (
               <span class="muted small" data-testid="puzzle-missing-count">
                 {' '}
@@ -353,7 +364,16 @@ export function PuzzleScreen() {
           <button class="btn btn-primary btn-block" data-testid="scan-pieces" onClick={() => go('scan', p.id)}>
             📷 Scan pieces
           </button>
-          <Catalog projectId={p.id} version={pieces} markers={p.tracking === 'markers'} grid={p.grid} pitch={p.piecePitch} project={p} onProject={setProject} />
+          <Catalog
+            projectId={p.id}
+            version={`${pieces}|${trayN}`}
+            markers={p.tracking === 'markers'}
+            grid={p.grid}
+            pitch={p.piecePitch}
+            project={p}
+            onProject={setProject}
+            onPiecesChanged={() => void reloadScan().catch((err) => logError('puzzle', 'The piece counts could not be read', err))}
+          />
           {scanNote && (
             <div class="notice notice-good" role="status" data-testid="scan-bin-note">
               {scanNote}
@@ -519,6 +539,7 @@ function Catalog({
   pitch,
   project,
   onProject,
+  onPiecesChanged,
 }: {
   projectId: string;
   version: unknown;
@@ -527,8 +548,12 @@ function Catalog({
   pitch: Project['piecePitch'];
   project: Project;
   onProject: (p: Project) => void;
+  onPiecesChanged: () => void;
 }) {
   const [rows, setRows] = useState<PieceRow[]>([]);
+  const [allRows, setAllRows] = useState<PieceRow[]>([]);
+  const [traysOpen, setTraysOpen] = useState(false);
+  const [trayGroup, setTrayGroup] = useState<number | null>(null);
   const [show, setShow] = useState<'all' | 'border' | 'interior' | 'unsure'>('all');
   const [places, setPlaces] = useState<PlacementCache | null>(null);
   const [placing, setPlacing] = useState<{ done: number; total: number } | null>(null);
@@ -538,21 +563,25 @@ function Catalog({
   useEffect(() => {
     let live = true;
     void (async () => {
-      const ps = (await db().pieces.where('projectId').equals(projectId).toArray()).filter((q) => q.status === 'table');
+      const everything = await db().pieces.where('projectId').equals(projectId).toArray();
+      const ps = everything.filter((q) => q.status === 'table');
       if (!live) return;
       setRows(ps);
+      setAllRows(everything);
       // Box placement (M4): show what is known, then place pieces that are new or photographed again.
       if (!placeKey) return;
       const cached = await readPlacements(projectId);
       if (live) setPlaces(cached?.boxKey === placeKey ? cached : null);
-      const todo = stalePieces(cached, placeKey, ps).length;
+      // Pieces in trays are placed too: they still belong in the puzzle (and compete for empty spots).
+      const unplaced = everything.filter(unplacedStatus);
+      const todo = stalePieces(cached, placeKey, unplaced).length;
       if (!todo) return;
       try {
         const rw = readerWorker();
         const info = await rw.ready;
         if (!info?.ok || !live) return;
         setPlacing({ done: 0, total: todo });
-        const next = await updatePlacements(project, ps, rw.api, (done, total) => live && setPlacing({ done, total }));
+        const next = await updatePlacements(project, unplaced, rw.api, (done, total) => live && setPlacing({ done, total }));
         if (live) setPlaces(next);
         logInfo(
           'place',
@@ -571,11 +600,41 @@ function Catalog({
       live = false;
     };
   }, [projectId, version, placeKey]);
-  const shownPlaces = useMemo(() => shownPlacements(places, rows), [places, rows]);
+  const shownPlaces = useMemo(() => shownPlacements(places, allRows.filter(unplacedStatus)), [places, allRows]);
+  // Trays by colour (M4): read only when the owner opens it.
+  const { groups: colourGroups } = useColourGroups(traysOpen, project, allRows);
   const cell: [number, number] | null = pitch ? [pitch.wMm, pitch.hMm] : null;
   const groups = useMemo(() => new Map(rows.map((r) => [r.id, pieceGroup(r, cell)])), [rows, cell?.[0], cell?.[1]]);
+  const traysBlock = (
+    <>
+      <button
+        class={`btn btn-block ${traysOpen ? 'btn-on' : ''}`}
+        aria-expanded={traysOpen}
+        data-testid="trays-toggle"
+        onClick={() => (setTraysOpen(!traysOpen), setTrayGroup(null))}
+      >
+        🎨 Sort into trays by colour
+      </button>
+      {traysOpen && (
+        <TraysPanel
+          project={project}
+          all={allRows}
+          table={rows}
+          groups={colourGroups}
+          selected={trayGroup}
+          onSelect={setTrayGroup}
+          onChanged={(np) => (np ? onProject(np) : onPiecesChanged())}
+        />
+      )}
+    </>
+  );
   if (!rows.length)
-    return (
+    return allRows.some((q) => q.status === 'tray') ? (
+      <div>
+        <p class="muted small">All your scanned pieces are in trays.</p>
+        {traysBlock}
+      </div>
+    ) : (
       <p class="muted small">No pieces yet. Spread pieces face up {markers ? 'inside the markers' : 'on the table, with small gaps'} and tap Scan pieces.</p>
     );
   const n = { corner: 0, edge: 0, interior: 0, unsure: 0 };
@@ -584,9 +643,11 @@ function Catalog({
   const want = borderCounts(grid ?? { cols: 0, rows: 0 });
   const tooMany = grid && (n.corner > want.corners || n.edge > want.edges);
   if (show === 'unsure' && !count.unsure) setShow('all');
+  const trayOf = (id: string) => (traysOpen && colourGroups ? colourGroups.of.get(id) : undefined);
   const shown = rows
     .filter((r) => {
       const g = groups.get(r.id)!;
+      if (traysOpen && trayGroup !== null && trayOf(r.id)?.group !== trayGroup) return false;
       return show === 'all' || (show === 'border' ? g === 'corner' || g === 'edge' : g === show);
     })
     // Border view: corners first.
@@ -630,6 +691,7 @@ function Catalog({
           }}
         />
       )}
+      {traysBlock}
       <div class="catalog-grid" data-testid="catalog">
         {shown.slice(0, SHOW_MAX).map((r) => (
           <PieceThumb
@@ -639,6 +701,7 @@ function Catalog({
             place={shownPlaces.get(r.id)?.placement ?? null}
             selected={selected === r.id}
             onSelect={() => setSelected(selected === r.id ? null : r.id)}
+            tray={trayTag(colourGroups, trayOf(r.id))}
           />
         ))}
       </div>
@@ -658,18 +721,31 @@ function Catalog({
   );
 }
 
+/** A thumbnail's colour-group badge: the group's letter on its colour, "+B" when it also has a lot of B. */
+function trayTag(
+  groups: Groups | null,
+  of: { group: number; also: number | null } | undefined,
+): { letter: string; hex: string; ink: string; also: string | null } | null {
+  if (!groups || !of) return null;
+  const g = groups.groups[of.group];
+  if (!g) return null;
+  return { letter: g.letter, hex: g.hex, ink: g.ink, also: of.also !== null ? (groups.groups[of.also]?.letter ?? null) : null };
+}
+
 function PieceThumb({
   piece,
   group,
   place,
   onSelect,
   selected,
+  tray,
 }: {
   piece: PieceRow;
   group: ShapeGroup;
   place: Placement | null;
   onSelect: () => void;
   selected: boolean;
+  tray?: { letter: string; hex: string; ink: string; also: string | null } | null;
 }) {
   const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
   const cls = [
@@ -684,6 +760,12 @@ function PieceThumb({
     <button class="thumb-btn" onClick={onSelect} data-group={group} data-place={place?.verdict ?? 'none'} aria-label={`${title}: show where it goes`}>
       {url ? <img src={url} class={cls} alt={title} title={title} loading="lazy" /> : <div class={`catalog-empty ${cls}`} title={title} />}
       {place && place.verdict !== 'several' && <span class={`place-dot place-${place.verdict}`} />}
+      {tray && (
+        <span class="tray-tag" style={{ background: tray.hex, color: tray.ink }} data-testid="tray-tag">
+          {tray.letter}
+          {tray.also ? `+${tray.also}` : ''}
+        </span>
+      )}
     </button>
   );
 }

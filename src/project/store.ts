@@ -61,6 +61,10 @@ export function normalizeProject(row: Partial<Project> & { id: string }): Projec
     // A coin measurement wins; marker puzzles are measured by their markers; otherwise estimated.
     scaleSource: row.scaleSource === 'coin' ? 'coin' : row.tracking === 'markers' || row.markerMap ? 'markers' : 'estimate',
     openSpots: row.openSpots && Array.isArray(row.openSpots.gaps) ? row.openSpots : null,
+    trays:
+      row.trays && Number.isFinite(row.trays.count)
+        ? { count: row.trays.count, colours: Array.isArray(row.trays.colours) && row.trays.colours.length ? row.trays.colours : null }
+        : null,
   };
 }
 
@@ -191,11 +195,12 @@ export async function deleteBlob(id: string): Promise<void> {
   await db().blobs.delete(id);
 }
 
-/** Pieces catalogued for a puzzle: on the table now, and no longer seen at their spot (missing). */
-export async function countPiecesByStatus(projectId: string): Promise<{ table: number; missing: number; all: number }> {
+/** Pieces catalogued for a puzzle: on the table now, put into trays, and no longer seen at their spot (missing). */
+export async function countPiecesByStatus(projectId: string): Promise<{ table: number; missing: number; tray: number; all: number }> {
   const rows = await db().pieces.where('projectId').equals(projectId).toArray();
   const missing = rows.filter((p) => p.status === 'missing').length;
-  return { table: rows.length - missing, missing, all: rows.length };
+  const tray = rows.filter((p) => p.status === 'tray').length;
+  return { table: rows.length - missing - tray, missing, tray, all: rows.length };
 }
 
 /** Number of pieces catalogued for a puzzle. */
