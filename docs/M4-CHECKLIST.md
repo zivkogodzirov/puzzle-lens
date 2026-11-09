@@ -75,6 +75,8 @@ Part 4b (after your screenshot): colours are now evened out for the lamp. Your p
 6. If some pieces are in a tray (Part H), they still show here, marked "in tray …" (they aren't lit up on the photo, since they're not on the table).
 
 ## Part J: your table at a glance (part 6)
+✅ Checked on your iPhone 2026-11-09.
+
 1. Update the app (Part A). Settings should show the version I sent you.
 2. Open *The Kiss*. Under the piece groups (All · Border · …) a line says e.g. **"23 found · 21 shapes read · 18 placed on box"**.
 3. Tap **🗺 Show my table**: your scan photo with every piece outlined. Green pieces carry their spot (e.g. "26·1"), blue ones have their shape read but no sure spot, grey ones were found only.

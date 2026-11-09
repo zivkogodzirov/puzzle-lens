@@ -4,7 +4,7 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
-### M4 (part 6): green outlines: your table at a glance (2026-11-09; tested in the app on the Mac, not yet on your iPhone)
+### M4 (part 6): green outlines: your table at a glance (2026-11-09; tested in the app on the Mac and checked on your iPhone)
 - **🗺 Show my table** (puzzle page, under Pieces): your scan photo with every piece outlined by what the app knows. **Green:** its spot on the box is known (Strong or Likely), labelled with the spot ("26·1" = column 26, row 1). **Blue:** its shape is read, but several spots look alike. **Grey:** found, but its shape couldn't be read yet.
 - **Tap a piece** to zoom in on it and see, e.g., "Column 26, row 1 (Strong, 87 %), top edge". **Show where it goes** opens its spot on the box picture; **Whole photo** zooms back out. Several photos? **Next photo**.
 - **Progress line** under the piece groups: "23 found · 21 shapes read · 18 placed on box".
