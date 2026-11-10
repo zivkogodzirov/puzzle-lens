@@ -2,6 +2,21 @@
 
 The steps for the newest part are also inside the app: tap the small **🧪 Test** tab on the right edge of any screen.
 
+## Part 4: fixes from the app review (bugs and speed)
+
+**New:** the bugs and speed-ups from the app review, each checked against the version before by a second, independent check. Then a separate many-agent review asked whether any of it made the app worse: it confirmed 7 problems. 5 are fixed. The other 2 (extra scan work on photos that can't be used anyway) were kept, because cutting it also stopped some of your photos from being read.
+
+**Why:** scan photos were slow, the first photo after a new batch froze the screen, the scan note covered the gauge, and a photo of the finished puzzle said nothing about the loose pieces beside it. On the Mac with your 41 photos: about a fifth less time in all (photos of the puzzle gain most, photos of loose pieces about 7 %), and the same pieces found.
+
+1. **Scan pieces** → overview photo: the note sits in the panel at the bottom, not over the gauge. A long one shows **More ▾** (tap it, then **Close**). Sideways, it moves to a column on the left.
+2. **Choose a photo** → your nearly finished puzzle (like IMG_9280): right after the count you see **"Saved… 21 empty spots…"** and **"About N loose pieces lie next to the puzzle…"**. Is N close?
+3. On the puzzle page, tap a piece's small picture: its panel comes into view in one move, and **✓ Fits** tapped straight away counts once (then **Undo**).
+4. Set-up shows **"Step 4 of 4 · Ready to scan"**. **Sort into trays** opens almost at once.
+5. Time a scan photo. Is it quicker than before? Leave Scan open for 5 minutes: does the phone get warm?
+6. Try the Scan screen once in a **Safari tab** too (shorter screen), and check **Import a backup** and **Choose a photo** still open the picker.
+
+**Taken back:** the darker-cloth tip from part 3. It was never tested, and on computer-made photos darker cloths did worse. A close-up is the fix.
+
 ## Part 1: colours learned from your pieces
 
 **New:** once **12 pieces are in the puzzle at known spots** (✓ Fits), the app learns how your photos' colours map to the box picture, and places every other piece again. It learns again after every 10 more. The puzzle page then says **"Colours learned from your N pieces in the puzzle"**. It only uses what it learned when it predicts the colours of pieces it didn't learn from clearly better.
@@ -22,7 +37,7 @@ The steps for the newest part are also inside the app: tap the small **🧪 Test
 
 1. Put **5–6 pale pieces** (white dress) on the cream table, apart from each other, with a few darker ones. **Scan pieces** → overview photo.
 2. If the note says **"… only partly outlined"**, look at the yellow outlines: is each one smaller than its piece? Under **Pieces**, such a piece shows as **Not sure** (no corner/edge guess).
-3. Take a **close-up** of those pieces (or put a darker cloth under them) and scan again: do they get a full outline?
+3. Take a **close-up** of those pieces and scan again: do they get a full outline?
 
 ## Part 3: faster scans, a lighter live view
 

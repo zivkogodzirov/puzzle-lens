@@ -1,4 +1,6 @@
-# M8, part 3 follow-up: pieces outlined only in part (and M8 parts 1 and 3, M7, M6, M5, still to check)
+# M8, part 4: fixes from the app review, bugs and speed (and M8 parts 1 and 3, M7, M6, M5, still to check)
+
+**New in M8 part 4:** the fixes from the app review. Bugs: the note after a scan photo no longer covers the gauge, a photo of the finished puzzle now says how many loose pieces lie beside it, a misread "finished" count no longer overwrites your saved empty spots, and a tapped piece's panel no longer jumps. Speed (on the Mac, with your own photos): scan photos take about a fifth less time, the first photo after **Start a new batch** no longer freezes for 2 seconds, working out where pieces go is 3–6 times faster, and trays sort in about 0.05 s instead of half a second. Each change was checked against the version before it by a second, independent check, and your 41 photos give the same pieces as before.
 
 **New in M8 part 1:** once **12 pieces are in the puzzle at known spots** (✓ Fits), the app learns how your photos' colours map to the box picture and places every other piece again; the puzzle page says **"Colours learned from your N pieces in the puzzle"**. This is for a fresh puzzle on the whole picture (among the holes of a nearly finished puzzle it isn't needed). Measured on your 19 real pieces: right spot first **1 → 6**, in the top 5 **3 → 9**.
 
@@ -14,10 +16,50 @@ These steps are for version **{version}** (Settings shows the version).
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
 
+## M8 part 4: fixes from the app review (bugs and speed)
+
+### The note after a scan photo
+1. Open *The Kiss* → **Scan pieces**. If asked, tap **Allow the tilt sensor**, so the round gauge shows at the top.
+2. Take an overview photo of your loose pieces. The note with the result now sits **in the panel at the bottom**, above **Choose a photo**. It no longer covers the gauge's words at the top. Can you read its first lines without scrolling?
+3. If the note is long, a small blue **More ▾** shows on it: tap it, and the whole note opens over the camera. Tap **Close**: the note is still there. Tap the note itself: it goes away.
+4. With a note showing, turn the phone sideways: the note moves to a column on the left and isn't cut off. Turn it back.
+5. With a note showing, tap **Choose a photo**, then **Cancel**. If **Resume camera** appears, it sits near the top with the note below it, and both can be tapped.
+6. Try steps 2–3 once in **Safari** too (not the Home Screen app). The screen is shorter there: the first lines must still show, with **More ▾** if there is more.
+
+### A photo of the nearly finished puzzle
+1. **Scan pieces** → **Choose a photo** → a photo of the nearly finished puzzle with some loose pieces beside it (like your IMG_9280).
+2. The green note: **"Finished puzzle: 28 across × 36 down…"**, **"That matches your puzzle…"**, then straight away **"Saved… 21 empty spots…"** and the new line **"About N loose pieces lie next to the puzzle…"** (they used to be left out without a word). Is N close to the loose pieces you see? (On IMG_9280 the app says 8, and I count 8.) The long list of gaps comes after.
+3. This note is long, so while it shows, the gauge gets smaller (no "cm high · tilt" line) and **Coin for true size** hides. Tap the note away: both come back. A short note (like "Hardly any pieces…") keeps the full gauge and the coin choice.
+4. If a photo of the puzzle says **"Your puzzle is set to 28 × 36, so nothing was saved from this photo"**, the app counted the rows or columns wrong (your IMG_9244 reads 28 × 37). Your saved empty spots stay as they were. Take the photo again from straight above.
+
+### The puzzle page
+1. Scroll down to the small pictures of your pieces and tap one. Its panel comes into view **in one move**, and nothing jumps a moment later. Tap **✓ Fits** straight away: it counts once (**✓ 1 in the puzzle** goes up by one), and "Remove it?" never opens by mistake. Then tap **Undo**.
+2. Tap a piece on **Show my table** or in **📷 Live view of my table**, then **Show where it goes**: its panel is on screen at once.
+3. The set-up list shows **4 steps** for your puzzle (no printing): **"Step 4 of 4 · Ready to scan"**.
+4. Under the box picture: **"White outlines: the 21 empty spots."**
+5. **Sort into trays**: the trays show almost at once. Are the tray labels right? Put a piece back from a tray: does it show with the right colour group?
+6. **Delete scan**, then **Restore**: the Bin card appears, then goes. Close the app fully and open the puzzle again: the same as before you closed it.
+7. Only when you do M7 part 1 (a new batch, last): the first photo after **Start a new batch** comes back without the 2-second freeze.
+
+### Faster
+1. Time a scan photo, from taking it to the note. On the Mac a photo of the puzzle now takes about a third less time (IMG_9280: 6.2 → 4.1 s), a photo of loose pieces about 7 % less (IMG_9127: 5.7 → 5.3 s). Is it quicker on your iPhone?
+2. Does the puzzle page open quicker, and does **✓ Fits** feel instant?
+3. Leave the Scan screen open for about 5 minutes (the two photo helpers now start as soon as it opens). Does the phone get warm, or does the app reload by itself?
+
+### Small things
+1. The 🧪 Test tab on the right edge is a thin strip now, with a red dot when there are new steps. Does it stay off buttons and text? Is it easy to tap?
+2. **Settings → Device check**: the page no longer moves sideways when you swipe.
+3. **📈 Progress**: **Details** is a small button.
+4. Tap **Import a backup** on Home (then Cancel), and **Choose a photo** on the Scan screen (then Cancel): does the picker still open?
+5. If you ever refused the camera: the notice is readable in light mode too, with one **Start camera** button.
+
+### A tip taken back
+In the M8 part 3 follow-up I said a darker cloth might help pale pieces. I never tested that, and on computer-made test photos darker cloths did worse. A **close-up** is the fix (step 3 below now says so).
+
 ## M8 part 3 follow-up: pieces outlined only in part
 1. Put **5–6 pale pieces** (white dress) on the cream table, apart from each other, with a few darker ones. **Scan pieces** → overview photo.
 2. If the note says **"… only partly outlined"**, look at the yellow outlines: is each one smaller than its piece? Under **Pieces**, such a piece shows as **Not sure** (no corner/edge guess).
-3. Take a **close-up** of those pieces (or put a darker cloth under them) and scan again: do they get a full outline?
+3. Take a **close-up** of those pieces and scan again: do they get a full outline?
 4. Pieces that touch get an orange dashed outline: spread them apart and scan again; each should then get its own outline.
 
 ## M8 part 3: faster scans, a lighter live view
@@ -110,6 +152,9 @@ These steps are for version **{version}** (Settings shows the version).
 - Your answers are kept with the puzzle, and in backups.
 
 ## Please tell me
+- M8 part 4: does the scan note read well on your iPhone (Home Screen app and Safari)? Did **More ▾** show when the note was long?
+- M8 part 4: on your nearly finished puzzle photo, was the "About N loose pieces" number close?
+- M8 part 4: did the phone get warm on the Scan screen, or did the app reload by itself? Did every photo or file button still open the picker?
 - M8 part 3: how long did a scan photo take on your iPhone (first and second)? Did the live view still feel smooth?
 - M8 part 1: if you tried it, did the spots get better after the colours were learned?
 - M7 part 4: after your new puzzle photo, were the right pieces counted as in the puzzle?

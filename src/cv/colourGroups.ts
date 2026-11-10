@@ -52,22 +52,39 @@ export interface PieceColours {
  * the piece's pixels split into two colours (2-means), the larger one first.
  */
 export function pieceColours(rgba: Uint8Array, size = PATCH_SIZE): PieceColours | null {
-  const lab = labImage({ data: rgba, width: size, height: size, stride: size * 4 }, size, size);
-  const px: number[] = [];
-  for (let y = 0; y < size; y += 2)
-    for (let x = 0; x < size; x += 2)
-      if (rgba[(y * size + x) * 4 + 3]! >= 128) px.push(lab[(y * size + x) * 3]!, lab[(y * size + x) * 3 + 1]!, lab[(y * size + x) * 3 + 2]!);
-  const n = px.length / 3;
+  // Only every second pixel of every second row that is the piece's is used: only those are turned
+  // into Lab (as a picture 1 pixel high: the same values as from the whole patch). Measured
+  // 2026-11-10 on the owner's pieces: 4 × faster than the whole patch (this runs on the main thread).
+  let n = 0;
+  for (let y = 0; y < size; y += 2) for (let x = 0; x < size; x += 2) if (rgba[(y * size + x) * 4 + 3]! >= 128) n++;
   if (n < 20) return null;
-  const pixels = Float32Array.from(px);
+  const rgb = new Uint8Array(n * 4);
+  let j = 0;
+  for (let y = 0; y < size; y += 2)
+    for (let x = 0; x < size; x += 2) {
+      const k = (y * size + x) * 4;
+      if (rgba[k + 3]! < 128) continue;
+      rgb[j] = rgba[k]!;
+      rgb[j + 1] = rgba[k + 1]!;
+      rgb[j + 2] = rgba[k + 2]!;
+      rgb[j + 3] = 255;
+      j += 4;
+    }
+  const pixels = labImage({ data: rgb, width: n, height: 1, stride: n * 4 }, n, 1);
   const mean: Lab = [0, 0, 0];
   for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) mean[c]! += pixels[i * 3 + c]! / n;
+  // The distances below are dist2 written out: a view of each pixel (subarray) for every distance
+  // made this 1.6 × slower (measured 2026-11-10).
+  const w = GROUPS.lWeight;
   // Start from the pixel farthest from the mean, and the one farthest from that.
-  const far = (from: ArrayLike<number>): Lab => {
+  const far = (from: Lab): Lab => {
     let best = 0;
     let bi = 0;
     for (let i = 0; i < n; i++) {
-      const d = dist2(pixels.subarray(i * 3, i * 3 + 3), from);
+      const dl = (pixels[i * 3]! - from[0]) * w;
+      const da = pixels[i * 3 + 1]! - from[1];
+      const db = pixels[i * 3 + 2]! - from[2];
+      const d = dl * dl + da * da + db * db;
       if (d > best) ((best = d), (bi = i));
     }
     return [pixels[bi * 3]!, pixels[bi * 3 + 1]!, pixels[bi * 3 + 2]!];
@@ -80,10 +97,20 @@ export function pieceColours(rgba: Uint8Array, size = PATCH_SIZE): PieceColours 
     const s1: Lab = [0, 0, 0];
     n0 = 0;
     for (let i = 0; i < n; i++) {
-      const p = pixels.subarray(i * 3, i * 3 + 3);
-      const to0 = dist2(p, c0) <= dist2(p, c1);
+      const p0 = pixels[i * 3]!;
+      const p1 = pixels[i * 3 + 1]!;
+      const p2 = pixels[i * 3 + 2]!;
+      const al = (p0 - c0[0]) * w;
+      const aa = p1 - c0[1];
+      const ab = p2 - c0[2];
+      const bl = (p0 - c1[0]) * w;
+      const ba = p1 - c1[1];
+      const bb = p2 - c1[2];
+      const to0 = al * al + aa * aa + ab * ab <= bl * bl + ba * ba + bb * bb;
       const s = to0 ? s0 : s1;
-      for (let c = 0; c < 3; c++) s[c]! += p[c]!;
+      s[0] += p0;
+      s[1] += p1;
+      s[2] += p2;
       if (to0) n0++;
     }
     if (!n0 || n0 === n) break;
@@ -271,7 +298,18 @@ export function tableAround(
  */
 export function evenLight(rgba: Uint8Array, table: ArrayLike<number>, ref: ArrayLike<number>): Uint8Array {
   const gain = [0, 1, 2].map((c) => toLinear(ref[c]!) / Math.max(1e-4, toLinear(table[c]!)));
+  // Per channel, a table of all 256 values (the same sums, done once instead of for every pixel).
+  const [l0, l1, l2] = gain.map((g) => {
+    const t = new Uint8Array(256);
+    for (let v = 0; v < 256; v++) t[v] = toSrgb(toLinear(v) * g);
+    return t;
+  }) as [Uint8Array, Uint8Array, Uint8Array];
   const out = new Uint8Array(rgba);
-  for (let i = 0; i < out.length; i += 4) if (out[i + 3]) for (let c = 0; c < 3; c++) out[i + c] = toSrgb(toLinear(rgba[i + c]!) * gain[c]!);
+  for (let i = 0; i < out.length; i += 4)
+    if (out[i + 3]) {
+      out[i] = l0[rgba[i]!]!;
+      out[i + 1] = l1[rgba[i + 1]!]!;
+      out[i + 2] = l2[rgba[i + 2]!]!;
+    }
   return out;
 }

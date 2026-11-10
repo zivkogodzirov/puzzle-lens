@@ -17,15 +17,14 @@ import type { ReaderApi } from '../shared/apis';
 import { PhotoChecker } from '../cv/photoCheck';
 import { setupFromPhoto, toGray } from '../cv/tableSetup';
 import { ensureRgba, scanPixels, tableFromPixels } from '../cv/scanPhoto';
-import { scanMarkerless } from '../cv/scanMarkerless';
-import { findCoin } from '../cv/coin';
+import { gridPxPerMm, loosePiecesBeside, scanFreePixels } from '../cv/scanFreePixels';
+import { findCoin, type CoinFound } from '../cv/coin';
 import { readPiece } from '../cv/readPiece';
 import { readShape, READ_OK } from '../cv/shapeRead';
 import { buildBoxGrid, extractPatch, patchStats, placePiece, spotStats, PATCH_SIZE, type BoxGrid, type ColourMatch } from '../cv/placement';
 import { fitColour } from '../cv/colourFit';
 import { tableAround } from '../cv/colourGroups';
 import { orientSpots, SPOT_THUMB_CELL, straightenQuad } from '../cv/openSpots';
-import { puzzleQuad, readAssembledGrid, SEAM_OK, type AssembledGrid } from '../cv/assembledGrid';
 import type { FreeScanOptions, FreeScanReply, OpenSpotsInput, PieceToPlace, PlaceReply, ScanOptions, ScanReply, TableSetupReply } from '../shared/apis';
 import type { TableModel } from '../project/types';
 import { decodeAtMost, findBoxQuad, RECTIFIED_MAX_SIDE, rectifyQuad, type Point, type RectifyBoxResult } from '../cv/rectify';
@@ -332,28 +331,15 @@ const api: ReaderApi = {
       checker ??= new PhotoChecker(c);
       const gray = toGray(c, rgba, 'RGBA');
       const check = checker.check(gray, { map: null, zoom: opts.zoom, kind: opts.kind });
-      const hint = opts.scaleHint ? (opts.scaleHint.pxPerMm * Math.max(rgba.width, rgba.height)) / opts.scaleHint.maxSide : null;
-      let r = scanMarkerless(c, rgba, { catalog: opts.catalog, pitchMm: opts.pitchMm, zoom: opts.zoom, kind: opts.kind, table: opts.table, ppmHint: hint });
-      // The camera's zoom reading isn't always right (and a close-up may be taken at 1×): if the
-      // photo couldn't be used, try once more assuming the other zoom.
-      // Only when it found too few single pieces to measure a scale (a wrong zoom guess); a photo
-      // that was measured but didn't match is not retried (that would only double the time).
-      const unusable = (x: typeof r) => x.pieces.filter((p) => !p.flags.cut && !p.flags.clump).length < 5;
-      if (unusable(r)) {
-        const other = scanMarkerless(c, rgba, {
-          catalog: opts.catalog,
-          pitchMm: opts.pitchMm,
-          zoom: opts.zoom >= 1.5 ? 1 : 2,
-          kind: opts.kind,
-          table: opts.table,
-        });
-        if (!unusable(other)) r = { ...other, timings: { ...other.timings, retriedOtherZoom: 1 } };
-      }
+      // Pieces, placement, the finished-puzzle check and the retries (src/cv/scanFreePixels.ts).
+      const { r, finished: finishedRaw, looseFound } = scanFreePixels(c, rgba, opts);
       // A coin for true size: found in the photo, measured in catalog mm at its own position.
       let coin: FreeScanReply['coin'] = null;
+      let coinFound: CoinFound | null = null;
       if (opts.findCoin && r.imgToCatalog && r.pxPerMm) {
         const found = findCoin(c, rgba, { pxPerMm: r.pxPerMm });
         if (found) {
+          coinFound = found;
           const H = r.imgToCatalog;
           const at = (x: number, y: number): [number, number] => {
             const w = H[6]! * x + H[7]! * y + H[8]!;
@@ -375,26 +361,26 @@ const api: ReaderApi = {
           }
           coin = { ...found, diameterCatalogMm: (2 * mm) / 4 };
           // The coin itself is not a piece.
-          r.pieces = r.pieces.filter((p) => {
-            const [x, y, w, h] = p.bboxImg;
-            return Math.hypot(x + w / 2 - cx, y + h / 2 - cy) > 0.8 * rad;
-          });
+          r.pieces = r.pieces.filter(notOnCoin(found));
         }
       }
-      // A finished puzzle: most of the photo is one assembled area whose seams count up to the box's
-      // pieces with few gaps (owner's request 2026-11-08). Checked on close-ups too: after the first
-      // overview the scan screen switches to close-ups, and the owner's photo of the puzzle with its
-      // holes was then read as a close-up, its holes never looked for and 11 of its spots taken for
-      // loose pieces (2026-11-09). A close-up of part of the puzzle can't count up to the box's pieces.
-      let finishedRaw: AssembledGrid | null = null;
-      if (opts.pieceCount) {
-        const big = (r.regions ?? []).filter((g) => g.kind === 'assembled').sort((a, b) => outlineArea(b.outlineImg) - outlineArea(a.outlineImg))[0];
-        if (big && outlineArea(big.outlineImg) >= FINISHED_MIN_SHARE * rgba.width * rgba.height) {
-          const q = puzzleQuad(c, rgba, big.outlineImg);
-          const g = q ? readAssembledGrid(c, rgba, q, { pieceCount: opts.pieceCount, grid: opts.grid ?? null }) : null;
-          const cells = g ? g.cols * g.rows : 0;
-          if (g && g.seamStrength >= SEAM_OK && Math.abs(cells / opts.pieceCount - 1) <= FINISHED_COUNT_TOL && g.gaps.length <= FINISHED_MAX_GAPS * cells)
-            finishedRaw = g;
+      // Loose pieces beside a finished puzzle are not catalogued: they are counted, so the owner is
+      // told (2026-11-10; IMG_9280, 9281 and 9244 passed with 8, 18 and 14 of them, silently).
+      // The pieces found but not placed, and their scale, are not sent back.
+      const { unplaced, unplacedPxPerMm, ...scan } = r;
+      let loose = 0;
+      if (finishedRaw) {
+        // Found again at the puzzle's own scale when the scan's scale was far from it (scanFreePixels).
+        let seen = looseFound ?? (r.registered ? r.pieces : (unplaced ?? []));
+        loose = loosePiecesBeside(seen, finishedRaw);
+        if (loose && (looseFound || !r.registered) && opts.findCoin) {
+          // These pieces may still hold the coin (it was taken out of r.pieces only): the coin found
+          // above, else look for it at the puzzle's own scale.
+          const found = coinFound ?? findCoin(c, rgba, { pxPerMm: gridPxPerMm(finishedRaw, opts.pitchMm) });
+          if (found) {
+            seen = seen.filter(notOnCoin(found));
+            loose = loosePiecesBeside(seen, finishedRaw);
+          }
         }
       }
       // Box placement (M4): each clean piece straightened by the corners its shape reading finds.
@@ -440,11 +426,12 @@ const api: ReaderApi = {
         gapSides: finishedRaw.gapSides,
         gapsPreview: finishedRaw.gapsPx.map(([x, y]) => [x * previewScale, y * previewScale] as [number, number]),
         cornersPreview: finishedRaw.cornersPx.map(([x, y]) => [x * previewScale, y * previewScale] as [number, number]),
+        loose,
       };
       const outlinesPreview = r.pieces.map((p) => p.outlineImg.filter((_, i) => i % 4 < 2).map((v) => v * previewScale));
       const regionsPreview = (r.regions ?? []).map((g) => ({ kind: g.kind, points: g.outlineImg.filter((_, i) => i % 4 < 2).map((v) => v * previewScale) }));
       return {
-        ...r,
+        ...scan,
         coin,
         finished,
         patches,
@@ -708,18 +695,12 @@ const api: ReaderApi = {
 
 Comlink.expose(api);
 
-/** Finished-puzzle check: the assembled area covers at least this share of the photo… */
-const FINISHED_MIN_SHARE = 0.2;
-/** …its seams count within this share of the box's pieces… */
-const FINISHED_COUNT_TOL = 0.06;
-/** …and at most this share of its cells look empty. */
-const FINISHED_MAX_GAPS = 0.1;
-
-function outlineArea(o: number[]): number {
-  let a = 0;
-  for (let i = 0, n = o.length; i < n; i += 2) {
-    const j = (i + 2) % n;
-    a += o[i]! * o[j + 1]! - o[j]! * o[i + 1]!;
-  }
-  return Math.abs(a) / 2;
+/** Pieces not centred on the coin (the coin is not a piece). */
+function notOnCoin(coin: CoinFound): (p: { bboxImg: [number, number, number, number] }) => boolean {
+  const [cx, cy] = coin.centre;
+  const rad = coin.diameterPx / 2;
+  return (p) => {
+    const [x, y, w, h] = p.bboxImg;
+    return Math.hypot(x + w / 2 - cx, y + h / 2 - cy) > 0.8 * rad;
+  };
 }

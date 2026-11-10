@@ -4,11 +4,11 @@
  * trays still count among the empty spots.
  */
 import 'fake-indexeddb/auto';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { db, eraseAllData } from '../../src/db/db';
 import { countPiecesByStatus, createProject, getProject, normalizeProject, updateProject } from '../../src/project/store';
 import { emptyTray, fixedColours, moveToTray, trayCountOf, trayCounts } from '../../src/project/trays';
-import { makeGroups } from '../../src/project/groups';
+import { loadPieceColours, makeGroups } from '../../src/project/groups';
 import { stalePieces } from '../../src/project/placements';
 import { planMerge } from '../../src/project/catalog';
 import type { Lab, PieceColours } from '../../src/cv/colourGroups';
@@ -147,5 +147,41 @@ describe('trays', () => {
     expect(plan.added).toEqual([]);
     expect(plan.updates.find((p) => p.id === 'd1')).toBeUndefined();
     expect(plan.updates.filter((p) => p.status === 'missing')).toEqual([]);
+  });
+
+  it('colours are read only for the pieces asked for; the typical light still comes from all pieces (2026-11-10)', async () => {
+    const p = await createProject({ name: 'The Kiss', pieceCount: 1000, setupStep: 6 });
+    // A straightened piece: a disc in two shades of one colour.
+    const S = 56;
+    const disc = (rgb: number[]) => {
+      const out = new Uint8Array(S * S * 4);
+      for (let y = 0; y < S; y++)
+        for (let x = 0; x < S; x++)
+          if ((x - S / 2) ** 2 + (y - S / 2) ** 2 <= (S * 0.45) ** 2) out.set([...rgb.map((v) => v - (y > S / 2 ? 30 : 0)), 255], (y * S + x) * 4);
+      return out;
+    };
+    // 4 pieces on the table under one lamp, 8 placed ones photographed under another (one with no
+    // light measured): the light of the table pieces alone differs from all pieces' typical light.
+    const rows: PieceRow[] = Array.from({ length: 12 }, (_, i) => {
+      const row = piece(p.id, `c${i}`, i * 30);
+      const light: [number, number, number] | undefined = i === 11 ? undefined : i < 4 ? [214, 205, 188] : [186, 184, 182];
+      return { ...row, status: i < 4 ? 'table' : 'placed', patch: { ...row.patch!, ts: 200, ...(light ? { light } : {}) } };
+    });
+    await db().blobs.bulkPut(rows.map((r, i) => ({ id: r.patch!.blobId, ts: 1, kind: 'patch', blob: new Blob([disc([60 + i * 12, 150 - i * 5, 90])]) })));
+    const all = await loadPieceColours(rows);
+    const read = vi.spyOn(db().blobs, 'get');
+    // Another time (so nothing is cached), only the table pieces.
+    const again = rows.map((r) => ({ ...r, patch: { ...r.patch!, ts: 201 } }));
+    const some = await loadPieceColours(again, (q) => q.status === 'table');
+    const blobsRead = read.mock.calls.map((c) => String(c[0]));
+    read.mockRestore();
+    expect([...some.colours.keys()]).toEqual(['c0', 'c1', 'c2', 'c3']);
+    expect(blobsRead.sort()).toEqual(['c0', 'c1', 'c2', 'c3'].map((id) => `patch-${id}`));
+    for (const id of some.colours.keys()) expect(some.colours.get(id)).toEqual(all.colours.get(id));
+    expect(some.uneven).toBe(1);
+    expect(all.uneven).toBe(1);
+    // From the table pieces alone the light, and so their colours, would differ.
+    const alone = await loadPieceColours(again.slice(0, 4));
+    expect([...alone.colours.keys()].some((id) => JSON.stringify(alone.colours.get(id)) !== JSON.stringify(all.colours.get(id)))).toBe(true);
   });
 });

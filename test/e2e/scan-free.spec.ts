@@ -81,7 +81,23 @@ test.describe('scan pieces without markers', () => {
     const n = Number((await page.getByTestId('scan-count').innerText()).match(/\d+/)![0]);
     expect(n).toBeGreaterThanOrEqual(Math.floor(0.85 * visible));
     expect(n).toBeLessThanOrEqual(visible + 3);
+    // The note leaves the gauge and the mode buttons free (it covered them, M8 part 4): it sits at
+    // the top of the panel, and the map with the next close-up's dashed box stays in view beside it.
     await expect(page.getByTestId('coverage-map')).toBeVisible();
+    await expect(page.getByTestId('coverage-map').locator('.cov-target')).toHaveCount(1);
+    const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
+    const apart = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+      a.y + a.height <= b.y + 1 || b.y + b.height <= a.y + 1 || a.x + a.width <= b.x + 1 || b.x + b.width <= a.x + 1;
+    const note = await box('[data-testid="scan-note"]');
+    for (const sel of ['.gauge', '[data-testid="mode-overview"]', '[data-testid="mode-detail"]', '[data-testid="scan-count"]', '[data-testid="coverage-map"]'])
+      expect(apart(note, await box(sel)), sel).toBe(true);
+    // None of it is cut off without a sign: it all fits, or "More ▾" says there is more (review 2026-11-10).
+    expect(
+      await page
+        .getByTestId('scan-note')
+        .evaluate((n) => n.scrollHeight <= n.clientHeight + 2 || document.querySelector('[data-testid="scan-note-more"]') !== null),
+    ).toBe(true);
+    await page.getByTestId('mode-detail').click({ trial: true });
     await page.getByTestId('show-photo').click();
     await expect(page.getByTestId('photo-result').locator('polygon')).toHaveCount(n, { timeout: 5_000 });
     await page.screenshot({ path: test.info().outputPath('free-photo-result.png') });

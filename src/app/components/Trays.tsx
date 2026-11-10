@@ -15,26 +15,38 @@ import { snapsOfBatch } from '../../project/batches';
 import type { PieceRow, Project, SnapRow } from '../../project/types';
 import { logError, logInfo } from '../../log/logger';
 
+/** Pieces whose colours the groups need (src/project/groups.ts makeGroups): those on the table. */
+const isOnTable = (p: PieceRow) => p.status === 'table';
+/** …and, for the tray labels, those in trays too (their pictures are picked by colour). */
+const isOnTableOrInTray = (p: PieceRow) => p.status === 'table' || p.status === 'tray';
+
 /**
  * The colour groups of a puzzle's pieces (null while reading the pieces' colours), and how many
  * pieces' colours couldn't be evened out for the light (no measurement of the table around them).
+ * `colours` holds the pieces on the table and those in trays: placed and set-aside pieces (most of
+ * them, later on) aren't read. Measured 2026-11-10 at 1000 pieces (300 on the table): reading all of
+ * them took about 0.5 s on the Mac, without a break for the screen. Tray pieces are read too (about
+ * 20 ms per 200) so that pieces taken back out of a tray already have their colours: the groups don't
+ * flicker to a different grouping while the new read runs.
  */
 export function useColourGroups(
   enabled: boolean,
   project: Project,
   pieces: PieceRow[],
+  withTrays = true,
 ): { groups: Groups | null; colours: Map<string, PieceColours> | null; uneven: number } {
   const [read, setRead] = useState<{ colours: Map<string, PieceColours>; uneven: number } | null>(null);
   useEffect(() => {
     if (!enabled) return;
     let live = true;
-    loadPieceColours(pieces)
+    // All pieces still go in: the typical light is measured over all of them.
+    loadPieceColours(pieces, withTrays ? isOnTableOrInTray : isOnTable)
       .then((m) => live && setRead(m))
       .catch((err) => logError('trays', 'Piece colours could not be read', err));
     return () => {
       live = false;
     };
-  }, [enabled, pieces]);
+  }, [enabled, pieces, withTrays]);
   const groups = useMemo(() => (read ? makeGroups(project, pieces, read.colours) : null), [read, project.trays, pieces]);
   return { groups, colours: read?.colours ?? null, uneven: read?.uneven ?? 0 };
 }

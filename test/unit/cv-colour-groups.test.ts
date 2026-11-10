@@ -50,6 +50,68 @@ describe("a piece's colours", () => {
   it('too little of the piece in the patch: no colours', () => {
     expect(pieceColours(new Uint8Array(S * S * 4))).toBeNull();
   });
+
+  it('exactly the colours of the plain way (the whole patch in Lab, every second pixel), done faster (2026-11-10)', () => {
+    // The plain way, as before 2026-11-10: the whole patch turned into Lab, then 2-means on every
+    // second pixel of every second row that is the piece's.
+    const plain = (rgba: Uint8Array) => {
+      const lab = labImage({ data: rgba, width: S, height: S, stride: S * 4 }, S, S);
+      const px: number[] = [];
+      for (let y = 0; y < S; y += 2)
+        for (let x = 0; x < S; x += 2) if (rgba[(y * S + x) * 4 + 3]! >= 128) px.push(...lab.subarray((y * S + x) * 3, (y * S + x) * 3 + 3));
+      const n = px.length / 3;
+      if (n < 20) return null;
+      const pixels = Float32Array.from(px);
+      const mean: Lab = [0, 0, 0];
+      for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) mean[c]! += pixels[i * 3 + c]! / n;
+      const far = (from: ArrayLike<number>): Lab => {
+        let best = 0;
+        let bi = 0;
+        for (let i = 0; i < n; i++) {
+          const d = dist2(pixels.subarray(i * 3, i * 3 + 3), from);
+          if (d > best) ((best = d), (bi = i));
+        }
+        return [pixels[bi * 3]!, pixels[bi * 3 + 1]!, pixels[bi * 3 + 2]!];
+      };
+      let c0 = far(mean);
+      let c1 = far(c0);
+      let n0 = 0;
+      for (let it = 0; it < 10; it++) {
+        const s0: Lab = [0, 0, 0];
+        const s1: Lab = [0, 0, 0];
+        n0 = 0;
+        for (let i = 0; i < n; i++) {
+          const p = pixels.subarray(i * 3, i * 3 + 3);
+          const to0 = dist2(p, c0) <= dist2(p, c1);
+          for (let c = 0; c < 3; c++) (to0 ? s0 : s1)[c]! += p[c]!;
+          if (to0) n0++;
+        }
+        if (!n0 || n0 === n) break;
+        c0 = s0.map((v) => v / n0) as Lab;
+        c1 = s1.map((v) => v / (n - n0)) as Lab;
+      }
+      if (!n0 || n0 === n || Math.sqrt(dist2(c0, c1)) < GROUPS.sameColour) return { main: mean, mainShare: 1, second: null, secondShare: 0 };
+      const [main, second, nm] = n0 >= n - n0 ? [c0, c1, n0] : [c1, c0, n - n0];
+      return { main, mainShare: nm / n, second, secondShare: 1 - nm / n };
+    };
+    let s = 3;
+    const r = () => (s = (s * 1103515245 + 12345) >>> 0) / 2 ** 32;
+    for (let k = 0; k < 30; k++) {
+      // Two or three colours with noise, a ragged outline, and some half-transparent edge pixels.
+      const cols = Array.from({ length: 2 + (k % 2) }, () => [r() * 255, r() * 255, r() * 255]);
+      const rgba = new Uint8Array(S * S * 4);
+      for (let i = 0; i < S * S; i++) {
+        const c = cols[Math.floor((i % S) / (S / cols.length)) % cols.length]!;
+        for (let ch = 0; ch < 3; ch++) rgba[i * 4 + ch] = Math.max(0, Math.min(255, c[ch]! + (r() - 0.5) * 40));
+        rgba[i * 4 + 3] = r() < 0.15 ? 0 : r() < 0.1 ? 100 + Math.floor(r() * 60) : 255;
+      }
+      expect(pieceColours(rgba)).toEqual(plain(rgba));
+    }
+    const few = new Uint8Array(S * S * 4);
+    for (let i = 0; i < 19; i++) few[i * 2 * 4 + 3] = 255;
+    expect(pieceColours(few)).toBeNull();
+    expect(plain(few)).toBeNull();
+  });
 });
 
 describe('evening out the light', () => {
@@ -79,6 +141,36 @@ describe('evening out the light', () => {
     expect(lit[0]! > lit[1]! && lit[1]! > lit[2]!).toBe(true);
     expect([...lit.slice(4)]).toEqual([0, 0, 0, 0]);
     expect([...evenLight(patch, table, table)].slice(0, 3)).toEqual([60, 50, 40]);
+  });
+
+  it('evening out uses a table of the 256 values per channel: exactly the per-pixel sums (2026-11-10)', () => {
+    const toLinear = (v: number) => {
+      const t = v / 255;
+      return t <= 0.04045 ? t / 12.92 : ((t + 0.055) / 1.055) ** 2.4;
+    };
+    const toSrgb = (v: number) => Math.max(0, Math.min(255, 255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.max(0, v) ** (1 / 2.4) - 0.055)));
+    const rgba = new Uint8Array(64 * 4);
+    for (let i = 0; i < rgba.length; i++) rgba[i] = (i * 37 + (i >> 2) * 11) % 256;
+    for (let i = 3; i < rgba.length; i += 16) rgba[i] = 0;
+    for (const [table, ref] of [
+      [
+        [150, 140, 120],
+        [200, 196, 188],
+      ],
+      [
+        [240, 250, 230],
+        [100, 100, 100],
+      ],
+      [
+        [0, 30, 255],
+        [220, 210, 200],
+      ],
+    ]) {
+      const gain = [0, 1, 2].map((c) => toLinear(ref![c]!) / Math.max(1e-4, toLinear(table![c]!)));
+      const want = new Uint8Array(rgba);
+      for (let i = 0; i < want.length; i += 4) if (want[i + 3]) for (let c = 0; c < 3; c++) want[i + c] = toSrgb(toLinear(rgba[i + c]!) * gain[c]!);
+      expect(evenLight(rgba, table!, ref!)).toEqual(want);
+    }
   });
 
   it('a neighbouring piece next to the table around is left out', () => {

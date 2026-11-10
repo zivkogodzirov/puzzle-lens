@@ -1,17 +1,20 @@
 import { settings } from '../settings';
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { go, routeArg } from '../router';
-import { readerWorker, restartReader } from '../workers';
+import { readerWorker, restartReader, trackerWorker } from '../workers';
 import { TableCamera, type CaptureMeta } from '../components/TableCamera';
+import { TopBar } from '../components/TopBar';
+import { cameraState } from '../../camera/camera';
 import { deleteBlob, getProject, newId, projectBlobId, putBlob, updateProject } from '../../project/store';
 import { measurePitch, planMerge } from '../../project/catalog';
 import { snapsOfBatch } from '../../project/batches';
 import { markFromFinishedPhoto } from '../../project/placedFromPhoto';
 import { Coverage, sortingArea, type Area } from '../../scan/coverage';
 import { FREE_RULES, markerCentres, type CaptureKind } from '../../scan/autoCapture';
+import { currentPieceList, piecesAfterMerge, readPieceList, type PieceList } from '../../scan/pieceReads';
 import { applyH, invertH } from '../../geo/homography';
 import { db } from '../../db/db';
-import type { PhotoQuality, PieceRow, Project, SnapRow, Vec2 } from '../../project/types';
+import type { Grid, PhotoQuality, PieceRow, Project, SnapRow, Vec2 } from '../../project/types';
 import type { FoundPiece } from '../../cv/pieceFinder';
 import { coinById, MK_COINS, type CoinType } from '../../cv/coin';
 import { DEFAULT_PITCH_MM } from '../../cv/pieceFinder';
@@ -36,6 +39,9 @@ interface Unified {
   height: number;
   quality: PhotoQuality;
 }
+/** Where a result note that doesn't fit gets room (styles.css needs-room): not on a phone held sideways. */
+const ROOM_UPRIGHT = 'not all and (orientation: landscape) and (max-height: 500px)';
+
 /** How many scan photos keep their full-size picture. */
 const KEEP_FULL_PHOTOS = 10;
 
@@ -153,6 +159,88 @@ export function ScanScreen() {
   const [showPhoto, setShowPhoto] = useState(false);
   // After a photo that couldn't be used, wait for a tap instead of firing again and again.
   const [autoPaused, setAutoPaused] = useState(false);
+  // The result note shows what fits in its place. When part of it is out of view, "More ▾" says so and
+  // opens all of it over the camera (review 2026-11-10: only its first lines showed, with no sign of the
+  // rest). No photo is taken by itself while it is open.
+  const noteRef = useRef<HTMLDivElement>(null);
+  const [noteMore, setNoteMore] = useState(false);
+  // Squeezed to its least (about two lines, on a small screen): "More ▾" goes on its top edge, so it
+  // doesn't cover the last line that shows (check 2026-11-10).
+  const [noteTight, setNoteTight] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  // The note that didn't all fit with everything else in place: until the next note, the coin choice
+  // and (while no photo takes itself) the gauge's height line make room for it (styles.css needs-room).
+  // Only that note: a short one keeps the full gauge and the coin choice (check 2026-11-10).
+  const [roomFor, setRoomFor] = useState<ScanNote | null>(null);
+  const roomRef = useRef<ScanNote | null>(null);
+  roomRef.current = roomFor;
+  const recheck = useRef<(() => void) | null>(null);
+  useEffect(() => setNoteOpen(false), [note]);
+  useLayoutEffect(() => {
+    const el = noteRef.current;
+    if (!el) {
+      recheck.current = null;
+      setNoteMore(false);
+      setNoteTight(false);
+      return;
+    }
+    const check = () => {
+      // Words still below its window: the bottom of its last line of text (not of its last paragraph's
+      // box, whose line spacing alone may be cut: check 2026-11-10, a two-line note that showed whole
+      // lost the gauge's height line). None once scrolled to the end.
+      const last = el.lastElementChild;
+      let bottom = -Infinity;
+      if (last) {
+        const range = document.createRange();
+        range.selectNodeContents(last);
+        for (const r of range.getClientRects()) if (r.height > 0) bottom = Math.max(bottom, r.bottom);
+        if (bottom === -Infinity) bottom = last.getBoundingClientRect().bottom;
+      }
+      const hidden = bottom - (el.getBoundingClientRect().top + el.clientTop + el.clientHeight) > 2;
+      // Even its least (about two lines) doesn't fit below what is drawn at the top: it lies over the
+      // gauge's words, or over the button or box there (check 2026-11-10, a two-line note on a small
+      // screen). Only reaching into the room's own 8 px margin doesn't count (a later check: on an SE
+      // the gauge then shrank with its words still well clear of the note).
+      const gauge = el.closest('.table-camera')?.querySelector('[data-testid="level-gauge"]');
+      const room = el.closest('.table-camera-extra');
+      const above = gauge ? gauge.getBoundingClientRect().bottom : room ? room.getBoundingClientRect().top - 8 : -Infinity;
+      const squeezed = el.getBoundingClientRect().top < above - 1;
+      setNoteTight(el.clientHeight < 60);
+      // It doesn't fit: first it gets the room (upright only, where styles.css gives it); "More ▾" is
+      // decided again once the room is there (the effect on roomFor below), so it doesn't flash. Sideways
+      // the note has its own column and gets no room, so the flag isn't set there (check 2026-11-10: set
+      // sideways, it stayed on back upright where the note fitted).
+      if ((hidden || squeezed) && roomRef.current !== note && matchMedia(ROOM_UPRIGHT).matches) {
+        setRoomFor(note);
+        return;
+      }
+      setNoteMore(hidden);
+    };
+    recheck.current = check;
+    check();
+    // On a resize, checked in the next frame: the room it may give changes the note's size again, which
+    // within the same frame is a "ResizeObserver loop" error.
+    let frame = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(check);
+    });
+    ro.observe(el);
+    el.addEventListener('scroll', check, { passive: true });
+    // Turned upright or sideways: checked before that frame is drawn (from the next frame, the first
+    // upright frame showed the note without its room: check 2026-11-10).
+    const upright = matchMedia(ROOM_UPRIGHT);
+    upright.addEventListener('change', check);
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+      el.removeEventListener('scroll', check);
+      upright.removeEventListener('change', check);
+    };
+  }, [note]);
+  // The room is there now (or gone), or photos stopped or started taking themselves (the gauge's size):
+  // measured again before the screen shows it.
+  useLayoutEffect(() => recheck.current?.(), [roomFor, autoPaused]);
   /** Sharpness of the good photos so far, per kind: a photo far below them is blurred. */
   const sharpSeen = useRef<Record<string, number[]>>({});
   const lastUrl = useRef<string | null>(null);
@@ -197,11 +285,35 @@ export function ScanScreen() {
   }, [kind, coverage, frameSize, project]);
   const viewMm: Vec2 | null = frameSize ? [frameSize.width / frameSize.pxPerMm, frameSize.height / frameSize.pxPerMm] : [335, 447];
 
+  // The photo helper starts when the screen opens, so its start-up (loading OpenCV) is over before
+  // the first photo instead of adding to its wait (M8 part 4, 2026-11-10). A warm-up read of a
+  // made-up picture was tried as well: in Safari it made the first real photo slower, so it isn't done.
+  // It waits for the live tracker (which the camera starts) to be ready, so the live view isn't
+  // slowed down; after 3 s it starts anyway. A photo taken before that starts the helper itself.
+  const canScan = Boolean(project && (project.tracking !== 'markers' || project.markerMap));
+  useEffect(() => {
+    if (!canScan) return;
+    let left = false;
+    const start = () => {
+      if (!left) readerWorker();
+    };
+    const timer = setTimeout(start, 3000);
+    void trackerWorker().ready.then(() => {
+      clearTimeout(timer);
+      start();
+    });
+    return () => {
+      left = true;
+      clearTimeout(timer);
+    };
+  }, [canScan]);
+
   if (!id || project === null) {
     return (
-      <main class="screen">
-        <p>This puzzle is not on this iPhone.</p>
-        <button class="btn btn-primary" onClick={() => go('home')}>
+      <main class="screen" data-testid="scan-missing">
+        <TopBar title="Scan pieces" />
+        <div class="notice notice-bad">This puzzle is not on this iPhone (it may have been deleted).</div>
+        <button class="btn btn-primary btn-block" onClick={() => go('home')}>
           Back to my puzzles
         </button>
       </main>
@@ -238,9 +350,11 @@ export function ScanScreen() {
       const pitch = project.piecePitch;
       const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Reading the photo took too long; please try again')), SCAN_TIMEOUT_MS));
       let r: Unified;
+      // Read once here and used again for the merge below while no piece row was written meanwhile.
+      let first: PieceList | null = null;
       if (free) {
-        const existing0 = await db().pieces.where('projectId').equals(project.id).toArray();
-        const catalog = existing0
+        first = await readPieceList(project.id);
+        const catalog = first.rows
           .filter((p) => p.status === 'table' || p.status === 'pending')
           .map((p) => ({
             id: p.id,
@@ -262,11 +376,11 @@ export function ScanScreen() {
             findCoin: Boolean(coinType),
             pieceCount: project.pieceCount || undefined,
             grid: project.grid ? { cols: project.grid.cols, rows: project.grid.rows } : null,
-            // The newest photo of this batch at the same zoom: start detection at its scale (M8 part 3).
+            // The newest photo of this batch of the same kind at the same zoom: start detection at its
+            // scale (M8 part 3). Not a close-up's for an overview or the other way round: they are taken
+            // from different heights, and a wrong start can spoil the photo (review 2026-11-10).
             scaleHint: (() => {
-              const last = snaps
-                .filter((s) => (s.kind === 'overview' || s.kind === 'detail') && s.imgToTable && Math.abs(s.zoom - zoom) < 0.5)
-                .sort((a, b) => b.ts - a.ts)[0];
+              const last = snaps.filter((s) => s.kind === kind && s.imgToTable && Math.abs(s.zoom - zoom) < 0.5).sort((a, b) => b.ts - a.ts)[0];
               return last ? { pxPerMm: pxPerMmOf(last.imgToTable!, last.width, last.height), maxSide: Math.max(last.width, last.height) } : null;
             })(),
           }),
@@ -303,19 +417,26 @@ export function ScanScreen() {
           let next = project;
           const extra: string[] = [];
           try {
-            // The puzzle finished since the last photo of it (M7 part 4): the pieces the app had for
-            // its empty spots went in.
-            if (!f.finished.gaps.length && project.openSpots) {
-              const r = await markFromFinishedPhoto(project.id);
-              if (r.filled) {
-                logInfo('scan', `Finished puzzle photo: ${r.filled} spots filled since the last one; ${r.ids.length} pieces marked as in the puzzle`);
-                extra.push(
-                  `All ${r.filled} empty ${r.filled === 1 ? 'spot is' : 'spots are'} filled now. ${r.ids.length} of the pieces the app had for them ${r.ids.length === 1 ? 'is' : 'are'} counted as in the puzzle (Undo: "✓ in the puzzle" on the puzzle page).`,
-                );
+            // A count that doesn't match the puzzle's grid is not trusted: nothing is saved or marked
+            // from it (review 2026-11-10: a puzzle part done, read as finished 18 × 55, would have
+            // replaced the saved empty spots). The note says to check the grid.
+            if (!gridMatches(project.grid, f.finished)) {
+              logInfo('scan', `Finished-puzzle count ${f.finished.cols} × ${f.finished.rows} doesn't match the grid: nothing saved`);
+            } else {
+              // The puzzle finished since the last photo of it (M7 part 4): the pieces the app had for
+              // its empty spots went in.
+              if (!f.finished.gaps.length && project.openSpots) {
+                const r = await markFromFinishedPhoto(project.id);
+                if (r.filled) {
+                  logInfo('scan', `Finished puzzle photo: ${r.filled} spots filled since the last one; ${r.ids.length} pieces marked as in the puzzle`);
+                  extra.push(
+                    `All ${r.filled} empty ${r.filled === 1 ? 'spot is' : 'spots are'} filled now. ${r.ids.length} of the pieces the app had for them ${r.ids.length === 1 ? 'is' : 'are'} counted as in the puzzle (Undo: "✓ in the puzzle" on the puzzle page).`,
+                  );
+                }
               }
+              next = await saveOpenSpots(project, f.finished);
+              setProject(next);
             }
-            next = await saveOpenSpots(project, f.finished);
-            setProject(next);
           } catch (err) {
             logError('scan', 'The empty spots could not be saved', err);
           }
@@ -457,7 +578,9 @@ export function ScanScreen() {
       if (!r.pxPerMm) return;
       if (kind === 'detail') setFrameSize({ width: r.width, height: r.height, pxPerMm: r.pxPerMm });
       const now = Date.now();
-      const existing = await db().pieces.where('projectId').equals(project.id).toArray();
+      // The same rows as above unless something wrote piece rows since (e.g. the coin rescale).
+      const list = await currentPieceList(first, project.id);
+      const existing = list.rows;
       const plan = planMerge(
         existing,
         r.pieces.map((p, i) => {
@@ -538,7 +661,9 @@ export function ScanScreen() {
         await db().snaps.put(snap);
       });
       await pruneFullPhotos(project.id);
-      const all = await db().pieces.where('projectId').equals(project.id).toArray();
+      // What the transaction above left, taken from the plan when it was the only piece write since
+      // the rows were read (otherwise read back).
+      const all = await piecesAfterMerge(list, plan);
       const measured = measurePitch(all.filter((p) => p.status === 'table'));
       // Marker-free: a piece's found top face is ~79 % of its cell (REAL_PIECE_AREA_SHARE), so the
       // cell pitch is the face size ÷ √0.79. (Marker puzzles keep the face-size meaning they use.)
@@ -583,7 +708,7 @@ export function ScanScreen() {
         lines.push(`${faint} pale piece${faint > 1 ? 's' : ''} with a faint outline (yellow): check ${faint > 1 ? 'they are' : 'it is'} outlined right.`);
       if (part)
         lines.push(
-          `${part === 1 ? '1 piece' : `${part} pieces`} only partly outlined (yellow, smaller than the others): ${part === 1 ? 'its' : 'their'} shape is not used. A close-up, or a darker cloth under pale pieces, helps.`,
+          `${part === 1 ? '1 piece' : `${part} pieces`} only partly outlined (yellow, smaller than the others): ${part === 1 ? 'its' : 'their'} shape is not used. A close-up helps.`,
         );
       for (const q of r.reasons) if (!/Blurred|Tilted/.test(q)) lines.push(q);
       lines.unshift(...coinLines);
@@ -606,6 +731,12 @@ export function ScanScreen() {
 
   const onTable = pieces.filter((p) => p.status === 'table' || p.status === 'pending');
   const covered = coverage ? Math.round(coverage.share() * 100) : 0;
+  // Camera refused or paused: no map or "Aim at…" (nothing to aim with), so the panel stays short.
+  const cameraOff = cameraState.value === 'error' || cameraState.value === 'paused';
+  // Paused: TableCamera shows "Resume camera" in the middle of the screen; with a note it moves up under
+  // the top bar and the panel keeps below it (styles.css .scan-panel.camera-paused, 2026-11-10: the note
+  // covered it). Refused: "Start camera" is in the problem box at the top.
+  const paused = cameraState.value === 'paused';
 
   return (
     <>
@@ -614,13 +745,44 @@ export function ScanScreen() {
         map={map}
         target={target}
         busy={busy}
-        autoCapture={!autoPaused && (kind === 'overview' || target !== null)}
+        autoCapture={!autoPaused && !noteOpen && (kind === 'overview' || target !== null)}
         pieces={free ? undefined : onTable}
         free={free ? { pitchMm } : null}
         onPhoto={(b, m) => void onPhoto(b, m)}
         onClose={() => go('puzzle', project.id)}
       >
-        <div class="scan-panel" data-testid="scan-panel">
+        {/* auto-off: no photo takes itself (after a finished puzzle or a photo that couldn't be used);
+            needs-room: the note didn't all fit. With both, the gauge is smaller and the note gets the room
+            (styles.css, 2026-11-10). */}
+        <div
+          class={`scan-panel${note ? ' has-note' : ''}${note && roomFor === note ? ' needs-room' : ''}${paused ? ' camera-paused' : ''}${autoPaused ? ' auto-off' : ''}`}
+          data-testid="scan-panel"
+        >
+          {/* The result of the last photo, at the top of the panel until it is tapped away or the next
+              photo starts (M8 part 4, 2026-11-10): fixed near the top of the screen, it covered the
+              gauge's instruction and the buttons. While it shows, the panel reaches up to what is drawn
+              at the top and the note gets that room first (styles.css); what doesn't fit scrolls, with
+              "More ▾" to open all of it. On a phone held sideways it sits in the free column on the left. */}
+          {note && (
+            <div class={noteTight ? 'scan-note-box tight' : 'scan-note-box'}>
+              <div
+                ref={noteRef}
+                class={note.ok ? 'notice notice-good scan-note scan-note-panel' : 'notice notice-bad scan-note scan-note-panel'}
+                data-testid="scan-note"
+                role="status"
+                onClick={() => setNote(null)}
+              >
+                {note.lines.map((l) => (
+                  <p key={l}>{l}</p>
+                ))}
+              </div>
+              {noteMore && (
+                <button class="scan-note-more" data-testid="scan-note-more" onClick={() => setNoteOpen(true)}>
+                  More ▾
+                </button>
+              )}
+            </div>
+          )}
           <div class="scan-counts">
             <span data-testid="scan-count">{onTable.length} pieces found</span>
             <span data-testid="scan-coverage">close-ups {covered}%</span>
@@ -651,7 +813,7 @@ export function ScanScreen() {
               Close-ups 2×
             </button>
           </div>
-          {free && kind === 'detail' && target && <p class="chip">Aim at the dashed box on the map</p>}
+          {free && kind === 'detail' && target && !cameraOff && <p class="chip scan-aim">Aim at the dashed box on the map</p>}
           {free && kind === 'overview' && project.scaleSource !== 'coin' && (
             <label class="chip coin-pick">
               Coin for true size:{' '}
@@ -672,48 +834,55 @@ export function ScanScreen() {
               </select>
             </label>
           )}
-          {free && <CoverageMap pieces={onTable} coverage={coverage} target={kind === 'detail' ? target : null} view={viewMm} />}
-          {free && (
-            <label class="chip pick-photo" data-testid="pick-photo">
-              🖼 Choose a photo
-              <input
-                type="file"
-                accept="image/*"
-                data-testid="pick-photo-input"
-                hidden
-                onClick={() => setAutoPaused(true)}
-                onChange={(e) => {
-                  const input = e.currentTarget as HTMLInputElement;
-                  const file = input.files?.[0];
-                  input.value = '';
-                  // A photo from the library goes through exactly the same reading as a camera photo
-                  // (as an overview or a 2× close-up, whichever is selected above).
-                  if (file) void onPhoto(file, { zoom: kind === 'detail' ? 2 : 1, fix: null, auto: false, sensorTiltDeg: null });
-                }}
-              />
-            </label>
-          )}
-          {lastPhoto && (
-            <button class="chip" data-testid="show-photo" onClick={() => setShowPhoto(true)}>
-              See the last photo
-            </button>
+          {/* No camera, nothing to aim with: the map (and "Aim at…") are left out. */}
+          {free && !cameraOff && <CoverageMap pieces={onTable} coverage={coverage} target={kind === 'detail' ? target : null} view={viewMm} />}
+          {/* Side by side (they wrap on a narrow screen): one row less, so the note and the map fit. */}
+          {(free || lastPhoto) && (
+            <div class="row scan-photo-row">
+              {free && (
+                <label class="chip pick-photo" data-testid="pick-photo">
+                  🖼 Choose a photo
+                  <input
+                    type="file"
+                    accept="image/*"
+                    data-testid="pick-photo-input"
+                    hidden
+                    onClick={() => setAutoPaused(true)}
+                    onChange={(e) => {
+                      const input = e.currentTarget as HTMLInputElement;
+                      const file = input.files?.[0];
+                      input.value = '';
+                      // A photo from the library goes through exactly the same reading as a camera photo
+                      // (as an overview or a 2× close-up, whichever is selected above).
+                      if (file) void onPhoto(file, { zoom: kind === 'detail' ? 2 : 1, fix: null, auto: false, sensorTiltDeg: null });
+                    }}
+                  />
+                </label>
+              )}
+              {lastPhoto && (
+                <button class="chip" data-testid="show-photo" onClick={() => setShowPhoto(true)}>
+                  See the last photo
+                </button>
+              )}
+            </div>
           )}
           {kind === 'detail' && !target && covered >= 98 && <p class="chip ok">All close-ups done ✓</p>}
         </div>
       </TableCamera>
-      {note && (
-        <div
-          class={note.ok ? 'notice notice-good scan-note scan-note-top' : 'notice notice-bad scan-note scan-note-top'}
-          data-testid="scan-note"
-          role="status"
-          onClick={() => setNote(null)}
-        >
-          {note.lines.map((l) => (
-            <p key={l}>{l}</p>
-          ))}
+      {showPhoto && lastPhoto && <PhotoResult url={lastPhoto.url} size={lastPhoto.size} outlines={lastPhoto.outlines} onClose={() => setShowPhoto(false)} />}
+      {/* All of the note, over the camera; a tap anywhere closes it (the note stays). */}
+      {noteOpen && note && (
+        <div class="scan-note-sheet" data-testid="scan-note-sheet" onClick={() => setNoteOpen(false)}>
+          <div class={note.ok ? 'notice notice-good' : 'notice notice-bad'}>
+            {note.lines.map((l) => (
+              <p key={l}>{l}</p>
+            ))}
+          </div>
+          <button class="btn btn-primary" data-testid="scan-note-close">
+            Close
+          </button>
         </div>
       )}
-      {showPhoto && lastPhoto && <PhotoResult url={lastPhoto.url} size={lastPhoto.size} outlines={lastPhoto.outlines} onClose={() => setShowPhoto(false)} />}
     </>
   );
 }
@@ -740,34 +909,50 @@ export async function saveOpenSpots(project: Project, fin: FinishedCheck): Promi
   return project;
 }
 
-/** The finished-puzzle check in plain words. */
+/** The finished-puzzle count is the puzzle's grid, either way round (true when no grid is set). */
+export function gridMatches(g: Pick<Grid, 'cols' | 'rows'> | null | undefined, fin: Pick<FinishedCheck, 'cols' | 'rows'>): boolean {
+  return !g || (g.cols === fin.cols && g.rows === fin.rows) || (g.cols === fin.rows && g.rows === fin.cols);
+}
+
+/**
+ * The finished-puzzle check in plain words. What to do next (the saved empty spots, the loose pieces
+ * beside the puzzle) comes right after the count, before the long list of gaps: on a small screen the
+ * note shows only its first lines (review 2026-11-10).
+ */
 export function finishedLines(fin: FinishedCheck, project: Pick<Project, 'grid' | 'pieceCount' | 'box' | 'openSpots'>): string[] {
   const n = fin.cols * fin.rows;
+  const gaps = fin.gaps.length;
   const lines = [`Finished puzzle: ${fin.cols} across × ${fin.rows} down = ${n.toLocaleString('en')} pieces, counted from the seams.`];
   const g = project.grid;
+  const same = gridMatches(g, fin);
   if (g) {
-    const same = (g.cols === fin.cols && g.rows === fin.rows) || (g.cols === fin.rows && g.rows === fin.cols);
     lines.push(
       same
         ? `That matches your puzzle (${g.cols} × ${g.rows}).`
-        : `Your puzzle is set to ${g.cols} × ${g.rows}: check the grid, or take the photo again from straight above.`,
+        : `Your puzzle is set to ${g.cols} × ${g.rows}, so nothing was saved from this photo: check the grid, or take the photo again from straight above.`,
     );
   }
-  if (!fin.gaps.length) lines.push('No gaps found: every spot has a piece.');
+  if (same && gaps && project.openSpots && project.openSpots.gaps.length === gaps)
+    lines.push(
+      project.box
+        ? `Saved: your leftover pieces will now be matched only to these ${gaps} empty spots, one piece per spot. Scan the leftover pieces (or open Pieces on the puzzle's page).`
+        : `Saved these ${gaps} empty spots: add the box picture and your leftover pieces will be matched only to them.`,
+    );
+  // Loose pieces lying beside the puzzle are not added from this photo: say so (2026-11-10: they used
+  // to be skipped without a word).
+  const loose = fin.loose ?? 0;
+  if (loose === 1) lines.push('1 loose piece lies next to the puzzle. It was not added: to add it, take a photo of it away from the puzzle.');
+  else if (loose > 1)
+    lines.push(`About ${loose} loose pieces lie next to the puzzle. They were not added: to add them, take a photo of them away from the puzzle.`);
+  if (!gaps) lines.push('No gaps found: every spot has a piece.');
   else {
     const list = fin.gaps
       .slice(0, 6)
       .map(([c, r]) => `column ${c + 1}, row ${r + 1}`)
       .join('; ');
     lines.push(
-      `${fin.gaps.length === 1 ? '1 possible gap' : `${fin.gaps.length} possible gaps`} (red squares on the last photo; counted from the top left): ${list}${fin.gaps.length > 6 ? '; …' : ''}.`,
+      `${gaps === 1 ? '1 possible gap' : `${gaps} possible gaps`} (red squares on the last photo; counted from the top left): ${list}${gaps > 6 ? '; …' : ''}.`,
     );
-    if (project.openSpots && project.openSpots.gaps.length === fin.gaps.length)
-      lines.push(
-        project.box
-          ? `Saved: your leftover pieces will now be matched only to these ${fin.gaps.length} empty spots, one piece per spot. Scan the leftover pieces (or open Pieces on the puzzle's page).`
-          : `Saved these ${fin.gaps.length} empty spots: add the box picture and your leftover pieces will be matched only to them.`,
-      );
   }
   lines.push('This photo is not added to your pieces.');
   return lines;

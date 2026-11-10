@@ -80,3 +80,55 @@ describe('box placement', () => {
     for (const t of pl.top) (expect([0, 9]).toContain(t.col), expect([0, 7]).toContain(t.row));
   });
 });
+
+// The owner's puzzle size: enough cells (4032 spot × turn candidates) that the coarse level keeps
+// its best 48 without sorting them all (2026-11-10).
+describe('box placement at 28 × 36', () => {
+  it('pieces at the corners, on the edges and inside are found at their cell and turned the right way', () => {
+    const big = generatePuzzle({ cols: 28, rows: 36, cellMm: [17.8, 19.4], seed: 3 });
+    const a = big.art;
+    const bigBox = buildBoxGrid({ data: a.rgba, width: a.width, height: a.height, stride: a.width * 4 }, 28, 36);
+    const r = rng(7);
+    const d = new Uint8Array(a.rgba);
+    for (let i = 0; i < d.length; i += 4) for (let c = 0; c < 3; c++) d[i + c] = Math.max(0, Math.min(255, d[i + c]! + (r() - 0.5) * 16));
+    const photo = { data: d, width: a.width, height: a.height, stride: a.width * 4 };
+    const ids = ['r0c0', 'r0c27', 'r35c0', 'r35c27', 'r0c13', 'r17c0', 'r35c9', 'r20c27', 'r5c5', 'r18c14', 'r30c22', 'r9c20'];
+    let ok = 0;
+    for (const [j, id] of ids.entries()) {
+      const p = big.pieces.find((x) => x.id === id)!;
+      const q = j % 4;
+      const [sx, sy] = a.pxPerMm;
+      const cx = (p.col + 0.5) * big.cellMm[0];
+      const cy = (p.row + 0.5) * big.cellMm[1];
+      const toPx = (x: number, y: number): Vec2 => [(x + cx) * sx, (y + cy) * sy];
+      const corners: Vec2[] = [0, 1, 2, 3].map((k) => toPx(p.cornersMm[2 * k]!, p.cornersMm[2 * k + 1]!));
+      const outline: number[] = [];
+      for (let i = 0; i < p.outlineMm.length; i += 2) outline.push(...toPx(p.outlineMm[i]!, p.outlineMm[i + 1]!));
+      // Photographed turned: corners listed from corner q.
+      const turned = [0, 1, 2, 3].map((k) => corners[(k + q) % 4]!);
+      const t = placePiece(bigBox, extractPatch(photo, turned, outline)!).top[0]!;
+      if (t.col === p.col && t.row === p.row && t.rot === q) ok++;
+    }
+    expect(ok, `${ok}/${ids.length}`).toBeGreaterThanOrEqual(11);
+  });
+
+  it('spots that score exactly the same come in reading order, as when every candidate was sorted', () => {
+    // A plain picture and a plain piece: every spot clear of the picture's edges scores the same.
+    const W = 28 * 32;
+    const H = 36 * 32;
+    const pic = new Uint8Array(W * H * 4);
+    for (let i = 0; i < W * H; i++) pic.set([120, 90, 60, 255], i * 4);
+    const plainBox = buildBoxGrid({ data: pic, width: W, height: H, stride: W * 4 }, 28, 36);
+    const rgba = new Uint8Array(PATCH_SIZE * PATCH_SIZE * 4);
+    for (let i = 0; i < PATCH_SIZE * PATCH_SIZE; i++) rgba.set([120, 90, 60, 255], i * 4);
+    const pl = placePiece(plainBox, { size: PATCH_SIZE, rgba }, { topN: 99 });
+    expect(pl.top.map((t) => [t.col, t.row, t.rot])).toEqual([
+      [1, 1, 0],
+      [2, 1, 0],
+      [3, 1, 0],
+    ]);
+    expect(pl.top[1]!.score).toBe(pl.top[0]!.score);
+    expect(pl.top[2]!.p).toBe(pl.top[0]!.p);
+    expect(pl.verdict).toBe('several');
+  });
+});

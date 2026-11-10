@@ -81,7 +81,8 @@ export function TrayLabelsScreen() {
 }
 
 function Labels({ project, pieces }: { project: Project; pieces: PieceRow[] }) {
-  const { groups, colours } = useColourGroups(true, project, pieces);
+  // With the pieces in trays: each label shows those most of one colour.
+  const { groups, colours } = useColourGroups(true, project, pieces, true);
   const [thumbs, setThumbs] = useState<Map<number, string[]> | null>(null);
   const [shareNote, setShareNote] = useState<{ url: string; name: string } | null>(null);
   const [printError, setPrintError] = useState<string | null>(null);

@@ -2,9 +2,9 @@
  * New puzzle wizard (PLAN §5), steps 0–4, plus the printable marker sheets page.
  *
  *   0. Home Screen check (Safari tab only)   3. Grid (suggested from count + picture shape)
- *   1. Name and piece count                  4. Print markers + ruler check (print scale)
- *   2. Box picture: photo → corners → straightened picture
- *   5. (placeholder) Lay out markers and photograph the empty table — built separately.
+ *   1. Name and piece count                  4. Ready to scan (no printing), or with printed markers:
+ *   2. Box picture: photo → corners →           Print markers + ruler check (print scale)
+ *      straightened picture                  5. (markers only) Lay out markers and photograph the empty table
  *
  * Every answer is saved the moment it is given; `Project.setupStep` is the next step to show, so
  * leaving and coming back (or iOS reloading the app) resumes where the owner was.
@@ -36,7 +36,7 @@ import { MARKER_SHEET_PRINT_CSS, markerSheetSvg, markerSheetsHtml, SHEET_COUNT }
 import { CHECK_BAR_MM, MARKER_COUNT } from '../../markers/layout';
 import { shareOrDownload } from '../../report/share';
 import { logError, logInfo, logWarn } from '../../log/logger';
-import { errorWords, SETUP_STEPS, useBlobUrl } from './Puzzle';
+import { errorWords, setupSteps, UNREADABLE_PHOTO, useBlobUrl } from './Puzzle';
 import { StepTable } from './StepTable';
 
 const COMMON_COUNTS = [500, 1000, 1500, 2000];
@@ -70,6 +70,12 @@ function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   });
 }
 
+/** An error about a photo, for the screen: "That photo couldn't be used: …", or only the plain words for a photo that can't be read. */
+function photoError(lead: string, err: unknown, tail = ''): string {
+  const words = errorWords(err);
+  return words === UNREADABLE_PHOTO ? words : `${lead}: ${words}${tail}`;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Wizard shell
 // ---------------------------------------------------------------------------------------------
@@ -92,7 +98,8 @@ export function NewPuzzleScreen() {
         if (!live) return;
         setProject(p ?? null);
         if (p) {
-          setStep(Math.min(PLACEHOLDER_STEP, Math.max(1, p.setupStep)));
+          // The last step of the way it is set up (step 4 without printing).
+          setStep(Math.min(setupSteps(p).length - 1, Math.max(1, p.setupStep)));
           void setCurrentProjectId(p.id).catch(() => {});
         }
       })
@@ -176,7 +183,7 @@ export function NewPuzzleScreen() {
   return (
     <main class="screen wizard" data-testid="wizard" data-step={step}>
       <WizardTop title={project?.name ?? 'New puzzle'} onBack={back} onClose={() => (project ? go('puzzle', project.id) : go('home'))} />
-      {step >= 1 && <StepDots step={step} reached={project?.setupStep ?? 1} />}
+      {step >= 1 && <StepDots step={step} reached={project?.setupStep ?? 1} steps={setupSteps(project ?? { tracking: 'pieces' })} />}
       {step === 0 && <StepInstall onContinue={() => setStep(1)} />}
       {step === 1 && <StepNameCount project={project ?? null} ensureProject={ensureProject} save={save} onNext={async (p) => advance(2, p)} />}
       {step === 2 && project && <StepBox project={project} save={save} onNext={() => advance(3)} />}
@@ -209,15 +216,17 @@ function WizardTop({ title, onBack, onClose }: { title: string; onBack: () => vo
   );
 }
 
-function StepDots({ step, reached }: { step: number; reached: number }) {
+/** "Step 4 of 4 · Ready to scan": the steps of the way the puzzle is set up (4 without printing, 5 with printed markers). */
+function StepDots({ step, reached, steps }: { step: number; reached: number; steps: readonly string[] }) {
+  const last = steps.length - 1;
   return (
-    <div class="step-dots" aria-label={`Step ${step} of 5`}>
+    <div class="step-dots" aria-label={`Step ${step} of ${last}`}>
       <span class="step-count" data-testid="step-count">
-        Step {step} of 5 · {SETUP_STEPS[step]}
+        Step {step} of {last} · {steps[step]}
       </span>
       <span class="dots">
-        {[1, 2, 3, 4, 5].map((s) => (
-          <span key={s} class={`dot${s === step ? ' is-current' : s < reached ? ' is-done' : ''}`} />
+        {steps.slice(1).map((_, i) => (
+          <span key={i + 1} class={`dot${i + 1 === step ? ' is-current' : i + 1 < reached ? ' is-done' : ''}`} />
         ))}
       </span>
     </div>
@@ -466,7 +475,7 @@ function StepBox({ project, save, onNext }: { project: Project; save: (patch: Pr
       .catch((err) => {
         logError('wizard', 'The saved box photo could not be opened', err);
         if (live) {
-          setError(`The saved photo couldn't be opened: ${errorWords(err)}. Please take it again.`);
+          setError(photoError("The saved photo couldn't be opened", err, '. Please take it again.'));
           setPhase({ kind: 'choose' });
         }
       });
@@ -493,7 +502,7 @@ function StepBox({ project, save, onNext }: { project: Project; save: (patch: Pr
       await openCorners(photo, null);
     } catch (err) {
       logError('wizard', 'The box photo could not be used', err);
-      setError(`That photo couldn't be used: ${errorWords(err)}`);
+      setError(photoError("That photo couldn't be used", err));
       setPhase({ kind: 'choose' });
     }
   };
@@ -539,7 +548,7 @@ function StepBox({ project, save, onNext }: { project: Project; save: (patch: Pr
       setPhase({ kind: 'done' });
     } catch (err) {
       logError('wizard', 'The box picture could not be straightened', err);
-      setError(`The picture couldn't be straightened: ${errorWords(err)}`);
+      setError(photoError("The picture couldn't be straightened", err));
       setPhase(keep.kind === 'corners' ? keep : { kind: 'choose' });
     }
   };

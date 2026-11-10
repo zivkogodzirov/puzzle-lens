@@ -33,6 +33,8 @@ const colourCache = new Map<string, PieceColours | null>();
 
 const keyOf = (p: PieceRow) => `${p.patch!.blobId}|${p.patch!.ts}`;
 const pause = () => new Promise((r) => setTimeout(r, 0));
+/** Longest run (ms) between breaks for the screen while reading many pieces' colours. */
+const YIELD_MS = 30;
 
 /** Longest side a saved photo is decoded at to measure the table around pieces (plenty at 2–4 mm out). */
 const PHOTO_SIDE = 2000;
@@ -110,8 +112,11 @@ export interface PieceColourSet {
 /**
  * Each piece's colours: from its patch, evened out to the typical light of all the pieces' photos
  * (the median table colour), or, for pieces scanned before M4 (no patch), their mean colour.
+ * `need` picks the pieces whose colours are worked out (default: all). The typical light, and the
+ * count of pieces it couldn't be evened out for, are still from all `pieces`: from the table pieces
+ * alone the light changed, and with it the trays of 25 of 300 pieces (measured 2026-11-10).
  */
-export async function loadPieceColours(pieces: PieceRow[]): Promise<PieceColourSet> {
+export async function loadPieceColours(pieces: PieceRow[], need: (p: PieceRow) => boolean = () => true): Promise<PieceColourSet> {
   await lightsFromPhotos(pieces);
   const lights = pieces.map(lightOf).filter((l): l is Rgb => Boolean(l));
   // Rounded so a few more pieces don't change it (and the groups) every time.
@@ -119,26 +124,31 @@ export async function loadPieceColours(pieces: PieceRow[]): Promise<PieceColourS
   const ref = lights.length ? ([0, 1, 2].map((c) => Math.round(median(c) / 4) * 4) as Rgb) : null;
   const colours = new Map<string, PieceColours>();
   let uneven = 0;
-  let done = 0;
+  // Keep the screen responsive on a big catalog: a break whenever this has run for a while (the
+  // patches may all be read already, and then only the sums take time).
+  let since = performance.now();
   for (const p of pieces) {
+    if (p.patch && !lightOf(p)) uneven++;
+    if (!need(p)) continue;
     let pc: PieceColours | null = null;
     if (p.patch) {
       const key = keyOf(p);
       if (!patchCache.has(key)) {
         const b = await getBlob(p.patch.blobId);
         patchCache.set(key, b ? new Uint8Array(await b.arrayBuffer()) : null);
-        // Keep the screen responsive on a big catalog.
-        if (++done % 40 === 0) await pause();
       }
       const rgba = patchCache.get(key);
       const light = lightOf(p);
-      if (!light) uneven++;
       const ck = `${key}|${light?.join(',') ?? '-'}|${ref?.join(',') ?? '-'}`;
       if (!colourCache.has(ck)) colourCache.set(ck, rgba ? pieceColours(light && ref ? evenLight(rgba, light, ref) : rgba) : null);
       pc = colourCache.get(ck) ?? null;
     }
     pc ??= { main: p.colour.meanLab, mainShare: 1, second: null, secondShare: 0 };
     colours.set(p.id, pc);
+    if (performance.now() - since > YIELD_MS) {
+      await pause();
+      since = performance.now();
+    }
   }
   return { colours, uneven };
 }

@@ -96,7 +96,7 @@ export function TableContrast({ project, pieces, boxUrl }: { project: Project; p
     <div class="notice notice-warn small" data-testid="contrast-warn">
       <p>
         <strong>Table contrast:</strong> about {pc} % of the picture is close to your table’s colour. Pieces from there stand out little, so a scan may miss
-        them: check they’re found, or sort them on a darker cloth. {toggle}
+        them: check they’re found. {toggle}
       </p>
       {map}
     </div>

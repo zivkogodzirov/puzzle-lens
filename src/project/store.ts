@@ -16,10 +16,14 @@ export const printScaleKey = (projectId: string): string => `printScale:${projec
 
 export const LAST_SETUP_STEP = 6;
 
-/** Settings key of a puzzle's scan bin (deleted scan, restorable; src/project/scans.ts). */
 /** Settings row holding a puzzle's box placements (M4, src/project/placements.ts). */
 export const placementKey = (projectId: string): string => `placement:${projectId}`;
+/** Settings key of a puzzle's scan bin (deleted scan, restorable; src/project/scans.ts). */
 export const scanBinKey = (projectId: string): string => `scanBin:${projectId}`;
+/** Settings key of the bin's size (when deleted, pieces, photos), kept next to it so it can be shown without reading the whole bin. */
+export const scanBinSummaryKey = (projectId: string): string => `scanBinSummary:${projectId}`;
+/** Settings key of the ids that show the bin's size row still fits the bin (scans.ts BinCheck). */
+export const scanBinCheckKey = (projectId: string): string => `scanBinCheck:${projectId}`;
 
 export type ProjectPatch = Partial<Omit<Project, 'id' | 'createdAt'>>;
 
@@ -163,6 +167,8 @@ export async function deleteProject(id: string): Promise<void> {
     await d.blobs.bulkDelete(blobIds);
     await d.settings.delete(printScaleKey(id));
     await d.settings.delete(scanBinKey(id));
+    await d.settings.delete(scanBinSummaryKey(id));
+    await d.settings.delete(scanBinCheckKey(id));
     await d.settings.delete(placementKey(id));
     const current = await d.settings.get(CURRENT_PROJECT_KEY);
     if (current?.value === id) await d.settings.delete(CURRENT_PROJECT_KEY);
@@ -208,13 +214,21 @@ export async function deleteBlob(id: string): Promise<void> {
 export async function countPiecesByStatus(
   projectId: string,
 ): Promise<{ table: number; missing: number; tray: number; placed: number; pending: number; aside: number; all: number }> {
-  const rows = await db().pieces.where('projectId').equals(projectId).toArray();
-  const n = (s: PieceRow['status']) => rows.filter((p) => p.status === s).length;
-  const missing = n('missing');
-  const tray = n('tray');
-  const placed = n('placed');
-  const aside = n('aside');
-  return { table: rows.length - missing - tray - placed - aside, missing, tray, placed, pending: n('pending'), aside, all: rows.length };
+  // Counted from the indexes, without reading the pieces (review 2026-11-10: the puzzle page read
+  // every piece just to count them, on opening and after every ✓ Fits).
+  const d = db();
+  return d.transaction('r', d.pieces, async () => {
+    const n = (s: PieceRow['status']) => d.pieces.where('[projectId+status]').equals([projectId, s]).count();
+    const [all, missing, tray, placed, pending, aside] = await Promise.all([
+      d.pieces.where('projectId').equals(projectId).count(),
+      n('missing'),
+      n('tray'),
+      n('placed'),
+      n('pending'),
+      n('aside'),
+    ]);
+    return { table: all - missing - tray - placed - aside, missing, tray, placed, pending, aside, all };
+  });
 }
 
 /** Number of pieces catalogued for a puzzle. */

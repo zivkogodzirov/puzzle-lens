@@ -374,7 +374,18 @@ input[type='number'] {
   right: 12px;
   bottom: calc(var(--safe-bottom) + 130px);
   background: rgba(16, 20, 24, 0.92);
-  color: var(--text);
+  /* Always on the dark box: light text in both themes (the light theme's dark text was unreadable, 2026-11-10). */
+  color: #eef2f6;
+}
+/* Puzzle camera with the camera off (refused, paused): under the top bar, where the gauge would be, so it
+   no longer lands on the buttons at the bottom. While the camera is live (a failed photo, a frame error)
+   it stays at the bottom as before, so it doesn't hide the gauge or "Allow the tilt sensor". */
+.table-camera .live-notice-off {
+  top: calc(var(--safe-top) + 64px);
+  bottom: auto;
+  z-index: 4;
+  max-height: 40vh;
+  overflow: auto;
 }
 .live-notice p {
   margin: 0 0 8px;
@@ -429,6 +440,9 @@ pre.logbox {
   height: 1px;
   opacity: 0;
   pointer-events: none;
+  /* WebKit draws the file input's own button and text (~77 px) past this 1 px box; outside a
+     .file-btn nothing clipped it, so Device check scrolled sideways by 61 px (2026-11-10 app review). */
+  overflow: hidden;
 }
 
 /* device-check + report (fork) */
@@ -886,7 +900,99 @@ pre.logbox {
 .coverage-map { max-height: 16vh; }
 .photo-result { z-index: 50; }
 .coin-pick select { margin-left: 4px; background: rgba(0,0,0,0.5); color: #fff; min-height: 32px; }
-.scan-note-top { position: fixed; left: 12px; right: 12px; top: calc(var(--safe-top) + 196px); z-index: 6; max-height: 24vh; overflow: auto; font-size: 14px; color: var(--text); background: var(--panel); }
+/* The scan panel's room (M8 part 4, 2026-11-10): at most half the screen, and below the gauge, which ends
+   about safe-top + 278 px when its message takes two lines. It grows from the bottom; when it is full, the
+   result note scrolls and the map shrinks (down to 10vh), so the note doesn't cover the gauge or the buttons
+   and the map with the next close-up's dashed box stays in view. If even that doesn't fit, the panel shows
+   above its room (up to half the screen, as before) instead of being cut off. */
+.table-camera .table-camera-extra { height: 50vh; }
+.table-camera .scan-panel { max-height: min(50vh, calc(100vh - var(--safe-top) - var(--safe-bottom) - 406px)); justify-content: flex-end; }
+.table-camera .scan-panel > * { flex-shrink: 0; }
+.table-camera .scan-panel > p { margin: 0; }
+.table-camera .scan-panel .coverage-map { flex-shrink: 8; min-height: 10vh; }
+/* Short screens (Safari with its bars): the map may shrink a little more. */
+@media (max-height: 760px) {
+  .table-camera .scan-panel .coverage-map { min-height: 8vh; }
+}
+/* The result note gets the room first (review 2026-11-10: squeezed to 2-3 lines, its key lines out of view,
+   nothing saying there was more). While it shows:
+   - the panel reaches up to what is drawn at the top: --scan-top under the safe area is the gauge's lowest
+     (278 px, a two-line message) + 8 px, unless something shorter is there instead: "Allow the tilt sensor"
+     (two lines, to 116 px), "Resume camera", which moves up under the top bar (to 116 px), or the camera's
+     problem box, made one row (to about 144 px). The box is placed from the screen's real top and
+     bottom (not 100vh, which is taller than the screen in Safari with its bars). Never clipped: if even the
+     note's least doesn't fit, it shows above its room rather than being cut off;
+   - "Aim at…" (the map's dashed box stays), an overview's map (nothing to aim at) and the map's extra
+     height make room;
+   - what still doesn't fit scrolls, and "More ▾" in its corner (Scan.tsx) opens all of it. */
+.table-camera { --scan-top: 286px; }
+.table-camera:has(> [data-testid='allow-tilt']):not(:has(> .gauge-wrap)) { --scan-top: 124px; }
+.table-camera:has(.scan-panel.camera-paused.has-note) { --scan-top: 124px; }
+/* Camera refused: while a note shows, its problem box is one row, its words (two lines at most, all of them
+   back when the note is tapped away) beside "Start camera". */
+.table-camera:has(.scan-panel.has-note) > .live-notice-off { display: flex; align-items: center; gap: 10px; overflow: hidden; }
+.table-camera:has(.scan-panel.has-note) > .live-notice-off > p { flex: 1; min-width: 0; margin: 0; font-size: 15px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.table-camera:has(.scan-panel.has-note) > .live-notice-off > button { flex: none; }
+.table-camera:has(> .live-notice-off):has(.scan-panel.has-note) { --scan-top: 152px; }
+.table-camera:has(.scan-panel.camera-paused.has-note) > .live-center { justify-content: flex-start; padding-top: calc(var(--safe-top) + 64px); }
+.table-camera .table-camera-extra:has(> .scan-panel.has-note) { top: calc(var(--safe-top) + var(--scan-top)); height: auto; max-height: none; overflow: visible; }
+.table-camera .scan-panel.has-note { max-height: 100%; }
+.table-camera .scan-panel.has-note .scan-aim,
+.table-camera[data-mode='overview'] .scan-panel.has-note .coverage-map { display: none; }
+.table-camera .scan-panel.has-note .coverage-map { min-height: 8vh; }
+/* With the gauge shown, a finished puzzle's note still showed only its count (check 2026-11-10). A note that
+   doesn't all fit (Scan.tsx needs-room; only that note, so a short one keeps everything as it was) gets more:
+   the coin chooser makes room (back when the note is tapped away), and while no photo takes itself (after a
+   finished puzzle, or a photo that couldn't be used: Scan.tsx auto-off) the gauge is smaller (a 72 px face,
+   no height line) and the note reaches up to it: its lowest with a two-line message is 208 px, + 8.
+   Upright only: sideways the note has its own column (below). */
+@media not all and (orientation: landscape) and (max-height: 500px) {
+  .table-camera .scan-panel.has-note.needs-room .coin-pick { display: none; }
+  .table-camera:has(.scan-panel.has-note.needs-room.auto-off) .gauge svg { width: 72px; height: 72px; }
+  .table-camera:has(.scan-panel.has-note.needs-room.auto-off) .gauge-sub { display: none; }
+  .table-camera:has(> .gauge-wrap):has(.scan-panel.has-note.needs-room.auto-off) { --scan-top: 216px; }
+}
+/* Its least is as before (about two lines): any more and, on a small screen with the gauge, the panel would reach up over the gauge. */
+.table-camera .scan-panel .scan-note-box { position: relative; display: flex; flex-direction: column; flex-shrink: 1; min-height: 52px; width: min(92vw, 440px); }
+.table-camera .scan-panel .scan-note-panel { flex: 0 1 auto; min-height: 0; margin: 0; max-height: none; overflow: auto; font-size: 14px; color: var(--text); background: var(--panel); }
+/* On the note's lower edge (it covers as little of the last lines as it can), with a bigger place to tap than it looks. */
+.scan-note-more { position: absolute; right: 8px; bottom: -4px; z-index: 1; min-height: 24px; padding: 0 11px; border: 0; border-radius: 12px; background: var(--accent); color: #04121f; font-size: 13px; font-weight: 700; line-height: 24px; box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4); }
+.scan-note-more::before { content: ''; position: absolute; inset: -12px -8px -2px -12px; }
+/* A note squeezed to its least (about two lines, Scan.tsx "tight"): its second line is at the very bottom, so
+   "More ▾" sits on the top edge instead, over the padding only, to the right of the gauge (at most half the
+   screen wide, centred) and of "Resume camera". Check 2026-11-10: it covered the end of that line. */
+.table-camera .scan-note-box.tight .scan-note-more { top: -15px; bottom: auto; }
+.table-camera .scan-note-box.tight .scan-note-more::before { inset: -2px -8px -12px -12px; }
+/* Centred while it fits; a longer one scrolls from its top (auto margins, not justify-content: center, which would cut its top off). */
+.scan-note-sheet { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: calc(var(--safe-top) + 16px) 16px calc(var(--safe-bottom) + 16px); overflow-y: auto; background: rgba(0, 0, 0, 0.82); }
+.scan-note-sheet .notice { flex: none; width: min(100%, 560px); margin: auto 0 0; color: var(--text); text-align: left; }
+.scan-note-sheet .btn { flex: none; margin-bottom: auto; }
+.scan-note-sheet .notice p { margin: 4px 0; }
+/* A phone held sideways: the gauge and the panel fill the middle from top to bottom, so the note goes to the
+   free column on the left, from under the top bar (or "Allow the tilt sensor", or the camera's problem box,
+   which reach across) down to the bottom. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .table-camera { --scan-side-top: 64px; }
+  .table-camera:has(> [data-testid='allow-tilt']) { --scan-side-top: 124px; }
+  .table-camera:has(> .live-notice-off):has(.scan-panel.has-note) { --scan-side-top: 152px; }
+  .table-camera .table-camera-extra:has(> .scan-panel.has-note) { top: auto; height: 50vh; overflow: hidden; }
+  .table-camera .scan-panel.has-note { max-height: min(50vh, calc(100vh - var(--safe-top) - var(--safe-bottom) - 406px)); }
+  .table-camera:has(.scan-panel.camera-paused.has-note) > .live-center { justify-content: center; padding-top: 24px; }
+  /* The column ends 178 px left of the middle: a long gauge message (it made the gauge up to half the screen
+     wide) wraps narrower so the gauge (at most 348 px) stays clear of it. */
+  .table-camera:has(.scan-panel.has-note) .gauge-msg { max-width: 320px; }
+  /* The coin chooser makes room while any note shows (check 2026-11-10: with it, the middle panel reached up over
+     "Allow the tilt sensor" and the camera's problem box). It is back when the note is tapped away. */
+  .table-camera .scan-panel.has-note .coin-pick { display: none; }
+  .table-camera .scan-panel .scan-note-box {
+    position: fixed;
+    left: calc(env(safe-area-inset-left, 0px) + 12px);
+    top: calc(var(--safe-top) + var(--scan-side-top));
+    width: calc(50vw - 190px - env(safe-area-inset-left, 0px));
+    max-height: calc(100dvh - var(--safe-top) - var(--scan-side-top) - var(--safe-bottom) - 12px);
+  }
+}
+.scan-photo-row { flex-wrap: wrap; justify-content: center; gap: 6px; }
 .res-assembled { stroke: #3ccf7a; stroke-width: 3; }
 .res-object { stroke: #ff6b6b; stroke-dasharray: 3 3; }
 .res-finished { stroke: #3ccf7a; stroke-width: 4; }
@@ -965,9 +1071,13 @@ pre.logbox {
 .live-table-legend { color: #fff; margin: 4px 0 0; }
 
 /* ---------- What to test (owner's request: the test steps inside the app) ---------- */
-.test-tab { position: fixed; right: 0; top: 56%; z-index: 90; display: flex; flex-direction: column; align-items: center; gap: 1px; width: 40px; padding: 7px 0 6px; border: 1px solid rgba(255, 255, 255, 0.3); border-right: 0; border-radius: 12px 0 0 12px; background: rgba(34, 42, 51, 0.82); color: #fff; font-size: 18px; line-height: 1; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); }
-.test-tab-word { font-size: 10px; font-weight: 700; letter-spacing: 0.02em; }
-.test-tab-dot { position: absolute; top: 4px; left: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--bad); }
+/* 2026-11-10 (app review): the 40 px tab covered card edges, thumbnails, Help text and camera controls.
+   Now a 16 px handle that fits in the screens' 16 px side margin, so it covers nothing on the normal
+   screens and only a thin strip of the camera picture. Not faded (a faded handle and its red dot were
+   too faint in light mode), and tall (about 90 px) to make up for the narrow width when tapping. */
+.test-tab { position: fixed; right: env(safe-area-inset-right, 0px); top: 56%; z-index: 90; display: flex; flex-direction: column; align-items: center; gap: 5px; width: 16px; padding: 24px 0; border: 1px solid rgba(255, 255, 255, 0.4); border-right: 0; border-radius: 8px 0 0 8px; background: rgba(34, 42, 51, 0.85); color: #fff; font-size: 11px; line-height: 1; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); touch-action: manipulation; }
+.test-tab-word { writing-mode: vertical-rl; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; }
+.test-tab-dot { order: -1; flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--bad); }
 .test-sheet { position: fixed; inset: 0; z-index: 95; overflow-y: auto; background: var(--bg); color: var(--text); padding: calc(var(--safe-top) + 12px) 16px calc(var(--safe-bottom) + 20px); }
 .test-sheet-bar { display: flex; align-items: center; gap: 10px; font-size: 18px; }
 .test-sheet-bar .grow { flex: 1; }

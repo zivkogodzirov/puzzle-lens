@@ -562,9 +562,12 @@ function classify(img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: nu
       const dr = R - a * eR;
       const dg = G - a * eG;
       const db = B - a * eB;
-      const c = Math.sqrt((dr * dr + dg * dg + db * db) / ee) / Math.max(a, 0.15);
+      const d2 = dr * dr + dg * dg + db * db;
+      const c = Math.sqrt(d2 / ee) / Math.max(a, 0.15);
       chroma[p] = c;
-      const dl = Math.hypot(dr, dg, db) || 1;
+      // √ of the sum already formed, not Math.hypot: hypot's overflow-safe scaling made it ~30 % of
+      // this loop (review 2026-11-10); these values are far from overflow.
+      const dl = Math.sqrt(d2) || 1;
       hue[p * 3] = dr / dl;
       hue[p * 3 + 1] = dg / dl;
       hue[p * 3 + 2] = db / dl;
@@ -635,7 +638,6 @@ function classify(img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: nu
   // Breadth-first, at most `litSideMm` from the print (a lit side is a few mm wide; further
   // growth would leak along shadows between touching pieces).
   const maxSteps = Math.max(1, Math.round(SEG.litSideMm * sppm));
-  const depth = new Uint16Array(n);
   let queue: number[] = [];
   for (let p = 0; p < n; p++) if (cls[p] === STRONG || cls[p] === WEAK) queue.push(p);
   for (let step = 1; step <= maxSteps && queue.length; step++) {
@@ -649,7 +651,6 @@ function classify(img: SmallRgb, field: LightField, ignore: Uint8Array, sppm: nu
         if (hue[p * 3]! * hue[q * 3]! + hue[p * 3 + 1]! * hue[q * 3 + 1]! + hue[p * 3 + 2]! * hue[q * 3 + 2]! < SEG.litSideCos) continue;
         // Piece-coloured and joined to print: as good evidence as print itself.
         cls[q] = STRONG;
-        depth[q] = step;
         next.push(q);
       }
     }
@@ -763,30 +764,62 @@ function explainShadows(
   const span = Math.ceil(Math.abs(slope) * nMaj) + 1;
   const toPale: number[] = [];
   const explained = new Uint8Array(w * h);
-  const line: number[] = [];
+  // One line's pixel indexes, reused for every line (a number[] grown by push was ~⅓ of this
+  // step, review 2026-11-10).
+  const line = new Int32Array(nMaj);
   const kind = (q: number) => (q < 0 || ignore[q] ? TABLE : cls[q] === GLARE ? TABLE : cls[q]!);
+  // Minor-axis position of step t; monotonic in t, so a line's on-image steps are one run of t.
+  const onImage = (m0: number, t: number) => {
+    const b = Math.round(m0 + slope * t);
+    return b >= 0 && b < nMin;
+  };
   for (let m0 = -span; m0 < nMin + span; m0++) {
-    line.length = 0;
-    for (let t = 0; t < nMaj; t++) {
+    // The run's ends by bisection, instead of stepping through the off-image part of the line (up
+    // to ¾ of all steps when the light comes diagonally). Past the run's end nothing more is on
+    // the image, which reads the same as the line's end.
+    let t0 = 0;
+    let t1 = nMaj;
+    if (!onImage(m0, 0)) {
+      // The run starts after t = 0: find where b crosses into [0, nMin) (if it does at all).
+      const below = Math.round(m0) < 0;
+      let lo = 0;
+      let hi = nMaj;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        const b = Math.round(m0 + slope * mid);
+        if (below ? b < 0 : b >= nMin) lo = mid;
+        else hi = mid;
+      }
+      if (hi >= nMaj || !onImage(m0, hi)) continue;
+      t0 = hi;
+    }
+    if (!onImage(m0, nMaj - 1)) {
+      let lo = t0;
+      let hi = nMaj - 1;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (onImage(m0, mid)) lo = mid;
+        else hi = mid;
+      }
+      t1 = lo + 1;
+    }
+    let ln = 0;
+    for (let t = t0; t < t1; t++) {
       const a = sMaj > 0 ? t : nMaj - 1 - t;
       const b = Math.round(m0 + slope * t);
-      if (b < 0 || b >= nMin) {
-        if (line.length) line.push(-1);
-        continue;
-      }
-      line.push(major === 0 ? b * w + a : a * w + b);
+      line[ln++] = major === 0 ? b * w + a : a * w + b;
     }
     // Scan runs of SHADOW along the line.
     let i = 0;
-    while (i < line.length) {
-      if (line[i]! < 0 || kind(line[i]!) !== SHADOW) {
+    while (i < ln) {
+      if (kind(line[i]!) !== SHADOW) {
         i++;
         continue;
       }
       let j = i;
-      while (j < line.length && line[j]! >= 0 && kind(line[j]!) === SHADOW) j++;
-      const before = i > 0 && line[i - 1]! >= 0 ? kind(line[i - 1]!) : TABLE;
-      const after = j < line.length && line[j]! >= 0 ? kind(line[j]!) : TABLE;
+      while (j < ln && kind(line[j]!) === SHADOW) j++;
+      const before = i > 0 ? kind(line[i - 1]!) : TABLE;
+      const after = j < ln ? kind(line[j]!) : TABLE;
       const L = (j - i) * stepLen;
       const fgB = isFg(before) || before === PALE;
       const fgA = isFg(after) || after === PALE;
@@ -1295,60 +1328,77 @@ function peelRegions(
       }
     }
     if (!pieceParts) continue;
+    // Typed queue and unrolled neighbours, typed boxes instead of a Map: an assembled area is
+    // millions of small px, and the array literals per pixel took half of this step (review
+    // 2026-11-10).
     const owner = new Int32Array(bw * bh).fill(-1);
-    const queue: number[] = [];
+    const queue = new Int32Array(bw * bh);
+    let qn = 0;
     for (let q = 0; q < bw * bh; q++) {
       const j = parts.lab[q]!;
       if (j > 0) {
         owner[q] = j;
-        queue.push(q);
+        queue[qn++] = q;
       }
     }
-    for (let qi = 0; qi < queue.length; qi++) {
+    for (let qi = 0; qi < qn; qi++) {
       const q = queue[qi]!;
       const x = q % bw;
       const y = (q - x) / bw;
-      for (const [dx, dy] of [
-        [1, 0],
-        [-1, 0],
-        [0, 1],
-        [0, -1],
-      ] as const) {
-        const xx = x + dx;
-        const yy = y + dy;
-        if (xx < 0 || yy < 0 || xx >= bw || yy >= bh) continue;
-        const t = yy * bw + xx;
-        if (!roi[t] || owner[t]! >= 0) continue;
-        owner[t] = owner[q]!;
-        queue.push(t);
+      const o = owner[q]!;
+      // Same neighbour order as before (right, left, down, up): it decides which part a pixel joins.
+      if (x + 1 < bw && roi[q + 1] && owner[q + 1]! < 0) {
+        owner[q + 1] = o;
+        queue[qn++] = q + 1;
+      }
+      if (x > 0 && roi[q - 1] && owner[q - 1]! < 0) {
+        owner[q - 1] = o;
+        queue[qn++] = q - 1;
+      }
+      if (y + 1 < bh && roi[q + bw] && owner[q + bw]! < 0) {
+        owner[q + bw] = o;
+        queue[qn++] = q + bw;
+      }
+      if (y > 0 && roi[q - bw] && owner[q - bw]! < 0) {
+        owner[q - bw] = o;
+        queue[qn++] = q - bw;
       }
     }
+    const nl0 = nl;
     const newId = new Int32Array(parts.n);
     for (let j = 1; j < parts.n; j++) if (isPiece[j]) newId[j] = nl++;
-    const boxes = new Map<number, number[]>();
-    for (let q = 0; q < bw * bh; q++) {
-      if (!roi[q]) continue;
-      const o = owner[q]!;
-      const id = o > 0 && isPiece[o] ? newId[o]! : i;
-      const x = x0 + (q % bw);
-      const y = y0 + Math.floor(q / bw);
-      lab[y * w + x] = id;
-      let b = boxes.get(id);
-      if (!b) boxes.set(id, (b = [Infinity, Infinity, -Infinity, -Infinity, 0]));
-      b[0] = Math.min(b[0]!, x);
-      b[1] = Math.min(b[1]!, y);
-      b[2] = Math.max(b[2]!, x);
-      b[3] = Math.max(b[3]!, y);
-      b[4] = b[4]! + 1;
+    // Box slot 0 is what stays region i; slot s ≥ 1 is new label nl0 + s − 1.
+    const K = nl - nl0 + 1;
+    const bx0 = new Int32Array(K).fill(0x7fffffff);
+    const by0 = new Int32Array(K).fill(0x7fffffff);
+    const bx1 = new Int32Array(K).fill(-1);
+    const by1 = new Int32Array(K).fill(-1);
+    const bn = new Int32Array(K);
+    for (let yy = 0, q = 0; yy < bh; yy++)
+      for (let xx = 0; xx < bw; xx++, q++) {
+        if (!roi[q]) continue;
+        const o = owner[q]!;
+        const id = o > 0 && isPiece[o] ? newId[o]! : i;
+        const s = id === i ? 0 : id - nl0 + 1;
+        const x = x0 + xx;
+        const y = y0 + yy;
+        lab[y * w + x] = id;
+        if (x < bx0[s]!) bx0[s] = x;
+        if (y < by0[s]!) by0[s] = y;
+        if (x > bx1[s]!) bx1[s] = x;
+        if (y > by1[s]!) by1[s] = y;
+        bn[s]!++;
+      }
+    for (let s = 0; s < K; s++) {
+      if (!bn[s]) continue;
+      const id = s === 0 ? i : nl0 + s - 1;
+      st[id * 5] = bx0[s]!;
+      st[id * 5 + 1] = by0[s]!;
+      st[id * 5 + 2] = bx1[s]! - bx0[s]! + 1;
+      st[id * 5 + 3] = by1[s]! - by0[s]! + 1;
+      st[id * 5 + 4] = bn[s]!;
     }
-    for (const [id, b] of boxes) {
-      st[id * 5] = b[0]!;
-      st[id * 5 + 1] = b[1]!;
-      st[id * 5 + 2] = b[2]! - b[0]! + 1;
-      st[id * 5 + 3] = b[3]! - b[1]! + 1;
-      st[id * 5 + 4] = b[4]!;
-    }
-    if (!boxes.has(i)) st[i * 5 + 4] = 0;
+    if (!bn[0]) st[i * 5 + 4] = 0;
   }
   return { nl, st: Int32Array.from(st), lab };
 }
@@ -2515,14 +2565,18 @@ export function estimatePxPerMm(
 ): { pxPerMm: number; nPieces: number } | null {
   // First guess: a hand-held overview at 1× (~4 px/mm at 12 MP), close-ups at 2×.
   const base = ((opts.zoom ?? 1) >= 2 ? 9 : 4) * (Math.max(rgba.width, rgba.height) / 4032);
-  const first = estimateFrom(cv, rgba, opts, base);
+  // One ~1000 px copy for every guess below (the shrink is the same whatever the guess, and each
+  // one cost 100–150 ms on a 12 MP photo, review 2026-11-10).
+  const factor = Math.max(1, Math.max(rgba.width, rgba.height) / SEG.scaleWidth);
+  const img = shrinkRgb(rgba, factor);
+  const first = estimateFrom(cv, img, opts, base);
   if (first && first.nPieces >= SCALE_RETRY_BELOW) return first;
   // Few or no piece-sized blobs: the phone may be much closer than usual (owner's photo 2026-11-08,
   // held ~3× closer: every piece was 9× the expected area and none counted). Start again from
   // closer guesses and keep the one that finds the most pieces.
   let best = first;
   for (const k of SCALE_RETRY_STARTS) {
-    const r = estimateFrom(cv, rgba, opts, base * k);
+    const r = estimateFrom(cv, img, opts, base * k);
     if (r && (!best || r.nPieces > best.nPieces)) best = r;
   }
   return best;
@@ -2533,18 +2587,16 @@ const SCALE_RETRY_BELOW = 8;
 /** Closer starting guesses (× the usual one); each covers about ×0.4–×2.4 of itself. */
 const SCALE_RETRY_STARTS = [2.4, 5.5];
 
+/** One guess's search on the shrunk photo `img` (read only, shared by all guesses). */
 function estimateFrom(
   cv: Cv,
-  rgba: PixelBuffer,
+  img: SmallRgb,
   opts: { pitchMm?: number; zoom?: number; table?: TableModel | null },
   start: number,
 ): { pxPerMm: number; nPieces: number } | null {
   return cvGuard(cv, () => {
     const pitch = opts.pitchMm ?? DEFAULT_PITCH_MM;
-    const W = rgba.width;
-    const H = rgba.height;
-    const factor = Math.max(1, Math.max(W, H) / SEG.scaleWidth);
-    const img = shrinkRgb(rgba, factor);
+    const factor = img.factor;
     const { width: w, height: h } = img;
     const none = new Uint8Array(w * h);
     let ppm = start;

@@ -441,11 +441,23 @@ export function planMerge(
     (p) => !taken.has(p.id) && (p.status === 'table' || p.status === 'pending' || p.status === 'missing' || p.status === 'aside'),
   );
   const free = (p: PieceRow) => leftIds.has(p.id) || p.status === 'missing' || p.status === 'aside' || outOfView(p);
-  const sigs = new Map(candidates.map((p) => [p.id, shapeSignature(p.outlineMm)]));
+  // Set-aside pieces can't be taken back while BATCH.asideCost < 0 (every pair with one is refused
+  // below), so they aren't compared at all. Measured 2026-11-10: with 600–900 pieces set aside, the
+  // first photo of a new batch (300 pieces) spent 2–3 s comparing them, freezing the screen, for
+  // the very same result.
+  const comparable = BATCH.asideCost < 0 ? candidates.filter((p) => p.status !== 'aside') : candidates;
+  // Outline signatures (the pieces' here, the sightings' below), worked out only for those that get
+  // that far (most pairs are ruled out first by size, colour or picture).
+  const sigs = new Map<PieceRow, Float32Array>();
+  const sigOf = (p: PieceRow): Float32Array => {
+    let s = sigs.get(p);
+    if (!s) sigs.set(p, (s = shapeSignature(p.outlineMm)));
+    return s;
+  };
   const newOnes: number[] = [];
   const matchedRows = new Map(updates.map((u) => [u.id, u]));
-  /** Sightings to compare with the candidates (index into found) and their outline signatures. */
-  const toMatch: Array<{ i: number; sig: Float32Array }> = [];
+  /** Sightings to compare with the candidates (index into found). */
+  const toMatch: number[] = [];
   for (const i of unmatched) {
     const f = found[i]!;
     // Touching pieces already known (their centres inside the blob): those pieces, still there.
@@ -477,36 +489,49 @@ export function planMerge(
       skipped++;
       continue;
     }
+    // (All candidates, set-aside ones too, as before 2026-11-10: new pieces keep the order they are
+    // added in, and with it their ids.)
     if (f.flags.clump || !candidates.length) {
       newOnes.push(i);
       continue;
     }
-    toMatch.push({ i, sig: shapeSignature(relativeOutline(f.outlineMm, f.centreMm)) });
+    toMatch.push(i);
   }
   // Every sighting × candidate that could be the same piece, with a cost (lower = more alike):
   // the printed picture when both have a fingerprint, the outline shape always.
-  const pairs: Array<{ i: number; p: PieceRow; cost: number }> = [];
-  for (const { i, sig } of toMatch) {
+  type Pair = { i: number; p: PieceRow; cost: number };
+  const pairs: Pair[] = [];
+  for (const i of toMatch) {
     const f = found[i]!;
-    for (const p of candidates) {
+    const fpA = f.patch?.fp;
+    let sig: Float32Array | null = null;
+    for (const p of comparable) {
       const areaDiff = Math.abs(p.areaMm2 - f.areaMm2) / Math.max(p.areaMm2, f.areaMm2, 1);
-      const shapeD = shapeDistance(sig, sigs.get(p.id)!);
-      const fpA = f.patch?.fp;
       const fpB = p.patch?.fp;
       let cost: number;
+      // The cheap tests first: the outline comparison (72 turns × 72 angles) is done only for pairs
+      // that pass them (measured 2026-11-10: most pairs don't).
       if (fpA?.length && fpB?.length) {
         if (areaDiff > MOVED_AREA_FP || deltaE(p.colour.meanLab, f.meanLab) > MOVED_DELTA_E_FP) continue;
-        cost = fingerprintDistance(fpA, fpB, f.patch?.sides, p.patch?.sides).d + MOVED_SHAPE_WEIGHT * shapeD;
         // A piece whose spot is free (empty in view, missing, or out of view) may differ more (a
         // corner read differently changes the straightened picture); one whose spot still looks
         // covered only when the picture agrees well.
-        if (cost > (p.status === 'aside' ? BATCH.asideCost : free(p) ? MOVED_FP_COST_FREE : MOVED_FP_COST)) continue;
+        const limit = p.status === 'aside' ? BATCH.asideCost : free(p) ? MOVED_FP_COST_FREE : MOVED_FP_COST;
+        const fpD = fingerprintDistance(fpA, fpB, f.patch?.sides, p.patch?.sides).d;
+        // The outline only adds to the cost: a picture already too different decides it.
+        if (fpD > limit) continue;
+        sig ??= shapeSignature(relativeOutline(f.outlineMm, f.centreMm));
+        cost = fpD + MOVED_SHAPE_WEIGHT * shapeDistance(sig, sigOf(p));
+        if (cost > limit) continue;
       } else {
         // Without fingerprints (pieces scanned before M5 part 3): the outline alone, and only among
         // pieces that left a spot in view or are missing.
         // (Set-aside pieces need a fingerprint: there are too many of them for the outline alone.)
         if (!leftIds.has(p.id) && p.status !== 'missing') continue;
-        if (areaDiff > MOVED_AREA || deltaE(p.colour.meanLab, f.meanLab) > MOVED_DELTA_E || shapeD > MOVED_SHAPE_MM) continue;
+        if (areaDiff > MOVED_AREA || deltaE(p.colour.meanLab, f.meanLab) > MOVED_DELTA_E) continue;
+        sig ??= shapeSignature(relativeOutline(f.outlineMm, f.centreMm));
+        const shapeD = shapeDistance(sig, sigOf(p));
+        if (shapeD > MOVED_SHAPE_MM) continue;
         cost = (shapeD / MOVED_SHAPE_MM) * MOVED_FP_COST;
       }
       pairs.push({ i, p, cost });
@@ -514,11 +539,44 @@ export function planMerge(
   }
   // Most certain first; a pair counts only when clearly better than either side's next choice.
   pairs.sort((a, b) => a.cost - b.cost);
+  // Each sighting's and each piece's pairs, in that same order, so the next choice is looked up
+  // there rather than in all the pairs for every pair (that grew with the square of the pairs).
+  const ofF = new Map<number, { list: Pair[]; from: number }>();
+  const ofP = new Map<PieceRow, { list: Pair[]; from: number }>();
+  for (const q of pairs) {
+    let a = ofF.get(q.i);
+    if (!a) ofF.set(q.i, (a = { list: [], from: 0 }));
+    a.list.push(q);
+    let b = ofP.get(q.p);
+    if (!b) ofP.set(q.p, (b = { list: [], from: 0 }));
+    b.list.push(q);
+  }
+  /**
+   * The first of a side's pairs (cheapest first) with another partner than the pair being decided,
+   * still free. Pieces taken and sightings done stay so: pairs passed over for that are passed over
+   * for good (`from`).
+   */
+  const nextOf = (side: { list: Pair[]; from: number }, gone: (q: Pair) => boolean, same: (q: Pair) => boolean): Pair | undefined => {
+    while (side.from < side.list.length && gone(side.list[side.from]!)) side.from++;
+    for (let k = side.from; k < side.list.length; k++) {
+      const q = side.list[k]!;
+      if (!same(q) && !gone(q)) return q;
+    }
+    return undefined;
+  };
   const done = new Set<number>();
   for (const pr of pairs) {
     if (done.has(pr.i) || taken.has(pr.p.id)) continue;
-    const nextF = pairs.find((q) => q.i === pr.i && q.p !== pr.p && !taken.has(q.p.id));
-    const nextP = pairs.find((q) => q.p === pr.p && q.i !== pr.i && !done.has(q.i));
+    const nextF = nextOf(
+      ofF.get(pr.i)!,
+      (q) => taken.has(q.p.id),
+      (q) => q.p === pr.p,
+    );
+    const nextP = nextOf(
+      ofP.get(pr.p)!,
+      (q) => done.has(q.i),
+      (q) => q.i === pr.i,
+    );
     const clear = (q: { cost: number } | undefined) => !q || q.cost >= MOVED_MARGIN * pr.cost + MOVED_MARGIN_ABS;
     if (!clear(nextF) || !clear(nextP)) continue;
     done.add(pr.i);
@@ -554,9 +612,9 @@ export function planMerge(
   }
   // Unsure: a sighting that may be one of these known pieces, but not clearly one of them.
   const pendingOf = new Map<number, string[]>();
-  for (const { i } of toMatch) {
+  for (const i of toMatch) {
     if (done.has(i)) continue;
-    const maybe = pairs.filter((q) => q.i === i && !taken.has(q.p.id) && (BATCH.asidePending || q.p.status !== 'aside')).slice(0, 3);
+    const maybe = (ofF.get(i)?.list ?? []).filter((q) => !taken.has(q.p.id) && (BATCH.asidePending || q.p.status !== 'aside')).slice(0, 3);
     if (maybe.length)
       pendingOf.set(
         i,

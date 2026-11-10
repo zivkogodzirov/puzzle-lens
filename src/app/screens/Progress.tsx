@@ -77,7 +77,7 @@ export function ProgressScreen() {
     return (
       <main class="screen">
         <TopBar title="Progress" />
-        <p class="muted">This puzzle is no longer on this iPhone.</p>
+        <p class="muted">This puzzle is not on this iPhone.</p>
       </main>
     );
   const back = (
@@ -234,20 +234,25 @@ export function ProgressScreen() {
           No answers yet: tap ✓ Fits or ✗ Doesn't fit when you try a piece.
         </p>
       ) : (
-        <p data-testid="progress-accuracy">
-          {acc.first.all.total > 0 && (
-            <>
-              First choice of spot right <strong>{acc.first.all.right}</strong> of {acc.first.all.total} ({pc(acc.first.all.right, acc.first.all.total)}{' '}
-              %).{' '}
-            </>
-          )}
-          {pairs.all.total > 0 && (
-            <>
-              Pairs that fitted <strong>{pairs.all.right}</strong> of {pairs.all.total} ({pc(pairs.all.right, pairs.all.total)} %).{' '}
-            </>
-          )}
-          <a href={`#/accuracy/${encodeURIComponent(project.id)}`}>Details</a>
-        </p>
+        <>
+          <p data-testid="progress-accuracy">
+            {acc.first.all.total > 0 && (
+              <>
+                First choice of spot right <strong>{acc.first.all.right}</strong> of {acc.first.all.total} ({pc(acc.first.all.right, acc.first.all.total)}{' '}
+                %).{' '}
+              </>
+            )}
+            {pairs.all.total > 0 && (
+              <>
+                Pairs that fitted <strong>{pairs.all.right}</strong> of {pairs.all.total} ({pc(pairs.all.right, pairs.all.total)} %).{' '}
+              </>
+            )}
+          </p>
+          {/* A small button like "‹ Back to the puzzle", not a bare text link (2026-11-10 app review). */}
+          <a class="btn btn-small" href={`#/accuracy/${encodeURIComponent(project.id)}`} data-testid="progress-accuracy-details">
+            Details
+          </a>
+        </>
       )}
 
       <h2>Batch</h2>

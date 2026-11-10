@@ -26,3 +26,31 @@ test('home screen loads, shows the install banner in a Safari tab, and logs no e
   await page.waitForTimeout(2000);
   expect(problems.consoleErrors, 'console errors on the home screen').toEqual([]);
 });
+
+test('no screen scrolls sideways, and the 🧪 tab sits in the side margin, clear of the content', async ({ page }) => {
+  // 2026-11-10 app review: Device check scrolled sideways by 61 px (WebKit drew a bare hidden file
+  // input's button past its 1 px box), and the 40 px 🧪 tab covered card edges and text on every screen.
+  for (const width of [375, 402, 430]) {
+    await page.setViewportSize({ width, height: 800 });
+    for (const screen of ['', 'device', 'help', 'settings', 'report', 'log'] as const) {
+      await gotoScreen(page, screen);
+      const m = await page.evaluate(() => {
+        const main = document.querySelector('main.screen')!;
+        const r = main.getBoundingClientRect();
+        const contentRight = r.right - parseFloat(getComputedStyle(main).paddingRight);
+        const tab = document.querySelector('[data-testid=test-tab]')!.getBoundingClientRect();
+        return {
+          scrollWidth: document.documentElement.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
+          contentRight,
+          tabLeft: tab.left,
+          tabRight: tab.right,
+        };
+      });
+      const where = `#/${screen} at ${width} px`;
+      expect(m.scrollWidth, `${where}: page width`).toBe(m.clientWidth);
+      expect(m.tabRight, `${where}: tab at the right edge`).toBeCloseTo(width, 0);
+      expect(m.tabLeft, `${where}: tab inside the side margin`).toBeGreaterThanOrEqual(m.contentRight - 0.5);
+    }
+  }
+});

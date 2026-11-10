@@ -376,6 +376,25 @@ describe('re-identification (M5 part 3)', () => {
     expect(plan.missing).toBe(0);
   });
 
+  it('a new batch with many pieces set aside: while picture matching is off, they are not even compared (speed, 2026-11-10)', () => {
+    // 600 set-aside pieces whose outline or picture would be read if they were compared with the
+    // new photo's pieces: that froze the screen for 2–3 s after the first photo of a new batch.
+    let looked = 0;
+    const base = apply([], planMerge([], [withFp(100, 100, 1)], ctx(4, 1)))[0]!;
+    const aside = Array.from({ length: 600 }, (_, i): PieceRow => {
+      const row = { ...base, id: `aside-${i}`, status: 'aside' as const, table: { ...base.table, x: 20 + (i % 30) * 12, y: 20 + Math.floor(i / 30) * 12 } };
+      return Object.defineProperties(row, {
+        outlineMm: { get: () => (looked++, base.outlineMm), enumerable: true },
+        patch: { get: () => (looked++, base.patch), enumerable: true },
+      });
+    });
+    const sightings = Array.from({ length: 300 }, (_, i) => withFp(20 + (i % 20) * 18, 20 + Math.floor(i / 20) * 18, i % 2 ? 1 : 100 + i));
+    const plan = planMerge(aside, sightings, { ...ctx(4, 2), view });
+    expect(looked).toBe(0);
+    expect(plan.added).toHaveLength(300);
+    expect(plan.back + plan.pending + plan.missing + plan.updates.length).toBe(0);
+  });
+
   it('a new batch, with picture matching switched on (BATCH, for tuning): set-aside pieces come back recognised', () => {
     const save = { ...BATCH };
     BATCH.asideCost = 12;

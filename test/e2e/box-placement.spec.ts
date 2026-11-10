@@ -301,6 +301,9 @@ test('"Not now" on the box picture correction is remembered', async ({ page }) =
 test('Fits / Doesn’t fit (M5 part 2): ruled-out spots, a piece into the puzzle and back, Fill this spot, the Accuracy page', async ({ page }) => {
   await seed(page, null);
   await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
+  // Until the spots are found (2026-11-10): "On the box picture" is shown before that too, and when they are found,
+  // buttons appear above the pieces and move them down; a tap on a piece in that moment was lost now and then.
+  await expect(page.getByTestId('place-summary')).toContainText(/[1-9]\d* strong/, { timeout: 60_000 });
   const thumbs = page.locator('[data-testid="catalog"] .thumb-btn');
   await expect(thumbs).toHaveCount(6);
   // r1c2 (first in id order): its spot is column 3, row 2.
@@ -539,4 +542,39 @@ test('learned colours (M8): after 12 pieces fit, the colours are learned from th
   }
   await expect(page.getByTestId('colours-learned')).toContainText('Colours learned from your 12 pieces in the puzzle', { timeout: 60_000 });
   await page.getByTestId('place-summary').screenshot({ path: test.info().outputPath('colours-learned.png') });
+});
+
+// 2026-11-10: a tapped thumbnail's panel was scrolled into view 50 ms after it was drawn, moving it by about 250 px; a tap on
+// ✓ Fits in that moment was lost, or landed on "Not a puzzle piece? Remove it". Now it is brought into view before it is
+// shown, and only when its top isn't in view. Taps with the mouse, as a finger (Playwright's click scrolls into view first).
+test('a quick tap on ✓ Fits right after tapping a piece counts: its panel doesn’t move under the finger (M8 part 4)', async ({ page }) => {
+  await seed(page, null);
+  await expect(page.getByTestId('place-summary')).toContainText(/[1-9]\d* strong/, { timeout: 60_000 });
+  const thumbs = page.locator('[data-testid="catalog"] .thumb-btn');
+  const height = page.viewportSize()!.height;
+  const fits = () =>
+    page.getByTestId('spot-fits').evaluate((b) => {
+      const r = b.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2, top: r.top, bottom: r.bottom };
+    });
+  // The pieces 300 px down the screen: the panel opens partly on screen. Then the pieces at the bottom of the
+  // screen: the panel opens below it.
+  for (const [k, where] of (['partly on screen', 'below the screen'] as const).entries()) {
+    await expect(thumbs).toHaveCount(6 - k);
+    await page.evaluate((below) => {
+      const g = document.querySelector('[data-testid="catalog"]')!.getBoundingClientRect();
+      scrollBy(0, below ? g.bottom - innerHeight + 4 : g.top - 300);
+    }, k === 1);
+    const t = (await thumbs.nth(0).boundingBox())!;
+    await page.mouse.click(t.x + t.width / 2, t.y + t.height / 2);
+    const at = await fits();
+    expect(at.top, `${where}: ✓ Fits is on the screen at once`).toBeGreaterThanOrEqual(0);
+    expect(at.bottom, `${where}: ✓ Fits is on the screen at once`).toBeLessThanOrEqual(height);
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.waitForTimeout(100);
+    expect(await fits(), `${where}: ✓ Fits doesn't move under the finger`).toEqual(at);
+    await page.mouse.up();
+    await expect(page.getByTestId('in-puzzle')).toContainText(`${k + 1} in the puzzle`);
+  }
 });

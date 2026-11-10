@@ -43,10 +43,32 @@ export interface ScanMarkerlessOptions {
   /**
    * The expected scale (photo px per mm), e.g. from the previous photo of this scan at the same
    * zoom (M8 part 3): detection starts there instead of at the nominal guess, which saves the second
-   * detection when the guess is far off. Checked against the pieces like the guess, so a wrong hint
-   * costs only that second detection.
+   * detection when the guess is far off. Checked against the pieces like the guess, but a wrong hint
+   * can still spoil the photo: when too few single pieces come out to measure the scale and the
+   * pre-pass finds none either, nothing goes back to the nominal guess (review 2026-11-10: IMG_9226
+   * with a hint of 10.5 px/mm found 6 pieces instead of 59 and could not be placed). The reader
+   * worker therefore scans such a photo once more without the hint (src/cv/scanFreePixels.ts).
    */
   ppmHint?: number | null;
+  /**
+   * Keeps the scale pre-pass for another scan of the same photo at the same pitch, zoom and table
+   * (it depends only on those): scanFreePixels passes one to the scan with a hint and to the one
+   * without it.
+   */
+  prePass?: PrePassMemo;
+}
+
+/** The scale pre-pass's answer, once run (it is often null: nothing found); undefined = not run yet. */
+export interface PrePassMemo {
+  value?: ReturnType<typeof estimatePxPerMm>;
+}
+
+/**
+ * The scale detection starts from (photo px per mm): the hint when it is sane, else the nominal
+ * scale for the zoom (hand-held at ~65–75 cm: 1× ≈ 4 px/mm, 2× ≈ 9 px/mm at 12 MP).
+ */
+export function startPxPerMm(W: number, H: number, zoom: number, ppmHint?: number | null): number {
+  return ppmHint && ppmHint > 0.5 && ppmHint < 60 ? ppmHint : (zoom >= 2 ? 9 : 4) * (Math.max(W, H) / 4032);
 }
 
 export interface ScanMarkerlessResult {
@@ -66,6 +88,14 @@ export interface ScanMarkerlessResult {
   rmsMm: number;
   confidence: number;
   timings: Record<string, number>;
+  /**
+   * Only when not registered: the pieces found all the same (photo px; mm in this photo's own
+   * frame). Used only to count the loose pieces lying beside a finished puzzle, which are not
+   * catalogued (2026-11-10); `pieces` stays empty.
+   */
+  unplaced?: FoundPiece[];
+  /** Only when not registered: the scale `unplaced` was found at (photo px per mm of this scan's pitch). */
+  unplacedPxPerMm?: number;
 }
 
 /** Re-run detection when the registered scale differs from the estimate by more than this. */
@@ -106,6 +136,30 @@ function scaleFrame(W: number, H: number, ppm: number): { imgToMm: Mat3; mmToImg
     imgToMm: [1 / ppm, 0, -cx / ppm, 0, 1 / ppm, -cy / ppm, 0, 0, 1],
     mmToImg: [ppm, 0, cx, 0, ppm, cy, 0, 0, 1],
   };
+}
+
+/**
+ * One detection at a given scale, as the scan runs it: the photo mapped to mm by that scale alone
+ * (origin at the image centre), no markers, no glare mask. Also used to count the loose pieces
+ * beside a finished puzzle at the puzzle's own scale (src/cv/scanFreePixels.ts).
+ */
+export function findPiecesAt(
+  cv: Cv,
+  rgba: PixelBuffer,
+  o: { pxPerMm: number; zoom: number; table: TableModel | null; pieceAreaMm2: number },
+): { frame: { imgToMm: Mat3; mmToImg: Mat3 }; res: FindResult } {
+  const frame = scaleFrame(rgba.width, rgba.height, o.pxPerMm);
+  const res = findPieces(cv, rgba, {
+    imgToTable: frame.imgToMm,
+    tableToImg: frame.mmToImg,
+    map: null,
+    table: o.table,
+    pxPerMm: o.pxPerMm,
+    zoom: o.zoom,
+    pieceAreaMm2: o.pieceAreaMm2,
+    withGlareMask: false,
+  });
+  return { frame, res };
 }
 
 function mapRegion(g: FoundRegion, H: Mat3): FoundRegion {
@@ -155,23 +209,22 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
   const pieceAreaMm2 = share * pitch * pitch;
 
   let t = performance.now();
-  // Start from the nominal scale for the zoom (hand-held at ~65–75 cm: 1× ≈ 4 px/mm, 2× ≈ 9 px/mm
-  // at 12 MP); the pieces found then measure the real one (below).
-  let ppm = opts.ppmHint && opts.ppmHint > 0.5 && opts.ppmHint < 60 ? opts.ppmHint : (opts.zoom >= 2 ? 9 : 4) * (Math.max(W, H) / 4032);
+  // Start from the hint or the nominal scale for the zoom; the pieces found then measure the real
+  // one (below).
+  let ppm = startPxPerMm(W, H, opts.zoom, opts.ppmHint);
+  // The scale pre-pass depends only on the photo, the pitch, the zoom and the table, so it runs at
+  // most once per scan: both checks below may ask for it, and on some photos both did, about 1 s
+  // each (review 2026-11-10: owner's IMG_9280, IMG_9225, IMG_9128). It often finds nothing (null),
+  // so "not run yet" is undefined. The caller may hand in one already run for this photo.
+  const prePass: PrePassMemo = opts.prePass ?? {};
+  const estimate = () => {
+    if (prePass.value === undefined) prePass.value = estimatePxPerMm(cv, rgba, { pitchMm: pitch, zoom: opts.zoom, table: opts.table });
+    return prePass.value;
+  };
 
   const find = (pxPerMm: number) => {
-    const f = scaleFrame(W, H, pxPerMm);
     const t1 = performance.now();
-    const r = findPieces(cv, rgba, {
-      imgToTable: f.imgToMm,
-      tableToImg: f.mmToImg,
-      map: null,
-      table: opts.table,
-      pxPerMm,
-      zoom: opts.zoom,
-      pieceAreaMm2,
-      withGlareMask: false,
-    });
+    const { frame: f, res: r } = findPiecesAt(cv, rgba, { pxPerMm, zoom: opts.zoom, table: opts.table, pieceAreaMm2 });
     timings.find = (timings.find ?? 0) + performance.now() - t1;
     // The piece finder's own steps (M8 part 3: where the time goes), summed over its runs.
     for (const [k, v] of Object.entries(r.timings)) if (k !== 'total') timings[`find.${k}`] = (timings[`find.${k}`] ?? 0) + v;
@@ -186,7 +239,7 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
     // close-up reported as 1×, a phone much higher or lower than usual), so pieces came out as
     // "regions" or specks. The scale-robust pre-pass (it iterates from the blobs it sees) gives a
     // starting point; detect again there and measure properly.
-    const pre = estimatePxPerMm(cv, rgba, { pitchMm: pitch, zoom: opts.zoom, table: opts.table });
+    const pre = estimate();
     if (pre && Math.abs(pre.pxPerMm / ppm - 1) > 0.1) {
       ppm = pre.pxPerMm;
       ({ frame, res } = find(ppm));
@@ -232,7 +285,7 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
   {
     const blobs = res.pieces.filter((p) => p.flags.clump && !p.flags.cut).length + res.regions.length;
     if (blobs >= CLOSE_MIN_CLUMPS && blobs > CLOSE_CLUMP_RATIO * singles(res)) {
-      const pre = estimatePxPerMm(cv, rgba, { pitchMm: pitch, zoom: opts.zoom, table: opts.table });
+      const pre = estimate();
       if (pre && pre.pxPerMm / ppm > 1 + RESCALE_LIMIT) {
         const alt = find(pre.pxPerMm);
         if (singles(alt.res) > CLOSE_CLUMP_RATIO * singles(res)) {
@@ -274,7 +327,11 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
   // Not placed on the catalog: no pieces, but the assembled areas stay (in this photo's own frame),
   // so a photo of the finished puzzle taken after loose pieces were scanned is still recognised as
   // one (M7 part 4: it can't be matched to the loose pieces; its areas were dropped, so the finished
-  // check never ran and the owner couldn't update the puzzle photo).
+  // check never ran and the owner couldn't update the puzzle photo). The pieces found at the scale
+  // settled above are kept aside (`unplaced`), not those of a detection redone at the scale of a
+  // match that then failed.
+  const settled = res.pieces;
+  const settledPxPerMm = ppm;
   const empty = (): ScanMarkerlessResult => ({
     pieces: [],
     regions: res.regions,
@@ -287,6 +344,8 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
     rmsMm: 0,
     confidence: 0,
     timings: { ...timings, total: performance.now() - T0 },
+    unplaced: settled,
+    unplacedPxPerMm: settledPxPerMm,
   });
 
   if (!opts.catalog.length) {

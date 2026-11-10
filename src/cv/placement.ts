@@ -400,14 +400,90 @@ function labStats(lab: Float32Array, keep: Uint8Array | null): { mean: [number, 
 interface PatchLevel {
   size: number;
   margin: number;
-  /** Lab × 4 rotations, each size × size × 3. */
-  lab: Float32Array[];
-  /** Weights (0–1) × 4 rotations. */
-  w: Float32Array[];
+  /** The piece's pixels in each of the 4 quarter turns. */
+  turns: PatchTurn[];
 }
 
-/** Patch at a level (area-averaged), its Lab (colour-matched), rotated 0–3 quarter turns clockwise. */
-function patchLevel(patch: PiecePatch, cell: number, cm: ColourMatch | null): PatchLevel {
+/**
+ * One quarter turn of a patch level as score() reads it: only the pixels on the piece, row by row
+ * (the order score() always added them up in, so scores stay the same to the last bit).
+ * Built once per piece and level instead of at every one of the ~4000 spots × turns tried (2026-11-10).
+ */
+interface PatchTurn {
+  /** Number of piece pixels. */
+  n: number;
+  /** Their x and y in the patch. */
+  xs: Int32Array;
+  ys: Int32Array;
+  /** Their offset in the box level's Lab from the patch's top-left pixel: (y × level width + x) × 3. */
+  off: Int32Array;
+  /** Their Lab (3 per pixel). */
+  lab: Float64Array;
+  /**
+   * Sums of their L, a, b and of L², a², b²: the piece's side of the score, the same wherever the
+   * piece lies fully on the picture.
+   */
+  sums: Float64Array;
+  /** The piece pixels' bounding box in the patch (inclusive). */
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/** A turn's piece pixels (weight 1), for a box level `boxW` px wide. */
+function patchTurn(lab: Float32Array, w: Float32Array, size: number, boxW: number): PatchTurn {
+  let n = 0;
+  for (let i = 0; i < size * size; i++) if (w[i]) n++;
+  const xs = new Int32Array(n);
+  const ys = new Int32Array(n);
+  const off = new Int32Array(n);
+  const pl = new Float64Array(n * 3);
+  let s0 = 0;
+  let s1 = 0;
+  let s2 = 0;
+  let q0 = 0;
+  let q1 = 0;
+  let q2 = 0;
+  let minX = size;
+  let minY = size;
+  let maxX = -1;
+  let maxY = -1;
+  let k = 0;
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      if (!w[i]) continue;
+      const p0 = lab[i * 3]!;
+      const p1 = lab[i * 3 + 1]!;
+      const p2 = lab[i * 3 + 2]!;
+      xs[k] = x;
+      ys[k] = y;
+      off[k] = (y * boxW + x) * 3;
+      pl[k * 3] = p0;
+      pl[k * 3 + 1] = p1;
+      pl[k * 3 + 2] = p2;
+      s0 = s0 + p0;
+      s1 = s1 + p1;
+      s2 = s2 + p2;
+      q0 = q0 + p0 * p0;
+      q1 = q1 + p1 * p1;
+      q2 = q2 + p2 * p2;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      maxY = y;
+      k++;
+    }
+  return { n, xs, ys, off, lab: pl, sums: Float64Array.of(s0, s1, s2, q0, q1, q2), minX, minY, maxX, maxY };
+}
+
+/**
+ * Patch at a box level (area-averaged), its Lab (colour-matched), rotated 0–3 quarter turns
+ * clockwise, as the piece pixels of each turn.
+ */
+function patchLevel(patch: PiecePatch, lv: Level, cm: ColourMatch | null): PatchLevel {
+  const cell = lv.cell;
   const k = PATCH_CORE / cell;
   const size = Math.round(PATCH_SIZE / k);
   const margin = Math.round(PATCH_MARGIN / k);
@@ -462,46 +538,114 @@ function patchLevel(patch: PiecePatch, cell: number, cm: ColourMatch | null): Pa
     lab.push(nl);
     w.push(nw);
   }
-  return { size, margin, lab, w };
+  return { size, margin, turns: lab.map((l, r) => patchTurn(l, w[r]!, size, lv.w)) };
 }
 
-/** Score of a patch level placed with its core's top-left at box pixel (x0, y0). */
+/**
+ * Score of a patch level placed with its core's top-left at box pixel (x0, y0). The hot loop of
+ * placement (every spot × turn, then 25 shifts per finalist): plain number sums over the piece
+ * pixels only, and the piece's own sums taken from patchTurn() where it lies fully on the picture;
+ * same sums in the same order as before, so the same scores to the last bit (2026-11-10: placing a
+ * piece about 3× as fast on a Mac, about 6× in Safari's engine).
+ */
 function score(lv: Level, pl: PatchLevel, rot: number, x0: number, y0: number): number {
-  const { size, margin } = pl;
-  const P = pl.lab[rot]!;
-  const Wt = pl.w[rot]!;
+  const t = pl.turns[rot]!;
+  const m = t.n;
+  const P = t.lab;
   const B = lv.lab;
+  const LW = lv.w;
+  const LH = lv.h;
+  const bx0 = x0 - pl.margin;
+  const by0 = y0 - pl.margin;
   let n = 0;
   let outside = 0;
-  const sp = [0, 0, 0];
-  const sb = [0, 0, 0];
-  const spp = [0, 0, 0];
-  const sbb = [0, 0, 0];
-  const spb = [0, 0, 0];
-  for (let y = 0; y < size; y++) {
-    const by = y0 - margin + y;
-    for (let x = 0; x < size; x++) {
-      const i = y * size + x;
-      if (!Wt[i]) continue;
-      const bx = x0 - margin + x;
-      if (bx < 0 || by < 0 || bx >= lv.w || by >= lv.h) {
+  let sp0 = 0;
+  let sp1 = 0;
+  let sp2 = 0;
+  let spp0 = 0;
+  let spp1 = 0;
+  let spp2 = 0;
+  let sb0 = 0;
+  let sb1 = 0;
+  let sb2 = 0;
+  let sbb0 = 0;
+  let sbb1 = 0;
+  let sbb2 = 0;
+  let spb0 = 0;
+  let spb1 = 0;
+  let spb2 = 0;
+  if (bx0 + t.minX >= 0 && by0 + t.minY >= 0 && bx0 + t.maxX < LW && by0 + t.maxY < LH) {
+    // Every piece pixel on the picture.
+    const off = t.off;
+    const base = (by0 * LW + bx0) * 3;
+    for (let k = 0, j = 0; k < m; k++, j += 3) {
+      const bi = base + off[k]!;
+      const p0 = P[j]!;
+      const p1 = P[j + 1]!;
+      const p2 = P[j + 2]!;
+      const b0 = B[bi]!;
+      const b1 = B[bi + 1]!;
+      const b2 = B[bi + 2]!;
+      sb0 = sb0 + b0;
+      sb1 = sb1 + b1;
+      sb2 = sb2 + b2;
+      sbb0 = sbb0 + b0 * b0;
+      sbb1 = sbb1 + b1 * b1;
+      sbb2 = sbb2 + b2 * b2;
+      spb0 = spb0 + p0 * b0;
+      spb1 = spb1 + p1 * b1;
+      spb2 = spb2 + p2 * b2;
+    }
+    const s = t.sums;
+    sp0 = s[0]!;
+    sp1 = s[1]!;
+    sp2 = s[2]!;
+    spp0 = s[3]!;
+    spp1 = s[4]!;
+    spp2 = s[5]!;
+    n = m;
+  } else {
+    // Partly off the picture (a cell on the edge): count what's off.
+    const xs = t.xs;
+    const ys = t.ys;
+    for (let k = 0, j = 0; k < m; k++, j += 3) {
+      const bx = bx0 + xs[k]!;
+      const by = by0 + ys[k]!;
+      if (bx < 0 || by < 0 || bx >= LW || by >= LH) {
         outside++;
         continue;
       }
-      const bi = (by * lv.w + bx) * 3;
-      for (let c = 0; c < 3; c++) {
-        const p = P[i * 3 + c]!;
-        const b = B[bi + c]!;
-        sp[c] = sp[c]! + p;
-        sb[c] = sb[c]! + b;
-        spp[c] = spp[c]! + p * p;
-        sbb[c] = sbb[c]! + b * b;
-        spb[c] = spb[c]! + p * b;
-      }
+      const bi = (by * LW + bx) * 3;
+      const p0 = P[j]!;
+      const p1 = P[j + 1]!;
+      const p2 = P[j + 2]!;
+      const b0 = B[bi]!;
+      const b1 = B[bi + 1]!;
+      const b2 = B[bi + 2]!;
+      sp0 = sp0 + p0;
+      sp1 = sp1 + p1;
+      sp2 = sp2 + p2;
+      spp0 = spp0 + p0 * p0;
+      spp1 = spp1 + p1 * p1;
+      spp2 = spp2 + p2 * p2;
+      sb0 = sb0 + b0;
+      sb1 = sb1 + b1;
+      sb2 = sb2 + b2;
+      sbb0 = sbb0 + b0 * b0;
+      sbb1 = sbb1 + b1 * b1;
+      sbb2 = sbb2 + b2 * b2;
+      spb0 = spb0 + p0 * b0;
+      spb1 = spb1 + p1 * b1;
+      spb2 = spb2 + p2 * b2;
       n++;
     }
   }
   if (n < 8) return -1;
+  const sp = [sp0, sp1, sp2];
+  const sb = [sb0, sb1, sb2];
+  const spp = [spp0, spp1, spp2];
+  const sbb = [sbb0, sbb1, sbb2];
+  const spb = [spb0, spb1, spb2];
   let z = 0;
   let wz = 0;
   const meanP = [0, 0, 0];
@@ -542,6 +686,25 @@ function borderMismatch(flats: boolean[], rot: number, col: number, row: number,
   return bad;
 }
 
+/**
+ * The first k candidates best score first, ties in their order: exactly what sorting them all (a
+ * stable sort) and keeping the first k gives, without sorting all ~4000 of level 0, which took
+ * about a fifth of a piece's placement (2026-11-10).
+ */
+function bestFirst<T extends { s: number }>(cands: T[], k: number): T[] {
+  if (k * 8 >= cands.length) return cands.sort((a, b) => b.s - a.s).slice(0, k);
+  const top: T[] = [];
+  for (const c of cands) {
+    if (top.length === k && !(c.s > top[k - 1]!.s)) continue;
+    // After every kept one scoring the same or more (those came first).
+    let i = top.length;
+    while (i > 0 && top[i - 1]!.s < c.s) i--;
+    top.splice(i, 0, c);
+    if (top.length > k) top.pop();
+  }
+  return top;
+}
+
 export interface PlaceOptions {
   /** The piece's sides (patch top, right, bottom, left) read as flat, and whether that read is trusted. */
   flats?: boolean[] | null;
@@ -569,7 +732,7 @@ export function placePiece(box: BoxGrid, patch: PiecePatch, opts: PlaceOptions =
     return opts.flatsSure ? Infinity : PLACE.borderSoft * bad;
   };
   const cm = opts.colour ?? null;
-  const pls = box.levels.map((lv) => patchLevel(patch, lv.cell, cm));
+  const pls = box.levels.map((lv) => patchLevel(patch, lv, cm));
 
   // Level 0: every cell × 4 turns.
   type Cand = { col: number; row: number; rot: number; dx: number; dy: number; s: number };
@@ -592,9 +755,8 @@ export function placePiece(box: BoxGrid, patch: PiecePatch, opts: PlaceOptions =
         cands.push({ col, row, rot, dx: b0x, dy: b0y, s: s0 - pn });
       }
     }
-  cands.sort((a, b) => b.s - a.s);
   const all = opts.full ? cands.length : 0;
-  cands = cands.slice(0, Math.max(all, PLACE.keep0));
+  cands = bestFirst(cands, Math.max(all, PLACE.keep0));
   // Levels 1 and 2: refine with ±2 px shifts.
   for (const [li, keep] of [
     [1, Math.max(all, PLACE.keep1)],

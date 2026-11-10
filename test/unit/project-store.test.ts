@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { db, eraseAllData } from '../../src/db/db';
 import {
   countPieces,
+  countPiecesByStatus,
   createProject,
   deleteProject,
   getBlob,
@@ -188,5 +189,33 @@ describe('scale source', () => {
     expect(normalizeProject({ id: 'c', setupStep: 6, tracking: 'pieces', scaleSource: 'coin' }).scaleSource).toBe('coin');
     // A marker puzzle saved as "estimate" before its map existed is corrected.
     expect(normalizeProject({ id: 'd', setupStep: 6, tracking: 'markers', scaleSource: 'estimate' }).scaleSource).toBe('markers');
+  });
+});
+
+describe('counting pieces', () => {
+  it('counts by status from the indexes, as a count of every piece would (review 2026-11-10)', async () => {
+    const a = await createProject();
+    const b = await createProject();
+    const statuses = ['table', 'table', 'pending', 'tray', 'tray', 'tray', 'placed', 'missing', 'aside', 'aside', undefined, 'odd'];
+    await db().pieces.bulkPut([
+      ...statuses.map((status, i) => ({ ...makePiece(`a${i}`, a.id, null), status }) as PieceRow),
+      ...['table', 'placed'].map((status, i) => ({ ...makePiece(`b${i}`, b.id, null), status }) as PieceRow),
+    ]);
+    // What the page counted before, from every row: anything not missing, in a tray, in the puzzle or set aside is on the table.
+    const rows = await db().pieces.where('projectId').equals(a.id).toArray();
+    const n = (s: string) => rows.filter((p) => p.status === s).length;
+    const old = {
+      table: rows.length - n('missing') - n('tray') - n('placed') - n('aside'),
+      missing: n('missing'),
+      tray: n('tray'),
+      placed: n('placed'),
+      pending: n('pending'),
+      aside: n('aside'),
+      all: rows.length,
+    };
+    expect(await countPiecesByStatus(a.id)).toEqual(old);
+    expect(old).toEqual({ table: 5, missing: 1, tray: 3, placed: 1, pending: 1, aside: 2, all: 12 });
+    expect(await countPiecesByStatus(b.id)).toEqual({ table: 1, missing: 0, tray: 0, placed: 1, pending: 0, aside: 0, all: 2 });
+    expect(await countPiecesByStatus('none')).toEqual({ table: 0, missing: 0, tray: 0, placed: 0, pending: 0, aside: 0, all: 0 });
   });
 });

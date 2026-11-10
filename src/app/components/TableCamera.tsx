@@ -229,6 +229,7 @@ export function TableCamera(props: {
   const maxTilt = free ? FREE_RULES[mode === 'detail' ? 'detail' : 'overview'].maxTiltDeg : mode === 'detail' ? RULES.detail.maxTiltDeg : RULES.overview.maxTiltDeg;
   const tilt = gauge?.tiltDeg ?? (mode === 'detail' && level.value ? level.value.tiltDeg : null);
   const lean: Vec2 = gauge && gauge.tiltDeg !== null ? gauge.leanImg : level.value?.lean ?? [0, 0];
+  const problem = (live && pumpError.value) || error || cameraError.value;
 
   return (
     <div class="live table-camera" data-testid="table-camera" data-mode={mode}>
@@ -256,18 +257,20 @@ export function TableCamera(props: {
       {live && free && levelPermission.value === 'denied' && <p class="chip level-ask">Tilt sensor off: hold the phone as flat as you can</p>}
       {children && <div class="table-camera-extra">{children}</div>}
 
-      {(live && pumpError.value) || error || cameraError.value ? (
-        <div class="notice notice-bad live-notice" data-testid="camera-problem">
+      {problem ? (
+        <div class={state === 'live' ? 'notice notice-bad live-notice' : 'notice notice-bad live-notice live-notice-off'} data-testid="camera-problem">
           <p>{error ?? pumpError.value ?? cameraError.value}</p>
           {state !== 'live' && (
-            <button class="btn btn-small" onClick={() => void startCamera()}>
+            <button class="btn btn-small" data-testid="start-camera" onClick={() => void startCamera()}>
               Start camera
             </button>
           )}
         </div>
       ) : null}
 
-      {!live && (
+      {/* With the camera off, a problem box already offers "Start camera" (under the top bar): no second
+          one in the middle, where it landed on the buttons below (2026-11-10). */}
+      {!live && (state === 'starting' || !problem) && (
         <div class="live-center">
           {state === 'starting' ? (
             <p>Starting the camera…</p>

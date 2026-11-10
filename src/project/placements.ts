@@ -89,18 +89,89 @@ export function stalePieces(cache: PlacementCache | null, placeKey: string, piec
   return pieces.filter((p) => unplacedStatus(p) && p.patch && (all || !fresh || fresh.byPiece[p.id]?.ts !== p.patch.ts));
 }
 
+type PlaceReader = Pick<ReaderApi, 'placePieces'> & Partial<Pick<ReaderApi, 'learnColour'>>;
+type Progress = (done: number, total: number) => void;
+interface PlaceCall {
+  project: Project;
+  pieces: PieceRow[];
+  reader: PlaceReader;
+  onProgress?: Progress;
+  all: PieceRow[];
+}
+interface PlaceJob {
+  /** The photo helper this run asks. */
+  reader: PlaceReader;
+  /** Where the run going now reports its progress: the newest caller. */
+  progress?: Progress;
+  /** The one more run asked for while this one goes: the newest call's pieces, and the answer its callers wait for. */
+  next: { call: PlaceCall; result: Promise<PlacementCache | null>; resolve: (c: PlacementCache | null) => void; reject: (e: unknown) => void } | null;
+}
+/** The run going on now, per puzzle (see updatePlacements). */
+const jobs = new Map<string, PlaceJob>();
+
 /**
  * Places the pieces that need it (in batches, reporting progress) and saves the results.
  * Returns the up-to-date cache, or null when the puzzle has no box picture or grid.
+ *
+ * One run per puzzle at a time (review 2026-11-10): the puzzle page asks again after every ✓ Fits,
+ * and a run started while a long one was going (every piece placed again after learning the
+ * colours) read the same out-of-date saved placements and did all the work again: 3 answers during
+ * one run made 3 times the work, and the runs' saves raced. Now a call made while a run is going
+ * waits for it; then one more run is made with the newest call's pieces (calls waiting together
+ * share it), which only does what is still needed. Nothing is saved before a run ends, so a run cut
+ * short (the app closed) is simply done again next time.
+ *
+ * A call with another photo helper doesn't wait (check 2026-11-10): the helper is restarted to free
+ * memory or after a time-out, and a question the old one was answering then never gets its answer,
+ * so a run waiting for it would hold the puzzle until the app is closed. The call starts a run of
+ * its own at once, and calls that were waiting for the old run get its answer instead.
  */
-export async function updatePlacements(
+export function updatePlacements(
   project: Project,
   pieces: PieceRow[],
-  reader: Pick<ReaderApi, 'placePieces'> & Partial<Pick<ReaderApi, 'learnColour'>>,
-  onProgress?: (done: number, total: number) => void,
+  reader: PlaceReader,
+  onProgress?: Progress,
   /** Every piece of the puzzle (to learn colours from those in it, M8); defaults to `pieces`. */
   all: PieceRow[] = pieces,
 ): Promise<PlacementCache | null> {
+  const call: PlaceCall = { project, pieces, reader, onProgress, all };
+  const job = jobs.get(project.id);
+  if (!job) return startPlacing(call);
+  if (job.reader !== reader) {
+    const waiting = job.next;
+    job.next = null;
+    const run = startPlacing(call);
+    if (waiting) run.then(waiting.resolve, waiting.reject);
+    return run;
+  }
+  // The screen asking now shows the progress of the run going on.
+  job.progress = onProgress;
+  if (job.next) job.next.call = call;
+  else {
+    let resolve!: (c: PlacementCache | null) => void;
+    let reject!: (e: unknown) => void;
+    const result = new Promise<PlacementCache | null>((res, rej) => ((resolve = res), (reject = rej)));
+    job.next = { call, result, resolve, reject };
+  }
+  return job.next.result;
+}
+
+function startPlacing(call: PlaceCall): Promise<PlacementCache | null> {
+  const id = call.project.id;
+  const job: PlaceJob = { reader: call.reader, progress: call.onProgress, next: null };
+  jobs.set(id, job);
+  const run = placeNow(call, (done, total) => job.progress?.(done, total));
+  const after = () => {
+    // A run with another photo helper may have taken over the puzzle meanwhile (see updatePlacements).
+    if (jobs.get(id) === job) jobs.delete(id);
+    const n = job.next;
+    if (n) startPlacing(n.call).then(n.resolve, n.reject);
+  };
+  run.then(after, after);
+  return run;
+}
+
+async function placeNow({ project, pieces, reader, all }: PlaceCall, onProgress: Progress): Promise<PlacementCache | null> {
   const boxKey = boxKeyOf(project);
   const placeKey = placeKeyOf(project);
   if (!boxKey || !placeKey || !project.box || !project.grid) return null;
@@ -149,7 +220,7 @@ export async function updatePlacements(
       cache.open = reply.open;
       for (const r of reply.results) cache.byPiece[r.id] = { ts: part.find((p) => p.id === r.id)!.patch!.ts, placement: r.placement };
     }
-    onProgress?.(Math.min(todo.length, i + BATCH), todo.length);
+    onProgress(Math.min(todo.length, i + BATCH), todo.length);
   }
   await db().settings.put({ key: placementKey(project.id), value: cache });
   return cache;

@@ -7,9 +7,9 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db, eraseAllData } from '../../src/db/db';
 import { createProject, getProject, projectBlobId, putBlob, updateProject } from '../../src/project/store';
-import { readPlacements, shownPlacements, updatePlacements } from '../../src/project/placements';
+import { placeKeyOf, placementKey, readPlacements, shownPlacements, unplacedStatus, updatePlacements } from '../../src/project/placements';
 import { planMerge } from '../../src/project/catalog';
-import type { PieceRow } from '../../src/project/types';
+import type { PieceRow, Project } from '../../src/project/types';
 import type { OpenSpotsInput, PieceToPlace, PlaceReply } from '../../src/shared/apis';
 
 beforeEach(async () => {
@@ -207,5 +207,166 @@ describe('box placements', () => {
     expect(plan.patches.map((p) => p.id)).toEqual(['pt-n1']);
     const again = planMerge(plan.added, [{ ...found, patch: { ...found.patch, flats: [false, true, false, false] } }], { ...ctx, pxPerMm: 9, now: 20 });
     expect(again.updates[0]!.patch).toEqual({ blobId: 'pt-n1', flats: [false, true, false, false], sure: true, ts: 20 });
+  });
+});
+
+/**
+ * One run per puzzle at a time (review 2026-11-10): the puzzle page asks again after every ✓ Fits.
+ * A stand-in photo helper holds the first run while it places pieces, like a long run on the
+ * iPhone after learning the colours; answers given meanwhile used to start full runs of their own.
+ */
+describe('box placements: one run at a time', () => {
+  const PLACED = 20;
+  const UNPLACED = 80;
+  const learned = { ...colour, affine: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0] };
+
+  /** A stand-in photo helper that holds every placePieces call until `open()`. */
+  function heldReader() {
+    let open!: () => void;
+    const gate = new Promise<void>((res) => (open = res));
+    const r = {
+      open,
+      placeCalls: 0,
+      placed: 0,
+      learnCalls: 0,
+      fail: false,
+      async placePieces(_box: Blob, _key: string, _grid: { cols: number; rows: number }, pieces: PieceToPlace[], c: unknown): Promise<PlaceReply> {
+        r.placeCalls++;
+        await gate;
+        if (r.fail) throw new Error('The photo helper stopped');
+        r.placed += pieces.length;
+        return {
+          results: pieces.map((p, i) => ({ id: p.id, placement: { top: [{ col: i % 28, row: 0, rot: 0, score: 1, p: 0.9 }], verdict: 'strong' as const } })),
+          colour: (c as typeof colour | null) ?? colour,
+          open: null,
+          ms: 1,
+        };
+      },
+      async learnColour() {
+        r.learnCalls++;
+        return { colour: learned, n: PLACED, before: 6, after: 4, heldOut: 4, heldOutBase: 6, useful: true };
+      },
+    };
+    return r;
+  }
+
+  /** PLACED pieces in the puzzle at known spots, UNPLACED on the table, all placed before; colours learned from 10 (due again). */
+  async function puzzleDueToLearn() {
+    const project = await setup(PLACED + UNPLACED);
+    const rows = await db().pieces.toArray();
+    for (let i = 0; i < PLACED; i++)
+      await db().pieces.update(`p${i}`, { status: 'placed', placedAt: { col: i, row: 1, rot: 0, at: 5, from: 'table', tray: null, by: 'answer' } });
+    const byPiece = Object.fromEntries(
+      rows
+        .filter((p) => Number(p.id.slice(1)) >= PLACED)
+        .map((p) => [p.id, { ts: p.patch!.ts, placement: { top: [{ col: 0, row: 0, rot: 0 as const, score: 1, p: 0.9 }], verdict: 'strong' as const } }]),
+    );
+    await db().settings.put({
+      key: placementKey(project.id),
+      value: { boxKey: placeKeyOf(project)!, colour, open: null, byPiece, learned: { n: 10, before: 6, after: 6 } },
+    });
+    return project;
+  }
+
+  /** Asks as the puzzle page does (the pieces not yet in the puzzle, and all of them); resolves once asked, with the answer to come. */
+  async function ask(project: Project, r: ReturnType<typeof heldReader>, onProgress?: (done: number, total: number) => void) {
+    const all = await db().pieces.toArray();
+    return { result: updatePlacements(project, all.filter(unplacedStatus), r, onProgress, all) };
+  }
+
+  async function until(ok: () => boolean) {
+    for (let i = 0; i < 500 && !ok(); i++) await new Promise((res) => setTimeout(res, 2));
+    expect(ok()).toBe(true);
+  }
+
+  const fits = (id: string, col: number) =>
+    db().pieces.update(id, { status: 'placed', placedAt: { col, row: 2, rot: 0, at: 6, from: 'table', tray: null, by: 'answer' } });
+
+  it('answers given during a run wait for it, then share one more run that only does what is left', async () => {
+    const project = await puzzleDueToLearn();
+    const r = heldReader();
+    const progress: string[] = [];
+    const first = (await ask(project, r)).result;
+    await until(() => r.placeCalls > 0);
+    // Two ✓ Fits answers while the colours are being learned and every piece placed again.
+    await fits(`p${PLACED}`, 0);
+    const second = (await ask(project, r)).result;
+    await fits(`p${PLACED + 1}`, 1);
+    const third = (await ask(project, r, (done, total) => progress.push(`${done}/${total}`))).result;
+    r.open();
+    const [c1, c2, c3] = await Promise.all([first, second, third]);
+    // Learned once, every piece placed once (before: 3 learnings and 80 + 79 + 78 pieces placed).
+    expect(r.learnCalls).toBe(1);
+    expect(r.placed).toBe(UNPLACED);
+    expect(c1!.learned!.n).toBe(PLACED);
+    expect(c1!.colour).toEqual(learned);
+    // The waiting calls share the last run, which found nothing left to do; the newest one saw the run's progress.
+    expect(c3).toBe(c2);
+    expect(c3).toEqual(await readPlacements(project.id));
+    expect(progress).toEqual(['40/80', '80/80']);
+    // The puzzle is free again: a later call runs at once.
+    expect(await (await ask(project, r)).result).toEqual(c3);
+    expect(r.placed).toBe(UNPLACED);
+  });
+
+  it('a piece photographed again during a run is placed by the run after it', async () => {
+    const project = await puzzleDueToLearn();
+    const r = heldReader();
+    const first = (await ask(project, r)).result;
+    await until(() => r.placeCalls > 0);
+    const p = (await db().pieces.get(`p${PLACED + 5}`))!;
+    await db().pieces.update(p.id, { patch: { ...p.patch!, ts: 300 } });
+    const second = (await ask(project, r)).result;
+    r.open();
+    await first;
+    const c2 = await second;
+    expect(r.learnCalls).toBe(1);
+    expect(r.placed).toBe(UNPLACED + 1);
+    expect(c2!.byPiece[p.id]!.ts).toBe(300);
+  });
+
+  it('a photo helper restarted during a run does not hold the puzzle: a call with the new one runs at once', async () => {
+    const project = await puzzleDueToLearn();
+    // The old helper was thrown away (to free memory) while answering: it never answers again.
+    const old = heldReader();
+    const first = (await ask(project, old)).result;
+    await until(() => old.placeCalls > 0);
+    const waiting = (await ask(project, old)).result;
+    const fresh = heldReader();
+    fresh.open();
+    const progress: string[] = [];
+    let got: unknown = 'none';
+    const third = (await ask(project, fresh, (done, total) => progress.push(`${done}/${total}`))).result;
+    void third.then((c) => (got = c));
+    // Before: it waited for the old run until the app was closed.
+    await until(() => got !== 'none');
+    expect(fresh.learnCalls).toBe(1);
+    expect(fresh.placed).toBe(UNPLACED);
+    expect(progress).toEqual(['40/80', '80/80']);
+    expect(await third).toEqual(await readPlacements(project.id));
+    // The call that was waiting for the old run gets the new run's answer.
+    expect(await waiting).toBe(await third);
+    // The puzzle is free again: a later call runs at once and finds nothing left to do.
+    expect(await (await ask(project, fresh)).result).toEqual(await third);
+    expect(fresh.placed).toBe(UNPLACED);
+    expect(old.placed).toBe(0);
+    void first;
+  });
+
+  it('a run that fails frees the puzzle, and the call waiting for it still gets its run', async () => {
+    const project = await puzzleDueToLearn();
+    const r = heldReader();
+    r.fail = true;
+    const first = (await ask(project, r)).result;
+    await until(() => r.placeCalls > 0);
+    const second = (await ask(project, r)).result;
+    r.open();
+    await expect(first).rejects.toThrow('The photo helper stopped');
+    await expect(second).rejects.toThrow('The photo helper stopped');
+    expect(r.learnCalls).toBe(2);
+    r.fail = false;
+    const c = await (await ask(project, r)).result;
+    expect(Object.keys(c!.byPiece)).toHaveLength(UNPLACED);
+    expect(r.learnCalls).toBe(3);
   });
 });

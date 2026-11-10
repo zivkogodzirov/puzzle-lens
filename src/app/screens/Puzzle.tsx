@@ -2,7 +2,7 @@
  * One puzzle (PLAN §5): name, piece count, grid, box picture, setup progress with "Continue
  * setup", pieces catalogued so far, Export backup and Delete.
  */
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { TopBar } from '../components/TopBar';
 import { go, routeArg } from '../router';
 import { APP_VERSION } from '../env';
@@ -55,7 +55,7 @@ import { canShareFile, downloadUrl, revokeDownloadUrls, shareOrDownload } from '
 import { formatBytes } from '../../report/collect';
 import { logError, logInfo, logWarn } from '../../log/logger';
 
-/** The wizard steps the owner sees (index = Project.setupStep value that shows it). */
+/** The wizard steps the owner sees with printed markers (index = Project.setupStep value that shows it). */
 export const SETUP_STEPS: readonly string[] = [
   'Home Screen check',
   'Name and piece count',
@@ -64,12 +64,33 @@ export const SETUP_STEPS: readonly string[] = [
   'Print markers',
   'Lay out markers and photograph the table',
 ];
+/** Without printing (the default, 2026-11-07), step 4 is the last one and there are no marker steps. */
+const SETUP_STEPS_NO_PRINT: readonly string[] = ['Home Screen check', 'Name and piece count', 'Box picture', 'Grid', 'Ready to scan'];
 
-/** Words for an error, for the screen. */
+/**
+ * The set-up steps of the way the puzzle is set up (review 2026-11-10: without printing, the wizard
+ * said "Step 4 of 5 · Print markers", and the puzzle page then ticked the two marker steps as done).
+ * Until printed markers are chosen at step 4, a puzzle is set up without them.
+ */
+export function setupSteps(p: Pick<Project, 'tracking'>): readonly string[] {
+  return p.tracking === 'markers' ? SETUP_STEPS : SETUP_STEPS_NO_PRINT;
+}
+
+/** What the screen says for a photo that can't be opened (a damaged file, or a kind of picture this iPhone can't read). */
+export const UNREADABLE_PHOTO = 'This photo couldn’t be read. Take it again, or choose a different photo.';
+
+/** Words for an error, for the screen (callers log the error itself, with its technical text). */
 export function errorWords(err: unknown): string {
   const e = err as { message?: string; name?: string } | null;
   const m = e?.message || String(err);
   if (e?.name === 'QuotaExceededError' || /quota/i.test(m)) return 'Your iPhone is out of storage space for Puzzle Lens. Free some space and try again.';
+  // The browser's own words for a photo it can't decode (review 2026-11-10), e.g. WebKit's "Cannot
+  // decode the data in the argument to createImageBitmap" or Chrome's "The source image could not be decoded."
+  if (
+    e?.name === 'EncodingError' ||
+    /createImageBitmap|could not be decoded|cannot be decoded|cannot decode|can't decode|unable to decode|unsupported image/i.test(m)
+  )
+    return UNREADABLE_PHOTO;
   return m;
 }
 
@@ -105,12 +126,17 @@ export function boxVersion(box: Project['box'] | null | undefined): string | nul
   return box ? `${box.rectifiedBlobId}|${box.width}x${box.height}|${box.corners.map((c) => c.join(',')).join(';')}|${box.fitted ?? 0}` : null;
 }
 
-/** "Set-up: step 3 of 5 (Grid)" or "Set-up finished". */
+/** "Set-up: step 3 of 4 (Grid)" (of 5 with printed markers) or "Set-up finished". */
 export function setupStatus(p: Project): string {
   if (p.setupStep >= LAST_SETUP_STEP) return 'Set-up finished';
-  const step = Math.max(1, Math.min(5, p.setupStep));
-  return `Set-up: step ${step} of 5 (${SETUP_STEPS[step]})`;
+  const steps = setupSteps(p);
+  const last = steps.length - 1;
+  const step = Math.max(1, Math.min(last, p.setupStep));
+  return `Set-up: step ${step} of ${last} (${steps[step]})`;
 }
+
+/** While the piece counts are being read, how often the backup reminder looks again whether the pieces list read the pieces (ms). */
+const REMIND_WAIT_MS = 300;
 
 type ExportPhase = { kind: 'idle' } | { kind: 'preparing' } | { kind: 'ready'; file: File; url: string } | { kind: 'error'; message: string };
 
@@ -132,8 +158,11 @@ export function PuzzleScreen() {
   const [asideN, setAsideN] = useState(0);
   const [scanAction, setScanAction] = useState<'none' | 'confirm-delete' | 'confirm-restore' | 'confirm-batch' | 'busy'>('none');
   const [scanNote, setScanNote] = useState<string | null>(null);
-  const [reminder, setReminder] = useState<BackupReminder | null>(null);
+  /** The pieces' times, for the backup reminder. */
+  const [reminderRows, setReminderRows] = useState<Pick<PieceRow, 'updatedAt'>[] | null>(null);
   const mounted = useRef(true);
+  /** Piece counts being read (on opening, or after a change), so the reminder waits for them. */
+  const counting = useRef(0);
   const thumb = useBlobUrl(project?.box?.rectifiedBlobId, boxVersion(project?.box));
 
   useEffect(() => {
@@ -146,10 +175,13 @@ export function PuzzleScreen() {
 
   useEffect(() => {
     setProject(undefined);
+    setPieces(null);
+    setReminderRows(null);
     if (!id) {
       setProject(null);
       return;
     }
+    counting.current++;
     getProject(id)
       .then(async (p) => {
         if (!mounted.current) return;
@@ -171,23 +203,61 @@ export function PuzzleScreen() {
         logError('puzzle', 'The puzzle could not be loaded', err);
         setError(errorWords(err));
         setProject(null);
-      });
+      })
+      .finally(() => counting.current--);
   }, [id]);
 
   // Backup reminder (M7 part 3): from the pieces' and answers' times against the last backup.
+  // The pieces are read again after every change that may have changed them, as before, but when the
+  // pieces list reads them after that change, its read is used (review 2026-11-10: on opening and
+  // after every ✓ Fits, every piece was read up to 3 more times for this and for the counts).
+  // How it fits together:
+  // - remindKey changes with every such change; askedAt is when it last changed (set while drawing).
+  // - A read started at or after askedAt is new enough; an older one is ignored when it arrives.
+  // - listReadAt is when the pieces list last started reading. It reads when the counts change, and
+  //   its effect runs before this one (children's effects come first), so after a change of counts
+  //   listReadAt >= askedAt and this effect doesn't read.
+  // - counting > 0 while counts are being read (reloadScan starts in the same tap as the change):
+  //   the list will most often read once they arrive, so this waits, looking again every REMIND_WAIT_MS.
+  // - Otherwise (e.g. ✗ Doesn't fit, which changes only the puzzle record) it reads at once.
+  const remindKey = project ? `${project.id}|${project.updatedAt}|${pieces}|${tableN}|${trayN}|${placedN}` : '';
+  const remind = useRef({ key: '', askedAt: 0, listReadAt: -1 });
+  if (remind.current.key !== remindKey) remind.current = { ...remind.current, key: remindKey, askedAt: performance.now() };
+  /** Pieces read starting at `at`: used if no change came after that. */
+  const gotReminderRows = (rows: PieceRow[], at: number) => {
+    if (mounted.current && at >= remind.current.askedAt) setReminderRows(rows.map((r) => ({ updatedAt: r.updatedAt })));
+  };
+  const listReading = (rows: Promise<PieceRow[]>, at: number) => {
+    remind.current.listReadAt = at;
+    void rows.then((r) => gotReminderRows(r, at)).catch(() => {});
+  };
   useEffect(() => {
     if (!project) return;
-    let live = true;
-    void db()
-      .pieces.where('projectId')
-      .equals(project.id)
-      .toArray()
-      .then((rows) => live && setReminder(backupReminder(project, rows)))
-      .catch(() => {});
-    return () => {
-      live = false;
+    const pid = project.id;
+    const key = remindKey;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const read = () => {
+      // A newer change: its own turn of this effect reads.
+      if (remind.current.key !== key) return;
+      // The counts are on their way (and with them, most often, the pieces list reads the pieces).
+      if (counting.current > 0) return void (t = setTimeout(read, REMIND_WAIT_MS));
+      // The pieces list is reading them since the change.
+      if (remind.current.listReadAt >= remind.current.askedAt) return;
+      const at = performance.now();
+      void db()
+        .pieces.where('projectId')
+        .equals(pid)
+        .toArray()
+        .then((rows) => gotReminderRows(rows, at))
+        .catch(() => {});
     };
-  }, [project?.id, project?.updatedAt, project?.lastBackup?.at, project?.backupSnoozedUntil, pieces, tableN, trayN, placedN]);
+    read();
+    return () => clearTimeout(t);
+  }, [remindKey]);
+  const reminder = useMemo<BackupReminder | null>(
+    () => (project && reminderRows ? backupReminder(project, reminderRows) : null),
+    [reminderRows, project?.lastBackup?.at, project?.backupSnoozedUntil],
+  );
 
   if (project === undefined) {
     return (
@@ -285,17 +355,22 @@ export function PuzzleScreen() {
 
   /** After deleting or restoring: the puzzle (size), piece count and bin as stored now. */
   const reloadScan = async () => {
-    const [np, c, b] = await Promise.all([getProject(p.id), countPiecesByStatus(p.id), scanBinSummary(p.id)]);
-    if (!mounted.current) return;
-    if (np) setProject(np);
-    setPieces(c.all);
-    setMissingN(c.missing);
-    setTrayN(c.tray);
-    setTableN(c.table);
-    setPendingN(c.pending);
-    setPlacedN(c.placed);
-    setAsideN(c.aside);
-    setBin(b);
+    counting.current++;
+    try {
+      const [np, c, b] = await Promise.all([getProject(p.id), countPiecesByStatus(p.id), scanBinSummary(p.id)]);
+      if (!mounted.current) return;
+      if (np) setProject(np);
+      setPieces(c.all);
+      setMissingN(c.missing);
+      setTrayN(c.tray);
+      setTableN(c.table);
+      setPendingN(c.pending);
+      setPlacedN(c.placed);
+      setAsideN(c.aside);
+      setBin(b);
+    } finally {
+      counting.current--;
+    }
   };
 
   // A new batch (M7): the pieces on the table are set aside; the next photo starts a fresh table.
@@ -491,18 +566,20 @@ export function PuzzleScreen() {
 
       <h2>Set-up</h2>
       <ol class="setup-progress" data-testid="setup-progress">
-        {SETUP_STEPS.slice(1).map((label, i) => {
-          const step = i + 1;
-          const state = p.setupStep > step ? 'done' : p.setupStep === step ? 'current' : 'todo';
-          return (
-            <li key={step} class={`setup-${state}`}>
-              <span class="setup-mark" aria-hidden="true">
-                {state === 'done' ? '✓' : step}
-              </span>
-              <span>{label}</span>
-            </li>
-          );
-        })}
+        {setupSteps(p)
+          .slice(1)
+          .map((label, i) => {
+            const step = i + 1;
+            const state = p.setupStep > step ? 'done' : p.setupStep === step ? 'current' : 'todo';
+            return (
+              <li key={step} class={`setup-${state}`}>
+                <span class="setup-mark" aria-hidden="true">
+                  {state === 'done' ? '✓' : step}
+                </span>
+                <span>{label}</span>
+              </li>
+            );
+          })}
       </ol>
       {!setupDone && (
         <button class="btn btn-primary btn-block" data-testid="continue-setup" onClick={() => go('new', p.id)}>
@@ -516,16 +593,20 @@ export function PuzzleScreen() {
           <button class="btn btn-primary btn-block" data-testid="scan-pieces" onClick={() => go('scan', p.id)}>
             📷 Scan pieces
           </button>
-          <Catalog
-            projectId={p.id}
-            version={`${pieces}|${trayN}|${tableN}|${pendingN}`}
-            markers={p.tracking === 'markers'}
-            grid={p.grid}
-            pitch={p.piecePitch}
-            project={p}
-            onProject={setProject}
-            onPiecesChanged={() => void reloadScan().catch((err) => logError('puzzle', 'The piece counts could not be read', err))}
-          />
+          {/* Once the counts are known, so it reads the pieces once on opening, not again when they arrive. */}
+          {pieces !== null && (
+            <Catalog
+              projectId={p.id}
+              version={`${pieces}|${trayN}|${tableN}|${pendingN}`}
+              markers={p.tracking === 'markers'}
+              grid={p.grid}
+              pitch={p.piecePitch}
+              project={p}
+              onProject={setProject}
+              onPiecesChanged={() => void reloadScan().catch((err) => logError('puzzle', 'The piece counts could not be read', err))}
+              onReading={listReading}
+            />
+          )}
           {scanNote && (
             <div class="notice notice-good" role="status" data-testid="scan-bin-note">
               {scanNote}
@@ -746,6 +827,7 @@ function Catalog({
   project,
   onProject,
   onPiecesChanged,
+  onReading,
 }: {
   projectId: string;
   version: unknown;
@@ -755,6 +837,8 @@ function Catalog({
   project: Project;
   onProject: (p: Project) => void;
   onPiecesChanged: () => void;
+  /** Every piece being read (from the time given), so the page can use the same read. */
+  onReading?: (rows: Promise<PieceRow[]>, at: number) => void;
 }) {
   const [rows, setRows] = useState<PieceRow[]>([]);
   const [allRows, setAllRows] = useState<PieceRow[]>([]);
@@ -779,7 +863,10 @@ function Catalog({
   useEffect(() => {
     let live = true;
     void (async () => {
-      const everything = await db().pieces.where('projectId').equals(projectId).toArray();
+      const at = performance.now();
+      const reading = db().pieces.where('projectId').equals(projectId).toArray();
+      onReading?.(reading, at);
+      const everything = await reading;
       // Pieces to check (M5 part 3) are on the table too.
       const ps = everything.filter((q) => q.status === 'table' || q.status === 'pending');
       if (!live) return;
@@ -880,6 +967,33 @@ function Catalog({
       })
       .catch((err) => logError('answer', 'The answer could not be saved', err));
   };
+  /** Counts the picks, so each one looks once whether its panel needs bringing into view (also when the same piece is picked again). */
+  const [panelAsk, setPanelAsk] = useState(0);
+  /**
+   * Opens a piece's panel (below the list of pieces, up to SHOW_MAX thumbnails) and brings it into
+   * view (review 2026-11-10: a tapped thumbnail opened it out of sight).
+   */
+  const pick = (id: string) => {
+    setSelected(id);
+    setPanelAsk((n) => n + 1);
+  };
+  // The panel is brought into view in the same frame it is drawn, before the screen shows it, and only
+  // when its top (the piece, its spot, ✓ Fits) isn't in view (2026-11-10). Scrolled from a timer 50 ms
+  // later, it moved by about 250 px after it was on screen: a tap on ✓ Fits in that moment was lost or
+  // landed on "Not a puzzle piece? Remove it". The panel is taller than the screen with its box picture,
+  // so its top comes first; centred, as before for picks on the table photo and the live view, it was cut off.
+  useLayoutEffect(() => {
+    if (!panelAsk) return;
+    const el = document.querySelector<HTMLElement>('[data-testid="piece-spots"]');
+    if (!el) return;
+    // Its top lines end with ✓ Fits / ✗ Doesn't fit, or with what it says when there is no spot.
+    const head = el.querySelector('[data-testid="spot-answer"]') ?? el.querySelector('[data-testid="spot-verdict"]') ?? el;
+    // Clear of the iPhone's status bar and Home bar (the panel's scroll margins).
+    const css = getComputedStyle(el);
+    const top = el.getBoundingClientRect().top;
+    if (top < (parseFloat(css.scrollMarginTop) || 0) || head.getBoundingClientRect().bottom > innerHeight - (parseFloat(css.scrollMarginBottom) || 0))
+      el.scrollIntoView({ block: 'start' });
+  }, [panelAsk]);
   const bestSpot = (p: PieceRow) => {
     const t = shownPlaces.get(p.id)?.placement.top[0];
     return t ? { col: t.col, row: t.row, rot: t.rot } : null;
@@ -934,8 +1048,7 @@ function Catalog({
           }}
           onPick={(p) => {
             setLiveOpen(false);
-            setSelected(p.id);
-            setTimeout(() => document.querySelector('[data-testid="piece-spots"]')?.scrollIntoView({ block: 'center' }), 50);
+            pick(p.id);
           }}
           title="Live view"
           lines={matchLines}
@@ -975,8 +1088,7 @@ function Catalog({
           infoOf={infoOf}
           onPick={(p) => {
             setTableOpen(false);
-            setSelected(p.id);
-            setTimeout(() => document.querySelector('[data-testid="piece-spots"]')?.scrollIntoView({ block: 'center' }), 50);
+            pick(p.id);
           }}
           maxPhotos={6}
           title="Your table"
@@ -1120,7 +1232,7 @@ function Catalog({
         {(['all', 'border', 'interior', 'unsure'] as const)
           .filter((k) => k !== 'unsure' || count.unsure > 0)
           .map((k) => (
-            <button key={k} class={`chip ${show === k ? 'chip-on' : ''}`} aria-pressed={show === k} data-testid={`group-${k}`} onClick={() => setShow(k)}>
+            <button key={k} class="chip" aria-pressed={show === k} data-testid={`group-${k}`} onClick={() => setShow(k)}>
               {GROUP_LABEL[k]} {count[k]}
             </button>
           ))}
@@ -1288,7 +1400,7 @@ function Catalog({
             group={groups.get(r.id)!}
             place={shownPlaces.get(r.id)?.placement ?? null}
             selected={selected === r.id}
-            onSelect={() => setSelected(selected === r.id ? null : r.id)}
+            onSelect={() => (selected === r.id ? setSelected(null) : pick(r.id))}
             tray={trayTag(colourGroups, trayOf(r.id))}
             side={sideOf(r.id)}
           />
@@ -1481,6 +1593,11 @@ function PieceThumb({
   );
 }
 
+/** Room kept around the piece panel when it is scrolled into view (clear of the iPhone's status bar and Home bar). */
+const SPOTS_SCROLL_MARGIN = {
+  scrollMarginTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+  scrollMarginBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+};
 const VERDICT_WORDS: Record<Placement['verdict'], string> = { strong: 'Strong', likely: 'Likely', several: 'Several spots look alike' };
 /** A chance in whole percent, never shown as a certain 100 %. */
 const pct = (p: number): number => Math.min(99, Math.round(p * 100));
@@ -1618,7 +1735,7 @@ function PieceSpots({
   const best = place?.top[0];
   const fits = choice?.fits ?? true;
   return (
-    <div class="card piece-spots" data-testid="piece-spots">
+    <div class="card piece-spots" data-testid="piece-spots" style={SPOTS_SCROLL_MARGIN}>
       <div class="row">
         {url && <img src={url} class="spot-thumb" alt="This piece" />}
         <div class="grow">
@@ -1653,7 +1770,7 @@ function PieceSpots({
                   </button>
                 </div>
               )}
-              <p class="muted small">Counted from the top-left corner of the box picture.{spots ? ` Grey squares: the ${spots.length} empty spots.` : ''}</p>
+              <p class="muted small">Counted from the top-left corner of the box picture.{spots ? ` White outlines: the ${spots.length} empty spots.` : ''}</p>
               {place!.top.slice(1).some((t) => t.p >= 0.01) && (
                 <p class="small" data-testid="spot-others">
                   Also possible:{' '}

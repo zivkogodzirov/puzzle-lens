@@ -91,6 +91,8 @@ export interface FinishedCheck {
   gapsPreview: Array<[number, number]>;
   /** The puzzle's 4 corners in preview px. */
   cornersPreview: Array<[number, number]>;
+  /** Loose pieces seen beside the puzzle (touching ones count once): not catalogued from this photo. */
+  loose?: number;
 }
 
 export type FreeScanReply = ScanMarkerlessResult & {

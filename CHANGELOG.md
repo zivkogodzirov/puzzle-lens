@@ -4,6 +4,37 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M8 (part 4): fixes from the app review, bugs and speed (2026-11-10; tested on the Mac with your photos, not yet on your iPhone)
+- **Checked twice.** Every change was checked by a second, independent check against the version before it. Then a separate review asked one question: did any of it make the app worse? Over 40 checks looked at the Scan screen, the puzzle page, memory, speed, your photos and data safety. They confirmed 7 small-to-medium problems and the final check found nothing new. 5 are fixed below. The other 2 were about extra scan work on photos that can't be used anyway: every way I tried to cut it also stopped some of your photos from being read, so it stays (a test with your photos now guards it).
+- **Your 41 photos, through the whole app:** the same pieces as before, apart from 2 photos of the half-finished puzzle (IMG_9226, IMG_9227) that now read right after a photo taken at another height. All 22 end results (a catalog per batch) are the same.
+- **Scan screen, the note after a photo:**
+  - It no longer covers the gauge's words at the top. It sits in the panel at the bottom, gets the room first, and a long one shows **More ▾**, which opens all of it.
+  - A note that doesn't fit makes room for itself. The coin choice hides while it shows, and while no photo takes itself the gauge gets smaller. A short note keeps everything as before.
+  - Sideways, it sits in its own column on the left and is never cut off.
+  - The review found the first version showed only 2–3 lines on a small screen, with no sign of the rest. Now, in the Home Screen app on your iPhone 17 Pro, the finished-puzzle note shows whole.
+- **A photo of the finished or nearly finished puzzle:**
+  - It now says **"About N loose pieces lie next to the puzzle"** (on IMG_9280, 8, and I count 8; it's a rough count). They used to be left out without a word.
+  - The saved empty spots and the loose pieces now come first, before the long list of gaps.
+  - The review found the loose line could go missing after a photo taken at another height. Fixed: they are counted at the puzzle's own size.
+- **Fixed (found in the review, there since M7):** a puzzle part done, misread as "finished" with a different grid, replaced your saved empty spots. Your IMG_9244 reads as 28 × 37 instead of 28 × 36: the app saved 92 "empty spots" it then couldn't use, and said "Saved". Now nothing is saved from a count that doesn't match your grid, and the note says so. Your photos of the finished and nearly finished puzzle (IMG_9272, IMG_9280, IMG_9281) all read 28 × 36 and save as before.
+- **The scale guess** comes only from the newest photo of the same kind (overview or close-up), so an overview after a close-up (or the other way round) is no longer read at the wrong size.
+- **The puzzle page:**
+  - A tapped piece's panel comes into view in one move. The review found that the first version moved it again a moment later, so a quick ✓ Fits could be lost or land on "Remove it". Fixed: it is placed before the screen shows it.
+  - Quick ✓ Fits answers are counted once.
+  - Set-up shows **4 steps** when you don't print markers ("Step 4 of 4 · Ready to scan").
+  - Clearer words when a photo can't be read; "White outlines: the 21 empty spots."
+  - The Bin card's size is kept in a small row of its own, and it checks itself against the bin.
+- **Faster (on the Mac):**
+  - Scan photos take about a fifth less time in all (timed twice, old and new back to back on a quiet Mac: 609 → 485 s for all 41 photos in every kind of scan). The first photo of a scan takes 0.57–0.96× its old time (median 0.83×). Photos of the puzzle gain most (IMG_9280 6.2 → 4.1 s, IMG_9272 5.5 → 3.7 s), photos of loose pieces least (IMG_9127 and IMG_9276 5.7 → 5.3 s). The finder's colour step is about 30 % faster, and the scale is checked once instead of twice. A finished puzzle skips its second try.
+  - The first photo after **Start a new batch**: a 1.8–2.6 s freeze → under 1 ms.
+  - Working out where pieces go: 11.2 → 3.4 ms a piece (3.3× faster; 5.7–6.3× in Safari's engine), with the same results.
+  - **Sort into trays**: about 0.5 s → 50–74 ms, never frozen for more than 0.08 s.
+  - The puzzle page reads your pieces once when it opens (was 5 times) and once per ✓ Fits (was 4), and its pictures load in 0.31 s instead of 0.48 s. A scan photo reads them once (was 3 times).
+  - The photo helper now starts when the Scan screen opens. That saves only **0.1–0.6 s** on the first photo, not the 2.5–3 s the review guessed. A warm-up photo was tried and dropped, because it made the first photo slower.
+- **Small things:** the 🧪 Test tab is a thin strip that stays off buttons and text; Device check no longer scrolls sideways; Progress's **Details** is a small button; a refused camera's notice is readable in light mode, with one **Start camera** button.
+- **A tip taken back:** in M8 part 3 (and in the table-contrast check, M4) I suggested a darker cloth under pale pieces. I never tested it, and on computer-made photos darker cloths did worse (white 95 %, mid grey 85 %, dark green 77 %, dark grey 44 % of pale pieces found). A close-up is the fix; the app no longer suggests the cloth.
+- **Still to check on your iPhone:** Safari tabs (shorter screen), the camera stopping while the photo picker is open, warmth and memory with both photo helpers running from the start, and the photo and file buttons.
+
 ### M8 (part 3, follow-up): why your photo IMG_9127 showed 44 pieces (2026-11-10; tested on your photos, not yet on your iPhone)
 - **A correction first:** I wrote that IMG_9127 had about 95 loose pieces. Counted carefully on close-ups, it has **about 60**.
 - **Every one of them was found.** The 44 outlines cover about 60 pieces:
@@ -12,9 +43,9 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
   - **1** pale piece outlined only in part.
   - **2** things cut off at the photo's edge.
 - **Pale pieces on your cream table** (the white dress) sometimes get only part of their outline: the table looks like the white print. A wrong, too-small outline gave a wrong shape (for example a "flat side" where the outline cut across the piece).
-- **New:** a piece outlined much smaller than the photo's other pieces (under 60 % of a typical one) is now marked **yellow, "only partly outlined"**. The app doesn't use its shape (no corner/edge guess, no knob fit), only its picture. The scan note says how many, and that a close-up or a darker cloth under pale pieces helps.
+- **New:** a piece outlined much smaller than the photo's other pieces (under 60 % of a typical one) is now marked **yellow, "only partly outlined"**. The app doesn't use its shape (no corner/edge guess, no knob fit), only its picture. The scan note says how many, and that a close-up or a darker cloth under pale pieces helps. *(The darker cloth was withdrawn in M8 part 4: never tested.)*
 - **Checked on all 20 of your photos:** no whole piece was marked. Marked: the clearly cut-short pale piece in IMG_9127, two piece backs in the brown lid (IMG_9245), and some false "pieces" inside the finished part of the puzzle. On computer-made photos: 12 of 2639 pieces marked, none of them whole.
-- **Not solved:** pale pieces outlined at 70–80 % of their size can't be told from whole pieces by size, so they aren't marked. Spreading pieces so they don't touch, and a darker cloth under pale pieces, help most.
+- **Not solved:** pale pieces outlined at 70–80 % of their size can't be told from whole pieces by size, so they aren't marked. Spreading pieces so they don't touch, and a darker cloth under pale pieces, help most. *(The darker cloth was withdrawn in M8 part 4.)*
 
 ### M8 (part 3): faster scans, a lighter live view (2026-11-10; measured on the Mac with your photos, not yet on your iPhone)
 - **Scans are faster.** Your 18-megapixel photos were read in 7.4–11.5 s on the Mac; now **4.4–7.2 s** for the first photo of a scan, and **1.6–2.0 s** for the next ones taken at about the same height (the app starts from the previous photo's scale instead of guessing and searching twice). The pieces found are the same.
@@ -116,7 +147,7 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ### M4 (part 7): box setup checks, M4 finished (2026-11-09; tested in the app on the Mac and checked on your iPhone)
 - **Border question** (new-puzzle wizard, after straightening the box picture): "Does this picture show exactly the puzzle?" Yes / It has a frame or white border (then: put the dots inside the frame, with an **Adjust corners** button) / The box shows a bit more or less / Not sure. The answer is kept.
-- **Table-contrast check** (puzzle page, under the piece groups, once pieces are scanned): how much of the picture is close to your table's colour, so pieces from there stand out little and a scan may miss them; **Show where** marks those spots on the box picture. Your *The Kiss* on your white table: about 1 % (the white lace sleeve and the collar), shown as a calm ✓ line; from 2 % on, a warning suggests checking those pieces or sorting them on a darker cloth.
+- **Table-contrast check** (puzzle page, under the piece groups, once pieces are scanned): how much of the picture is close to your table's colour, so pieces from there stand out little and a scan may miss them; **Show where** marks those spots on the box picture. Your *The Kiss* on your white table: about 1 % (the white lace sleeve and the collar), shown as a calm ✓ line; from 2 % on, a warning suggests checking those pieces or sorting them on a darker cloth. *(The darker cloth was withdrawn in M8 part 4: never tested.)*
 - **Box picture check (box-to-grid correction):** box art often shows a little more or less of the scene than the real puzzle, so its grid drifts off the real pieces toward the edges. On computer-made 300-piece puzzles, a box picture 1 % too big each side placed only 74 % of pieces right first (instead of 83 %); 2 % too big, 51 %. The app now measures this from the pieces it's sure about. When it's off by 0.1 of a piece or more, the puzzle page offers **Correct the box picture**, which straightens your box photo again with corrected corners and places the pieces again. With the correction: 82 % (1 %), 82 % (2 %), 80 % (1.5 % too small). On a box picture that fits, it never offers anything. Your box picture fits *The Kiss* within 0.15 of a piece, so you won't see it there.
 
 ### M4 (part 6): green outlines: your table at a glance (2026-11-09; tested in the app on the Mac and checked on your iPhone)
