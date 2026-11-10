@@ -577,7 +577,14 @@ export function ScanScreen() {
         lines.push(
           `${clumps === 1 ? 'One spot where pieces touch' : `${clumps} spots where pieces touch`} (orange dashes): spread them apart and take the photo again.`,
         );
-      if (weak) lines.push(`${weak} pale piece${weak > 1 ? 's' : ''} with a faint outline (yellow): check ${weak > 1 ? 'they are' : 'it is'} outlined right.`);
+      const part = r.pieces.filter((p) => p.flags.part).length;
+      const faint = weak - part;
+      if (faint)
+        lines.push(`${faint} pale piece${faint > 1 ? 's' : ''} with a faint outline (yellow): check ${faint > 1 ? 'they are' : 'it is'} outlined right.`);
+      if (part)
+        lines.push(
+          `${part === 1 ? '1 piece' : `${part} pieces`} only partly outlined (yellow, smaller than the others): ${part === 1 ? 'its' : 'their'} shape is not used. A close-up, or a darker cloth under pale pieces, helps.`,
+        );
       for (const q of r.reasons) if (!/Blurred|Tilted/.test(q)) lines.push(q);
       lines.unshift(...coinLines);
       if (kind === 'overview' && settings.scanMode.value === 'quick') lines.push('Quick scan done. Close-ups (2×) read the shapes better, if you want them.');

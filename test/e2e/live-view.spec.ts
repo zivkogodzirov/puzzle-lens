@@ -184,6 +184,7 @@ test.describe('what to test', () => {
     const sheet = page.getByTestId('test-sheet');
     await expect(sheet.locator('h2').first()).toContainText('M8');
     await expect(sheet).toContainText('Colours learned');
+    await expect(sheet).toContainText('only partly outlined');
     await expect(sheet).not.toContainText('{version}');
     const ticks = sheet.getByTestId('test-tick');
     expect(await ticks.count()).toBeGreaterThanOrEqual(5);

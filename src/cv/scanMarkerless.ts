@@ -76,6 +76,28 @@ export const CLOSE_CLUMP_RATIO = 1.5;
 export const CLOSE_MAX_AREA = 6;
 /** Found top-face area ÷ cell area on real photos (IMG_9224: 12 single pieces, 0.79 ± 0.05 against the assembled frame's scale). */
 export const REAL_PIECE_AREA_SHARE = 0.79;
+/**
+ * Outlines found only in part (owner's IMG_9127, 2026-11-10: a pale white-dress piece on the cream
+ * table came out at 0.15 of a piece; IMG_9245, piece backs on brown cardboard: 0.48, 0.52). A
+ * single piece under `minShare` × the median of the photo's single pieces is marked `weak` and
+ * `part`. Whole pieces on the owner's photos read 0.73 and up at the app's 4032 px (IMG_9224, a
+ * tilted photo; 0.77+ on the others); 12 synthetic overview photos: 12 marked, none a whole piece.
+ * Partial outlines at 0.7–0.8 can't be told from whole pieces by size. Needs `minSingles` single
+ * pieces for the median.
+ */
+export const PART_OUTLINE = { minShare: 0.6, minSingles: 8 };
+
+/** Marks single pieces much smaller than the photo's others as found only in part (see PART_OUTLINE). */
+export function flagPartOutlines<T extends Pick<FoundPiece, 'areaMm2' | 'flags'>>(pieces: T[]): T[] {
+  const single = (p: T) => !p.flags.cut && !p.flags.clump && !p.flags.weak && p.areaMm2 > 0;
+  const areas = pieces
+    .filter(single)
+    .map((p) => p.areaMm2)
+    .sort((a, b) => a - b);
+  if (areas.length < PART_OUTLINE.minSingles) return pieces;
+  const limit = PART_OUTLINE.minShare * areas[areas.length >> 1]!;
+  return pieces.map((p) => (single(p) && p.areaMm2 < limit ? { ...p, flags: { ...p.flags, weak: true, part: true } } : p));
+}
 
 function scaleFrame(W: number, H: number, ppm: number): { imgToMm: Mat3; mmToImg: Mat3 } {
   const cx = (W - 1) / 2;
@@ -271,7 +293,7 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
     // The first photo defines the frame. Undo the phone's small tilt, measured from how piece
     // sizes change across the photo (nearer pieces look bigger), so the frame is metric.
     const Hr = levelFromSizes(res.pieces, { W, H, zoom: opts.zoom, pxPerMm: ppm }) ?? IDENTITY;
-    const pieces = res.pieces.map((p) => mapPiece(p, Hr));
+    const pieces = flagPartOutlines(res.pieces.map((p) => mapPiece(p, Hr)));
     timings.total = performance.now() - T0;
     return {
       pieces,
@@ -305,7 +327,7 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
     reg = again;
   }
   const Hc = reg.photoToCatalog;
-  const pieces = res.pieces.map((p) => mapPiece(p, Hc));
+  const pieces = flagPartOutlines(res.pieces.map((p) => mapPiece(p, Hc)));
   const imgToCatalog = mulH(Hc, frame.imgToMm);
   t = performance.now();
   timings.total = t - T0;

@@ -236,4 +236,36 @@ describe.skipIf(photos.length === 0)('real photos, marker-free scan', () => {
     },
     120_000,
   );
+
+  // IMG_9127 (owner, 2026-11-10): ~95 pieces in two groups on the cream table. Pale white-dress
+  // pieces came out only in part (at the app's 4032 px: one at 0.15 of a piece, others at 0.73–0.77,
+  // too close to whole pieces to tell by size: the cream table looks like the white print). The
+  // clearly cut-short one is marked `part` (and `weak`) so its shape isn't trusted. IMG_9245: two
+  // piece backs on brown cardboard, 0.48 and 0.52. Whole pieces are never marked (IMG_9224, tilted,
+  // has whole pieces down to 0.68 at full size, 0.73 at the app's).
+  it.skipIf(!has('IMG_9127'))(
+    'IMG_9127 and the others: outlines found only in part are marked, whole pieces never',
+    async () => {
+      const cv = await getCv();
+      for (const [name, want] of [
+        ['IMG_9127', 1],
+        ['IMG_9245', 2],
+        ['IMG_9224', 0],
+        ['IMG_9263', 0],
+        ['IMG_9264', 0],
+        ['IMG_9274', 0],
+        ['IMG_9275', 0],
+        ['IMG_9276', 0],
+        ['IMG_9277', 0],
+      ] as const) {
+        if (!has(name)) continue;
+        const img = await load(cv, photos.find((p) => p.name.startsWith(name))!.path);
+        const r = scanMarkerless(cv, img, { catalog: [], zoom: 1, kind: 'overview', table: null });
+        const part = r.pieces.filter((p) => p.flags.part);
+        expect(part.length, name).toBe(want);
+        expect(part.every((p) => p.flags.weak)).toBe(true);
+      }
+    },
+    600_000,
+  );
 });

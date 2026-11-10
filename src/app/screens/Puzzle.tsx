@@ -723,7 +723,7 @@ export type ShapeGroup = PieceKind | 'unsure';
 
 /** A catalogued piece's group from its outline: corner, edge, interior, or not sure (touching, cut, or a read not trusted). */
 export function pieceGroup(p: PieceRow, cell: [number, number] | null): ShapeGroup {
-  if (p.flags.clump || p.flags.cut) return 'unsure';
+  if (p.flags.clump || p.flags.cut || p.flags.part) return 'unsure';
   const r = readShape(p.outlineMm, cell);
   return r && r.kind && r.quality >= READ_OK ? r.kind : 'unsure';
 }

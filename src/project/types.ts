@@ -212,6 +212,12 @@ export interface PieceFlags {
   glare?: boolean;
   /** Pale piece with a weak outline: shown with a "check" mark. */
   weak?: boolean;
+  /**
+   * Outline found only in part: much smaller than the photo's other single pieces (a pale piece on
+   * the cream table, a piece back on a wooden table). Always with `weak`; its shape is not trusted
+   * (no corner/edge read, no side shapes), only its picture.
+   */
+  part?: boolean;
 }
 
 export interface PieceRow {

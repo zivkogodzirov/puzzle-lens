@@ -1,6 +1,8 @@
-# M8, parts 1 and 3: colours learned from your pieces, faster scans and a lighter live view (and M7, M6, M5, still to check)
+# M8, part 3 follow-up: pieces outlined only in part (and M8 parts 1 and 3, M7, M6, M5, still to check)
 
 **New in M8 part 1:** once **12 pieces are in the puzzle at known spots** (✓ Fits), the app learns how your photos' colours map to the box picture and places every other piece again; the puzzle page says **"Colours learned from your N pieces in the puzzle"**. This is for a fresh puzzle on the whole picture (among the holes of a nearly finished puzzle it isn't needed). Measured on your 19 real pieces: right spot first **1 → 6**, in the top 5 **3 → 9**.
+
+**New in the M8 part 3 follow-up:** a piece outlined much smaller than the others on a photo (usually a pale piece on your cream table) is marked **yellow, "only partly outlined"**, and its shape isn't used, only its picture. Your photo IMG_9127 has about 60 loose pieces (not 95, as I wrote first); all were found: 27 alone, about 29 in groups of touching pieces (spread them apart), 1 pale one only in part.
 
 **New in M8 part 3:** scans are faster (on the Mac your 18 MP photos now take 4–7 s for the first photo of a scan and under 2 s for the next ones at about the same height, instead of 7–12 s), and the live view looks at fewer frames while you hold the phone still, to save battery.
 
@@ -11,6 +13,12 @@ These steps are for version **{version}** (Settings shows the version).
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## M8 part 3 follow-up: pieces outlined only in part
+1. Put **5–6 pale pieces** (white dress) on the cream table, apart from each other, with a few darker ones. **Scan pieces** → overview photo.
+2. If the note says **"… only partly outlined"**, look at the yellow outlines: is each one smaller than its piece? Under **Pieces**, such a piece shows as **Not sure** (no corner/edge guess).
+3. Take a **close-up** of those pieces (or put a darker cloth under them) and scan again: do they get a full outline?
+4. Pieces that touch get an orange dashed outline: spread them apart and scan again; each should then get its own outline.
 
 ## M8 part 3: faster scans, a lighter live view
 1. **Scan pieces** → take an overview photo, then another from about the same height. Does the second one come back noticeably faster than the first?

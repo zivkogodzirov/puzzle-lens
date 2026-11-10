@@ -4,12 +4,24 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M8 (part 3, follow-up): why your photo IMG_9127 showed 44 pieces (2026-11-10; tested on your photos, not yet on your iPhone)
+- **A correction first:** I wrote that IMG_9127 had about 95 loose pieces. Counted carefully on close-ups, it has **about 60**.
+- **Every one of them was found.** The 44 outlines cover about 60 pieces:
+  - **27** pieces on their own.
+  - **15** outlines around **2–4 pieces that touch** (about 29 pieces). The app asks you to spread these apart (orange dashes). This was the main reason for the low count, not the angle as I said before.
+  - **1** pale piece outlined only in part.
+  - **2** things cut off at the photo's edge.
+- **Pale pieces on your cream table** (the white dress) sometimes get only part of their outline: the table looks like the white print. A wrong, too-small outline gave a wrong shape (for example a "flat side" where the outline cut across the piece).
+- **New:** a piece outlined much smaller than the photo's other pieces (under 60 % of a typical one) is now marked **yellow, "only partly outlined"**. The app doesn't use its shape (no corner/edge guess, no knob fit), only its picture. The scan note says how many, and that a close-up or a darker cloth under pale pieces helps.
+- **Checked on all 20 of your photos:** no whole piece was marked. Marked: the clearly cut-short pale piece in IMG_9127, two piece backs in the brown lid (IMG_9245), and some false "pieces" inside the finished part of the puzzle. On computer-made photos: 12 of 2639 pieces marked, none of them whole.
+- **Not solved:** pale pieces outlined at 70–80 % of their size can't be told from whole pieces by size, so they aren't marked. Spreading pieces so they don't touch, and a darker cloth under pale pieces, help most.
+
 ### M8 (part 3): faster scans, a lighter live view (2026-11-10; measured on the Mac with your photos, not yet on your iPhone)
 - **Scans are faster.** Your 18-megapixel photos were read in 7.4–11.5 s on the Mac; now **4.4–7.2 s** for the first photo of a scan, and **1.6–2.0 s** for the next ones taken at about the same height (the app starts from the previous photo's scale instead of guessing and searching twice). The pieces found are the same.
   - Most of the time went into one small step: sorting every pixel around each piece to find two numbers; it now finds them directly (the same numbers).
 - **The live view saves battery while you hold the phone still**: after a second without movement it looks at about 7 frames a second instead of 25, and goes back to full speed as soon as you move. The small number after "Tracking ✓" shows it (e.g. **7/s**).
 - **Memory:** reading your 18 MP photos uses about 100 MB in the app's image helper, and doesn't grow from one photo to the next.
-- **Your new photos:** IMG_9127 (the border done and about 95 loose pieces inside it) was used for the timing; the app found 44 of its pieces, because the photo is taken at an angle and the far pieces are small: the scan screen asks for photos from straight above for this reason. IMG_9226 and IMG_9227 (the half-finished puzzle from a steep angle) are still too steep to be read as the puzzle.
+- **Your new photos:** IMG_9127 (the border done and loose pieces inside it) was used for the timing. Why it showed only 44 pieces: see the follow-up above (the angle wasn't the reason). IMG_9226 and IMG_9227 (the half-finished puzzle from a steep angle) are still too steep to be read as the puzzle.
 
 ### M8 (part 1): colours learned from your pieces (2026-11-10; tested on your photos, not yet on your iPhone)
 - **The problem:** on the whole box picture (a fresh puzzle, no holes photo), your real pieces were rarely placed right: your photos' colours under the lamp differ from the box picture in ways the one-time colour match can't undo (light parts yellower, shadows different). Of your 19 pieces with known spots, only **1** came first.

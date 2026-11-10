@@ -24,7 +24,11 @@ export interface PieceRead {
  * the straightened patch, and its fingerprint. Null for cut pieces, clumps and unreadable shapes.
  * Used by the photo helper's scan and by the tests, so both make exactly the same patches.
  */
-export function readPiece(photo: PixelBuffer, piece: { outlineImg: number[]; flags: { cut?: boolean; clump?: boolean } }, pxPerMm: number): PieceRead | null {
+export function readPiece(
+  photo: PixelBuffer,
+  piece: { outlineImg: number[]; flags: { cut?: boolean; clump?: boolean; part?: boolean } },
+  pxPerMm: number,
+): PieceRead | null {
   if (piece.flags.cut || piece.flags.clump) return null;
   const rd = readShape(
     piece.outlineImg.map((v) => v / pxPerMm),
@@ -37,6 +41,8 @@ export function readPiece(photo: PixelBuffer, piece: { outlineImg: number[]; fla
     piece.outlineImg,
   );
   if (!patch) return null;
+  // An outline found only in part: its sides are not the piece's (a cut across it can read as flat).
+  if (piece.flags.part) return { patch, flats: [false, false, false, false], sure: false, sides: 'uuuu', sideConf: [0, 0, 0, 0], fp: pieceFingerprint(patch) };
   return {
     patch,
     flats: rd.sides.map((sd) => sd.kind === 'flat'),
