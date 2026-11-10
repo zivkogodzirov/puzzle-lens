@@ -87,7 +87,7 @@ describe('create, read, list, update', () => {
     const u = await updateProject(a.id, { name: 'Sea', grid: { cols: 28, rows: 36, source: 'suggested' }, setupStep: 4, createdAt: 5 } as never);
     expect(u).toMatchObject({ id: a.id, name: 'Sea', createdAt: a.createdAt, grid: { cols: 28, rows: 36 }, setupStep: 4 });
     expect(u.updatedAt).toBeGreaterThan(a.updatedAt);
-    await expect(updateProject('missing', { name: 'x' })).rejects.toThrow(/no longer/);
+    await expect(updateProject('missing', { name: 'x' })).rejects.toThrow('This puzzle is not on this iPhone.');
   });
 
   it('reads old (schema v1) rows that only have id, name and times', async () => {

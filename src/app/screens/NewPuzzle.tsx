@@ -11,6 +11,8 @@
  * Address: `#/new` before the puzzle exists, `#/new/<id>` after.
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { TestButton } from '../components/TestSteps';
+import { plural } from '../words';
 import { go, replaceRoute, routeArg } from '../router';
 import { isStandalone } from '../env';
 import { readerWorker } from '../workers';
@@ -212,6 +214,7 @@ function WizardTop({ title, onBack, onClose }: { title: string; onBack: () => vo
           Close
         </button>
       )}
+      <TestButton />
     </div>
   );
 }
@@ -795,7 +798,7 @@ function StepGrid({ project, save, onNext }: { project: Project; save: (patch: P
           <div class="grid-big">
             {chosen.cols} <span class="muted">across</span> × {chosen.rows} <span class="muted">down</span>
           </div>
-          <div class="grid-sub">= {chosen.cols * chosen.rows} pieces</div>
+          <div class="grid-sub">= {plural(chosen.cols * chosen.rows, 'piece')}</div>
           <div class="small muted">{project.grid ? (project.grid.source === 'manual' ? 'Typed in by you' : 'Chosen') : 'Best match'}</div>
         </div>
       ) : (
@@ -1086,6 +1089,7 @@ export function MarkerSheetsScreen() {
             ‹ Back
           </button>
           <h1>Marker sheets</h1>
+          <TestButton />
         </div>
         <div class="row two-up">
           <button class="btn btn-primary" data-testid="print-sheets" onClick={print}>

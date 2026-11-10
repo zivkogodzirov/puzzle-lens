@@ -29,7 +29,7 @@ export async function moveToTray(projectId: string, ids: string[], tray: string,
   return d.transaction('rw', d.pieces, d.projects, async () => {
     const all = await d.pieces.where('projectId').equals(projectId).toArray();
     const project = await d.projects.get(projectId);
-    if (!project) throw new Error('This puzzle is no longer on this iPhone.');
+    if (!project) throw new Error('This puzzle is not on this iPhone.');
     const now = Date.now();
     const want = new Set(ids);
     const moving = all.filter((p) => want.has(p.id) && (p.status === 'table' || p.status === 'pending'));

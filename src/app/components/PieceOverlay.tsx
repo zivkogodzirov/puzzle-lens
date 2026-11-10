@@ -3,12 +3,14 @@ import { latestFrame, latestFrameAt } from '../../camera/framePump';
 import { frameToElement } from '../../camera/coords';
 import { applyH } from '../../geo/homography';
 import type { PieceRow } from '../../project/types';
+import { strokeHalo } from '../overlay';
 
 /**
  * Outlines of catalogued pieces drawn over the live video (PLAN §5 "Overlay state colours"):
  * grey = detected; orange dashed = probably touching pieces ("spread these apart"); yellow = pale
  * piece with a weak outline (check it). Outlines are stored in table mm, so they stay on their
  * pieces while the phone moves (each frame's own table position maps them into the picture).
+ * Each outline sits on a dark halo, so it shows on a cream table too (M9 part 1).
  */
 export function PieceOverlay({ video, pieces }: { video: HTMLVideoElement | null; pieces: PieceRow[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -61,19 +63,11 @@ export function PieceOverlay({ video, pieces }: { video: HTMLVideoElement | null
           else ctx.lineTo(x, y);
         }
         ctx.closePath();
-        if (p.flags.clump) {
-          ctx.strokeStyle = '#ff9f2e';
-          ctx.setLineDash([6, 4]);
-          ctx.lineWidth = 2.5;
-        } else if (p.flags.weak) {
-          ctx.strokeStyle = '#ffd84a';
-          ctx.setLineDash([]);
-          ctx.lineWidth = 2;
-        } else {
-          ctx.strokeStyle = 'rgba(225, 230, 235, 0.9)';
-          ctx.setLineDash([]);
-          ctx.lineWidth = 1.5;
-        }
+        const [colour, dash, width] = p.flags.clump ? ['#ff9f2e', [6, 4], 2.5] : p.flags.weak ? ['#ffd84a', [], 2] : ['rgba(225, 230, 235, 0.9)', [], 1.5];
+        strokeHalo(ctx, width);
+        ctx.strokeStyle = colour;
+        ctx.setLineDash(dash);
+        ctx.lineWidth = width;
         ctx.stroke();
       }
       ctx.setLineDash([]);

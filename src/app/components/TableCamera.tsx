@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
+import { TestButton } from './TestSteps';
+import { errorWords } from '../words';
 import { cameraError, cameraInfo, cameraState, cameraStream, setZoom, startCamera, stopCamera } from '../../camera/camera';
 import { latestFrame, pumpError, pumpMode, startPump, stopPump } from '../../camera/framePump';
 import { capturePhoto, snapBusy } from '../../camera/snap';
@@ -49,13 +51,20 @@ class SetupCapture {
     const base = { tiltDeg: null, heightMm: null, leanImg: [0, 0] as Vec2, targetMm: null, targetDirImg: null };
     if (ids.size < MARKER_COUNT) {
       this.last = null;
-      return { ...base, status: ids.size ? 'area-out' : 'no-markers', message: `${ids.size} of ${MARKER_COUNT} markers in view — raise the phone until all 8 show`, steady: 0 };
+      return {
+        ...base,
+        status: ids.size ? 'area-out' : 'no-markers',
+        message: `${ids.size} of ${MARKER_COUNT} markers in view — raise the phone until all 8 show`,
+        steady: 0,
+      };
     }
     const now = new Map(markers.map((m) => [m.id, [(m.corners[0]! + m.corners[4]!) / 2, (m.corners[1]! + m.corners[5]!) / 2] as Vec2]));
-    const moved = this.last ? [...now].some(([id, p]) => {
-      const q = this.last!.get(id);
-      return !q || Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.006 * width;
-    }) : true;
+    const moved = this.last
+      ? [...now].some(([id, p]) => {
+          const q = this.last!.get(id);
+          return !q || Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.006 * width;
+        })
+      : true;
     if (moved) {
       this.last = now;
       this.since = t;
@@ -173,13 +182,18 @@ export function TableCamera(props: {
     ac.current.noteFired(t);
     fc.current.noteFired(t);
     sc.current.noteFired(t);
-    const meta: CaptureMeta = { zoom: cur.current.zoom, fix: lastFix.current, auto, sensorTiltDeg: levelPermission.value === 'granted' ? (level.value?.tiltDeg ?? null) : null };
+    const meta: CaptureMeta = {
+      zoom: cur.current.zoom,
+      fix: lastFix.current,
+      auto,
+      sensorTiltDeg: levelPermission.value === 'granted' ? (level.value?.tiltDeg ?? null) : null,
+    };
     try {
       const { blob } = await capturePhoto(videoRef.current);
       setError(null);
       cur.current.onPhoto(blob, meta);
     } catch (err) {
-      setError(String((err as Error)?.message ?? err));
+      setError(errorWords(err));
       logWarn('scan', 'Photo failed', err);
     } finally {
       taking.current = false;
@@ -199,7 +213,11 @@ export function TableCamera(props: {
         else if (c.free) {
           const lv = level.value;
           const sensor = levelPermission.value === 'granted' && lv !== null;
-          g = fc.current.update(t, { tiltDeg: sensor ? lv.tiltDeg : null, pieces: f.pieces, frame: { width: f.width, height: f.height } }, { kind: c.mode, pitchMm: c.free.pitchMm, sensor });
+          g = fc.current.update(
+            t,
+            { tiltDeg: sensor ? lv.tiltDeg : null, pieces: f.pieces, frame: { width: f.width, height: f.height } },
+            { kind: c.mode, pitchMm: c.free.pitchMm, sensor },
+          );
           // Until the tilt sensor answers (not yet allowed, or no reading yet), never fire by itself:
           // a tilted first photo would become the table for the whole puzzle.
           const pending = levelPermission.value === 'unknown' || (levelPermission.value === 'granted' && lv === null);
@@ -209,7 +227,12 @@ export function TableCamera(props: {
           // No marker in view (middle close-up): fall back to the tilt sensor for "hold it flat".
           if (!f.table && c.mode === 'detail' && level.value) {
             const lv = level.value;
-            g = { ...g, tiltDeg: lv.tiltDeg, leanImg: [0, 0], message: lv.tiltDeg > RULES.detail.maxTiltDeg ? 'Hold the phone flat' : 'No marker in view: keep the height and tap the button' };
+            g = {
+              ...g,
+              tiltDeg: lv.tiltDeg,
+              leanImg: [0, 0],
+              message: lv.tiltDeg > RULES.detail.maxTiltDeg ? 'Hold the phone flat' : 'No marker in view: keep the height and tap the button',
+            };
           }
         }
         const v = videoRef.current;
@@ -226,9 +249,13 @@ export function TableCamera(props: {
     [],
   );
 
-  const maxTilt = free ? FREE_RULES[mode === 'detail' ? 'detail' : 'overview'].maxTiltDeg : mode === 'detail' ? RULES.detail.maxTiltDeg : RULES.overview.maxTiltDeg;
+  const maxTilt = free
+    ? FREE_RULES[mode === 'detail' ? 'detail' : 'overview'].maxTiltDeg
+    : mode === 'detail'
+      ? RULES.detail.maxTiltDeg
+      : RULES.overview.maxTiltDeg;
   const tilt = gauge?.tiltDeg ?? (mode === 'detail' && level.value ? level.value.tiltDeg : null);
-  const lean: Vec2 = gauge && gauge.tiltDeg !== null ? gauge.leanImg : level.value?.lean ?? [0, 0];
+  const lean: Vec2 = gauge && gauge.tiltDeg !== null ? gauge.leanImg : (level.value?.lean ?? [0, 0]);
   const problem = (live && pumpError.value) || error || cameraError.value;
 
   return (
@@ -241,7 +268,10 @@ export function TableCamera(props: {
           ‹ Back
         </button>
         <span class="title">{mode === 'setup' ? 'Marker photo' : mode === 'overview' ? 'Overview photo' : 'Close-ups'}</span>
-        <span class="chip" aria-label="Zoom">{zoom >= 1.5 ? '2×' : '1×'}</span>
+        <span class="chip" aria-label="Zoom">
+          {zoom >= 1.5 ? '2×' : '1×'}
+        </span>
+        <TestButton variant="camera" />
       </div>
 
       {live && gauge && !(free && levelPermission.value === 'unknown') && (
@@ -250,7 +280,11 @@ export function TableCamera(props: {
         </div>
       )}
       {live && (free || mode === 'detail') && levelPermission.value === 'unknown' && (
-        <button class={free ? 'btn btn-primary level-ask level-ask-big' : 'btn btn-small level-ask'} data-testid="allow-tilt" onClick={() => void requestLevelSensor()}>
+        <button
+          class={free ? 'btn btn-primary level-ask level-ask-big' : 'btn btn-small level-ask'}
+          data-testid="allow-tilt"
+          onClick={() => void requestLevelSensor()}
+        >
           {free ? 'Allow the tilt sensor (needed to hold the phone flat)' : 'Use the tilt sensor too'}
         </button>
       )}

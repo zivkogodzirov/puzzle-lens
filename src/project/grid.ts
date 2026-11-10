@@ -111,7 +111,7 @@ export function topGrids(pieceCount: number, pictureAspect: number | null, n = 3
 
 /** Plain-English description, e.g. "28 across × 36 down = 1008 pieces". */
 export function describeGrid(g: { cols: number; rows: number }): string {
-  return `${g.cols} across × ${g.rows} down = ${g.cols * g.rows} pieces`;
+  return `${g.cols} across × ${g.rows} down = ${g.cols * g.rows} piece${g.cols * g.rows === 1 ? '' : 's'}`;
 }
 
 /** Checks a grid typed in by hand; returns a problem in words, or null if fine. */

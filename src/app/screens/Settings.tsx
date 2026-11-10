@@ -4,11 +4,23 @@ import { settings, type LiveFormat, type Units } from '../settings';
 import { APP_VERSION, isStandalone, requestPersistence } from '../env';
 import { eraseAllData } from '../../db/db';
 
-function Segmented<T extends string | number>({ value, options, onChange }: { value: T; options: Array<[T, string]>; onChange: (v: T) => void }) {
+function Segmented<T extends string | number>({
+  value,
+  options,
+  onChange,
+  label,
+  testId,
+}: {
+  value: T;
+  options: Array<[T, string]>;
+  onChange: (v: T) => void;
+  label?: string;
+  testId?: string;
+}) {
   return (
-    <div class="segmented" role="group">
+    <div class="segmented" role="group" aria-label={label}>
       {options.map(([v, label]) => (
-        <button key={String(v)} aria-pressed={value === v} onClick={() => onChange(v)}>
+        <button key={String(v)} aria-pressed={value === v} data-testid={testId ? `${testId}-${String(v)}` : undefined} onClick={() => onChange(v)}>
           {label}
         </button>
       ))}
@@ -33,9 +45,27 @@ export function SettingsScreen() {
     void refreshStorage();
   }, []);
 
+  const tester = settings.testerMode.value;
   return (
     <main class="screen">
       <TopBar title="Settings" />
+
+      <h2>Tester mode</h2>
+      <Segmented<'on' | 'off'>
+        label="Tester mode"
+        testId="tester"
+        value={tester ? 'on' : 'off'}
+        options={[
+          ['on', 'On'],
+          ['off', 'Off'],
+        ]}
+        onChange={(v) => (settings.testerMode.value = v === 'on')}
+      />
+      <p class="muted small" data-testid="tester-explained">
+        {tester
+          ? 'On while you test the app: the 🧪 test steps, Device check, Send report, the Activity log, the Live camera and extra numbers (tracking speed, phone height and tilt) are shown.'
+          : 'Off: the testing tools and extra numbers are hidden for a cleaner look. Your puzzles and settings stay as they are. Turn it on again here at any time.'}
+      </p>
 
       <h2>Accuracy</h2>
       <a class="btn btn-block" href="#/accuracy" data-testid="settings-accuracy">
@@ -102,15 +132,20 @@ export function SettingsScreen() {
         onChange={(v) => (settings.trackingFps.value = v)}
       />
 
-      <h2>Performance display</h2>
-      <Segmented<'on' | 'off'>
-        value={settings.showHud.value ? 'on' : 'off'}
-        options={[
-          ['on', 'Show'],
-          ['off', 'Hide'],
-        ]}
-        onChange={(v) => (settings.showHud.value = v === 'on')}
-      />
+      {tester && (
+        <>
+          <h2>Performance display</h2>
+          <Segmented<'on' | 'off'>
+            value={settings.showHud.value ? 'on' : 'off'}
+            options={[
+              ['on', 'Show'],
+              ['off', 'Hide'],
+            ]}
+            onChange={(v) => (settings.showHud.value = v === 'on')}
+          />
+          <p class="muted small">On the Live camera screen (also its HUD button).</p>
+        </>
+      )}
 
       <h2>Storage</h2>
       <div class="card">

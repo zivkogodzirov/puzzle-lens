@@ -4,6 +4,7 @@
  * tray A". Labels to print are on #/trays/<id>.
  */
 import { useEffect, useMemo, useState } from 'preact/hooks';
+import { TestStrip } from './TestSteps';
 import { go } from '../router';
 import { db } from '../../db/db';
 import { applyH, invertH } from '../../geo/homography';
@@ -14,6 +15,7 @@ import { getBlob, getProject, updateProject } from '../../project/store';
 import { snapsOfBatch } from '../../project/batches';
 import type { PieceRow, Project, SnapRow } from '../../project/types';
 import { logError, logInfo } from '../../log/logger';
+import { HALO, HALO_SCALE } from '../overlay';
 
 /** Pieces whose colours the groups need (src/project/groups.ts makeGroups): those on the table. */
 const isOnTable = (p: PieceRow) => p.status === 'table';
@@ -363,6 +365,7 @@ export function TablePhoto({
   const tappedPiece = tapped ? (pieces.find((p) => p.id === tapped) ?? null) : null;
   return (
     <div class="photo-result table-photo" data-testid="table-photo">
+      <TestStrip />
       <div class="row table-photo-bar">
         <strong class="grow">
           {title}
@@ -404,6 +407,20 @@ export function TablePhoto({
           )}
           <image href={v.url} x={0} y={0} width={v.snap.width} height={v.snap.height} onClick={(e) => onPhotoTap(e as unknown as MouseEvent)} />
           {mode === 'lit' && <rect x={0} y={0} width={v.snap.width} height={v.snap.height} fill="#000" fill-opacity="0.6" mask="url(#lit)" />}
+          {/* Every outline on a dark halo, all halos first (M9 part 1: pale lines vanish on a cream table). */}
+          {v.outlines.map((o) => (
+            <polygon
+              key={`h${o.id}`}
+              points={pts(o.pts)}
+              fill="none"
+              stroke={HALO}
+              stroke-width={(tapped === o.id ? 7 : 4) * HALO_SCALE}
+              stroke-linejoin="round"
+              vector-effect="non-scaling-stroke"
+              pointer-events="none"
+              class="outline-halo"
+            />
+          ))}
           {v.outlines.map((o) => (
             <polygon
               key={o.id}

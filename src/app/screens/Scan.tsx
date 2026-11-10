@@ -4,6 +4,8 @@ import { go, routeArg } from '../router';
 import { readerWorker, restartReader, trackerWorker } from '../workers';
 import { TableCamera, type CaptureMeta } from '../components/TableCamera';
 import { TopBar } from '../components/TopBar';
+import { TestStrip } from '../components/TestSteps';
+import { plural } from '../words';
 import { cameraState } from '../../camera/camera';
 import { deleteBlob, getProject, newId, projectBlobId, putBlob, updateProject } from '../../project/store';
 import { measurePitch, planMerge } from '../../project/catalog';
@@ -494,7 +496,11 @@ export function ScanScreen() {
             } else {
               // Applied only once the photo is accepted (below), so a rejected photo changes nothing.
               scaleChanged = { k, coin: coinType };
-              coinLines.push(`Coin found ✓ Sizes are now measured (the estimate was ${Math.abs(Math.round((k - 1) * 100))} % ${k > 1 ? 'small' : 'big'}).`);
+              coinLines.push(
+                settings.testerMode.value
+                  ? `Coin found ✓ Sizes are now measured (the estimate was ${Math.abs(Math.round((k - 1) * 100))} % ${k > 1 ? 'small' : 'big'}).`
+                  : 'Coin found ✓ Sizes are now measured.',
+              );
             }
           } else {
             coinLines.push(`No ${coinType.label} coin found in this photo: sizes stay estimates (≈). Put it flat on the table, away from the pieces.`);
@@ -694,8 +700,8 @@ export function ScanScreen() {
       const weak = r.pieces.filter((p) => p.flags.weak).length;
       const lines: string[] = [
         kind === 'overview'
-          ? `Found ${r.pieces.filter((p) => !p.flags.cut).length} pieces (${plan.added.length} new).`
-          : `Close-up read: ${plan.updates.length - plan.missing + plan.added.length} pieces (${plan.added.length} new).`,
+          ? `Found ${plural(r.pieces.filter((p) => !p.flags.cut).length, 'piece')} (${plan.added.length} new).`
+          : `Close-up read: ${plural(plan.updates.length - plan.missing + plan.added.length, 'piece')} (${plan.added.length} new).`,
         ...lines0,
       ];
       if (clumps)
@@ -784,7 +790,7 @@ export function ScanScreen() {
             </div>
           )}
           <div class="scan-counts">
-            <span data-testid="scan-count">{onTable.length} pieces found</span>
+            <span data-testid="scan-count">{plural(onTable.length, 'piece')} found</span>
             <span data-testid="scan-coverage">close-ups {covered}%</span>
           </div>
           <div class="row scan-modes">
@@ -873,6 +879,7 @@ export function ScanScreen() {
       {/* All of the note, over the camera; a tap anywhere closes it (the note stays). */}
       {noteOpen && note && (
         <div class="scan-note-sheet" data-testid="scan-note-sheet" onClick={() => setNoteOpen(false)}>
+          <TestStrip />
           <div class={note.ok ? 'notice notice-good' : 'notice notice-bad'}>
             {note.lines.map((l) => (
               <p key={l}>{l}</p>

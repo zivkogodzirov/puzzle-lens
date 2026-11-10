@@ -148,7 +148,7 @@ export async function answerSpot(
   const d = db();
   return d.transaction('rw', d.projects, d.pieces, async () => {
     const project = await d.projects.get(projectId);
-    if (!project?.grid) throw new Error('This puzzle is no longer on this iPhone.');
+    if (!project?.grid) throw new Error('This puzzle is not on this iPhone.');
     const top = shown?.placement.top ?? [];
     const rank = top.findIndex((t) => t.col === spot.col && t.row === spot.row);
     const now = Date.now();
@@ -187,19 +187,29 @@ export async function answerSpot(
  * "fits" answer is marked undone (left out of the Accuracy page).
  */
 export async function undoFits(projectId: string, pieceId: string): Promise<Project> {
+  return undoAnswer(projectId, pieceId, true);
+}
+
+/**
+ * Undoes the piece's latest answer of this kind (Undo right after answering, M9 part 1): for ✓ Fits
+ * as undoFits; for ✗ Doesn't fit only that answer is marked undone, so its spot is offered again
+ * (earlier "doesn't fit" answers stay; clearNotHere drops them all).
+ */
+export async function undoAnswer(projectId: string, pieceId: string, fits: boolean): Promise<Project> {
   const d = db();
   return d.transaction('rw', d.projects, d.pieces, async () => {
     const project = await d.projects.get(projectId);
-    if (!project) throw new Error('This puzzle is no longer on this iPhone.');
+    if (!project) throw new Error('This puzzle is not on this iPhone.');
     const answers = [...(project.answers ?? [])];
     for (let i = answers.length - 1; i >= 0; i--)
-      if (answers[i]!.pieceId === pieceId && answers[i]!.fits && !answers[i]!.undone) {
+      if (answers[i]!.pieceId === pieceId && answers[i]!.fits === fits && !answers[i]!.undone) {
         answers[i] = { ...answers[i]!, undone: true };
         break;
       }
     const now = Date.now();
     const next: Project = { ...project, answers, updatedAt: Math.max(now, project.updatedAt + 1) };
     await d.projects.put(next);
+    if (!fits) return next;
     const row = await d.pieces.get(pieceId);
     if (row?.status === 'placed') {
       const back = row.placedAt?.from === 'tray' && row.placedAt.tray ? 'tray' : 'table';
@@ -217,7 +227,7 @@ export async function removeNotAPiece(projectId: string, pieceId: string): Promi
   const d = db();
   return d.transaction('rw', d.projects, d.pieces, async () => {
     const project = await d.projects.get(projectId);
-    if (!project) throw new Error('This puzzle is no longer on this iPhone.');
+    if (!project) throw new Error('This puzzle is not on this iPhone.');
     const answers = (project.answers ?? []).map((a) => (a.pieceId === pieceId && !a.undone ? { ...a, undone: true } : a));
     const pairAnswers = (project.pairAnswers ?? []).map((a) => ((a.a === pieceId || a.b === pieceId) && !a.undone ? { ...a, undone: true } : a));
     const next: Project = { ...project, answers, pairAnswers, updatedAt: Math.max(Date.now(), project.updatedAt + 1) };
@@ -232,7 +242,7 @@ export async function clearNotHere(projectId: string, pieceId: string): Promise<
   const d = db();
   return d.transaction('rw', d.projects, async () => {
     const project = await d.projects.get(projectId);
-    if (!project) throw new Error('This puzzle is no longer on this iPhone.');
+    if (!project) throw new Error('This puzzle is not on this iPhone.');
     const answers = (project.answers ?? []).map((a) => (a.pieceId === pieceId && !a.fits && !a.undone ? { ...a, undone: true } : a));
     const next: Project = { ...project, answers, updatedAt: Math.max(Date.now(), project.updatedAt + 1) };
     await d.projects.put(next);

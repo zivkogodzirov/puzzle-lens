@@ -7,6 +7,9 @@ import { importBackup } from '../../project/backup';
 import type { Project } from '../../project/types';
 import { logError, logInfo } from '../../log/logger';
 import { boxVersion, errorWords, setupStatus, useBlobUrl } from './Puzzle';
+import { TestButton } from '../components/TestSteps';
+import { settings } from '../settings';
+import { plural } from '../words';
 
 function PuzzleCard({ p }: { p: Project }) {
   const thumb = useBlobUrl(p.box?.rectifiedBlobId, boxVersion(p.box));
@@ -16,7 +19,7 @@ function PuzzleCard({ p }: { p: Project }) {
       <span class="puzzle-info">
         <strong class="puzzle-title">{p.name}</strong>
         <span class="small muted">
-          {p.pieceCount ? `${p.pieceCount} pieces` : 'Piece count not set'}
+          {p.pieceCount ? plural(p.pieceCount, 'piece') : 'Piece count not set'}
           {p.grid ? ` · ${p.grid.cols} × ${p.grid.rows}` : ''}
         </span>
         <span class="small muted">{setupStatus(p)}</span>
@@ -75,7 +78,7 @@ function YourPuzzles() {
     <section data-testid="your-puzzles">
       <h2>Your puzzles</h2>
       <button class="btn btn-primary btn-block" data-testid="new-puzzle" onClick={() => go('new')}>
-        ＋ New puzzle
+        <span aria-hidden="true">＋</span> New puzzle
       </button>
       {projects === null && <p class="muted small">Loading…</p>}
       {projects?.length === 0 && <p class="muted small">No puzzles yet. Tap "New puzzle" to start your first one.</p>}
@@ -106,10 +109,12 @@ export function HomeScreen() {
   // A memory test that never finished means iOS closed the app on purpose (that's how the test
   // measures): point to the result instead of showing the "ended unexpectedly" warning.
   const memoryResultWaiting = hasPendingMemoryResult();
+  const tester = settings.testerMode.value;
   return (
     <main class="screen">
       <div class="topbar">
         <h1>Puzzle Lens</h1>
+        <TestButton />
       </div>
 
       {!isStandalone.value && (
@@ -157,36 +162,51 @@ export function HomeScreen() {
 
       <h2>Tools</h2>
       <div class="tiles">
-        <a class="tile tile-wide" href="#/live">
-          <span class="tile-icon">📷</span>
-          <span>
-            Live camera
-            <div class="tile-sub">Camera, Snap and the speed display</div>
-          </span>
-        </a>
-        <a class="tile" href="#/device">
-          <span class="tile-icon">🩺</span>
-          <span>
-            Device check
-            <div class="tile-sub">What your iPhone can do</div>
-          </span>
-        </a>
-        <a class="tile" href="#/report">
-          <span class="tile-icon">📦</span>
-          <span>
-            Send report
-            <div class="tile-sub">For when something goes wrong</div>
-          </span>
-        </a>
+        {/* The testing tools: only in Tester mode (Settings). */}
+        {tester && (
+          <>
+            <a class="tile tile-wide" href="#/live" data-testid="tool-live">
+              <span class="tile-icon" aria-hidden="true">
+                📷
+              </span>
+              <span>
+                Live camera
+                <div class="tile-sub">Camera, Snap and the speed display</div>
+              </span>
+            </a>
+            <a class="tile" href="#/device" data-testid="tool-device">
+              <span class="tile-icon" aria-hidden="true">
+                🩺
+              </span>
+              <span>
+                Device check
+                <div class="tile-sub">What your iPhone can do</div>
+              </span>
+            </a>
+            <a class="tile" href="#/report" data-testid="tool-report">
+              <span class="tile-icon" aria-hidden="true">
+                📦
+              </span>
+              <span>
+                Send report
+                <div class="tile-sub">For when something goes wrong</div>
+              </span>
+            </a>
+          </>
+        )}
         <a class="tile" href="#/help">
-          <span class="tile-icon">🧭</span>
+          <span class="tile-icon" aria-hidden="true">
+            🧭
+          </span>
           <span>
             Setup guide
             <div class="tile-sub">Step by step</div>
           </span>
         </a>
         <a class="tile" href="#/settings">
-          <span class="tile-icon">⚙️</span>
+          <span class="tile-icon" aria-hidden="true">
+            ⚙️
+          </span>
           <span>
             Settings
             <div class="tile-sub">Units, camera, data</div>
@@ -195,10 +215,16 @@ export function HomeScreen() {
       </div>
 
       <p class="muted small" style={{ marginTop: '24px' }}>
-        Version {APP_VERSION} ·{' '}
-        <a href="#/log" style={{ color: 'inherit' }}>
-          Activity log
-        </a>
+        Version {APP_VERSION}
+        {tester && (
+          <>
+            {' '}
+            ·{' '}
+            <a href="#/log" style={{ color: 'inherit' }} data-testid="tool-log">
+              Activity log
+            </a>
+          </>
+        )}
       </p>
     </main>
   );

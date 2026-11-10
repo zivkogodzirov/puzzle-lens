@@ -126,7 +126,7 @@ export function ProgressScreen() {
               ? 'Your last photo of the puzzle shows it complete.'
               : `From your photo of the puzzle${project.openSpots ? ` (${project.openSpots.gaps.length} empty spots)` : ''}${s.placed ? `, and ${s.placed} ${s.placed === 1 ? 'piece' : 'pieces'} fitted since` : ''}.`
             : s.placed
-              ? `The pieces you said fit (✓ Fits). Photograph the nearly finished puzzle (Scan pieces) to count the rest.`
+              ? `The pieces you said fit (✓ Fits). Photograph the nearly finished puzzle (Scan) to count the rest.`
               : 'No pieces in the puzzle yet: tap ✓ Fits when a piece goes in, or photograph the puzzle when it is nearly finished.'}
         </p>
       </div>

@@ -407,7 +407,7 @@ test('which pieces join (M6): a square of 4 first, then a pair; They fit / Don�
   // A 2 × 2 block (columns 4–5, rows 3–4), a pair side by side (columns 7–8, row 6) and one piece alone.
   await seed(page, null, null, ['r2c3', 'r2c4', 'r3c3', 'r3c4', 'r5c6', 'r5c7', 'r0c0']);
   await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
-  await expect(page.getByTestId('matches-toggle')).toContainText('Which pieces join (5)');
+  await expect(page.getByTestId('matches-count')).toHaveText('5');
   await page.getByTestId('matches-toggle').click();
   // What next: the square, its four spots marked on the box picture.
   const next = page.getByTestId('match-next');
@@ -425,7 +425,7 @@ test('which pieces join (M6): a square of 4 first, then a pair; They fit / Don�
   await expect(page.getByTestId('match-next')).toContainText('These two join');
   await expect(page.getByTestId('match-next')).toContainText('side by side');
   await expect(page.getByTestId('match-next')).toContainText('Column 7–8, row 6');
-  await expect(page.getByTestId('matches-toggle')).toContainText('Which pieces join (1)');
+  await expect(page.getByTestId('matches-count')).toHaveText('1');
   // Don't fit: not suggested again; Undo brings it back.
   await page.getByTestId('match-next').getByTestId('match-not').click();
   await expect(page.getByTestId('match-note')).toContainText('isn’t suggested again');
@@ -519,7 +519,12 @@ test('"It’s in the puzzle" (M7 part 4): a piece whose spot isn’t sure can be
   await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
   // Rule out the first piece's spots until none is left: its spot isn't known any more.
   await page.locator('[data-testid="catalog"] .thumb-btn').nth(0).click();
+  // Its spots shown (M9 part 1: a tap retried past the action bar may come before the placements are drawn).
+  await expect(page.getByTestId('spot-not')).toBeVisible();
   for (let k = 0; k < 5 && (await page.getByTestId('spot-not').count()); k++) await page.getByTestId('spot-not').click();
+  // The last answer saved and the panel drawn again (M9 part 1: the button may start under the action bar, and a
+  // retried click must not land on what moved into its place).
+  await expect(page.getByTestId('spot-verdict')).toContainText('You said it doesn’t fit any of its suggested spots');
   await expect(page.getByTestId('spot-in-puzzle')).toBeVisible();
   await page.getByTestId('spot-in-puzzle').click();
   await expect(page.getByTestId('in-puzzle')).toContainText('1 in the puzzle');
@@ -551,7 +556,8 @@ test('a quick tap on ✓ Fits right after tapping a piece counts: its panel does
   await seed(page, null);
   await expect(page.getByTestId('place-summary')).toContainText(/[1-9]\d* strong/, { timeout: 60_000 });
   const thumbs = page.locator('[data-testid="catalog"] .thumb-btn');
-  const height = page.viewportSize()!.height;
+  // The bottom of the screen is the top of the action bar (M9 part 1).
+  const height = (await page.getByTestId('action-bar').boundingBox())!.y;
   const fits = () =>
     page.getByTestId('spot-fits').evaluate((b) => {
       const r = b.getBoundingClientRect();
@@ -561,10 +567,13 @@ test('a quick tap on ✓ Fits right after tapping a piece counts: its panel does
   // screen: the panel opens below it.
   for (const [k, where] of (['partly on screen', 'below the screen'] as const).entries()) {
     await expect(thumbs).toHaveCount(6 - k);
-    await page.evaluate((below) => {
-      const g = document.querySelector('[data-testid="catalog"]')!.getBoundingClientRect();
-      scrollBy(0, below ? g.bottom - innerHeight + 4 : g.top - 300);
-    }, k === 1);
+    await page.evaluate(
+      ([below, bottom]) => {
+        const g = document.querySelector('[data-testid="catalog"]')!.getBoundingClientRect();
+        scrollBy(0, below ? g.bottom - bottom + 4 : g.top - 300);
+      },
+      [k === 1, height] as const,
+    );
     const t = (await thumbs.nth(0).boundingBox())!;
     await page.mouse.click(t.x + t.width / 2, t.y + t.height / 2);
     const at = await fits();

@@ -116,6 +116,14 @@ test('pieces are grouped by colour, light up on the photo, go into a tray and ba
   await expect(page.getByTestId('progress')).toContainText('0 placed on box');
   await page.getByTestId('table-toggle').click();
   await expect(page.getByTestId('table-photo-svg').locator('.lit-outline')).toHaveCount(9);
+  // Every outline on a dark halo, 2.4 × its width, that taps go through (M9 part 1).
+  const halos = page.getByTestId('table-photo-svg').locator('.outline-halo');
+  await expect(halos).toHaveCount(9);
+  expect(await halos.first().evaluate((el) => [el.getAttribute('stroke'), el.getAttribute('stroke-width'), getComputedStyle(el).pointerEvents])).toEqual([
+    'rgba(0, 0, 0, 0.6)',
+    '9.6',
+    'none',
+  ]);
   await page.getByTestId('table-photo-svg').locator('.lit-outline').first().click();
   await expect(page.getByTestId('table-photo-info')).toBeVisible();
   await page.getByTestId('table-photo-pick').click();

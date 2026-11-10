@@ -14,9 +14,11 @@ import { TrayLabelsScreen } from './screens/TrayLabels';
 import { TestSteps } from './components/TestSteps';
 import { AccuracyScreen } from './screens/Accuracy';
 import { ProgressScreen } from './screens/Progress';
+import { useShell } from './shell';
 
 export function App() {
   const r = route.value;
+  useShell();
   return (
     <div class={`app route-${r}`}>
       <UpdateBanner />

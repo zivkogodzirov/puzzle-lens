@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect, gotoScreen } from './fixtures';
+import { showHud } from './live-helpers';
 
 /** Waits until the service worker has installed (precache filled) and is active. */
 async function waitForOfflineReady(page: Page): Promise<void> {
@@ -71,6 +72,7 @@ test.describe('offline', () => {
     await expect(page.getByTestId('install-banner')).toBeVisible();
     await expectNetworkOff(page);
     await page.goto('./#/live');
+    await showHud(page);
     await page.getByTestId('start-camera').click();
     await expect
       .poll(async () => Number((await page.getByTestId('markers-seen').textContent()) ?? 0), {

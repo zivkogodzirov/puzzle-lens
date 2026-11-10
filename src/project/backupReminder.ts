@@ -63,7 +63,7 @@ export async function markBackedUp(projectId: string, now = Date.now()): Promise
   const d = db();
   return d.transaction('rw', d.projects, d.pieces, async () => {
     const project = await d.projects.get(projectId);
-    if (!project) throw new Error('This puzzle is no longer on this iPhone.');
+    if (!project) throw new Error('This puzzle is not on this iPhone.');
     const pieces = await d.pieces.where('projectId').equals(projectId).count();
     const answers = (project.answers?.length ?? 0) + (project.pairAnswers?.length ?? 0);
     const next: Project = { ...project, lastBackup: { at: now, pieces, answers }, backupSnoozedUntil: null };
@@ -77,7 +77,7 @@ export async function snoozeBackupReminder(projectId: string, now = Date.now()):
   const d = db();
   return d.transaction('rw', d.projects, async () => {
     const project = await d.projects.get(projectId);
-    if (!project) throw new Error('This puzzle is no longer on this iPhone.');
+    if (!project) throw new Error('This puzzle is not on this iPhone.');
     const next: Project = { ...project, backupSnoozedUntil: now + BACKUP_REMIND.SNOOZE_H * 3600 * 1000 };
     await d.projects.put(next);
     return next;

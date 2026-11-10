@@ -1,4 +1,5 @@
 import type { GaugeState } from '../../scan/autoCapture';
+import { settings } from '../settings';
 
 /**
  * The level-and-height gauge for hand-held photos (PLAN §2 "Phone"): a bubble that sits in the
@@ -8,7 +9,19 @@ import type { GaugeState } from '../../scan/autoCapture';
  * `lean` is in screen coordinates (x right, y down). The bubble moves the way a spirit level's
  * bubble would: away from the low side.
  */
-export function LevelGauge({ state, lean, tiltDeg, maxTiltDeg, arrow }: { state: GaugeState; lean: [number, number]; tiltDeg: number | null; maxTiltDeg: number; arrow: [number, number] | null }) {
+export function LevelGauge({
+  state,
+  lean,
+  tiltDeg,
+  maxTiltDeg,
+  arrow,
+}: {
+  state: GaugeState;
+  lean: [number, number];
+  tiltDeg: number | null;
+  maxTiltDeg: number;
+  arrow: [number, number] | null;
+}) {
   const R = 46;
   const t = tiltDeg ?? 0;
   // Full deflection at twice the allowed tilt.
@@ -22,7 +35,7 @@ export function LevelGauge({ state, lean, tiltDeg, maxTiltDeg, arrow }: { state:
     <div class={`gauge gauge-${state.status}`} data-testid="level-gauge" data-status={state.status}>
       <svg viewBox="-60 -60 120 120" width="120" height="120" aria-hidden="true">
         <circle r={R} class="gauge-face" />
-        <circle r={maxTiltDeg / (2 * maxTiltDeg) * (R - 12) + 12} class="gauge-target" />
+        <circle r={(maxTiltDeg / (2 * maxTiltDeg)) * (R - 12) + 12} class="gauge-target" />
         <circle
           r={R + 6}
           class="gauge-steady"
@@ -39,7 +52,8 @@ export function LevelGauge({ state, lean, tiltDeg, maxTiltDeg, arrow }: { state:
       <p class={ready ? 'gauge-msg ok' : 'gauge-msg'} role="status" aria-live="polite">
         {state.message}
       </p>
-      {state.heightMm !== null && (
+      {/* Height and tilt in numbers: for testing only (M9 part 1, design plan §3.7). */}
+      {state.heightMm !== null && settings.testerMode.value && (
         <p class="gauge-sub">
           {Math.round(state.heightMm / 10)} cm high · tilt {t.toFixed(0)}°
         </p>

@@ -2,9 +2,11 @@
  * One puzzle (PLAN §5): name, piece count, grid, box picture, setup progress with "Continue
  * setup", pieces catalogued so far, Export backup and Delete.
  */
+import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { TopBar } from '../components/TopBar';
 import { go, routeArg } from '../router';
+import { setScreenTitle } from '../shell';
 import { APP_VERSION } from '../env';
 import { reportWorker } from '../workers';
 import { countPiecesByStatus, deleteProject, getBlob, getProject, LAST_SETUP_STEP, setCurrentProjectId, updateProject } from '../../project/store';
@@ -43,7 +45,8 @@ import { LiveTable, type MatchLine } from '../components/LiveTable';
 import { matchList, MatchesPanel } from '../components/Matches';
 import { pairKey, pairModel, type SidePartners } from '../../project/pairs';
 import { answerPair, pairAnswerView, undoPairAnswer } from '../../project/pairAnswers';
-import { answerSpot, answerView, clearNotHere, placedPieces, removeNotAPiece, undoFits } from '../../project/answers';
+import { answerSpot, answerView, clearNotHere, placedPieces, removeNotAPiece, undoAnswer, undoFits } from '../../project/answers';
+import { OVERLAY_STATE } from '../overlay';
 import { resolvePending } from '../../project/pending';
 import { startNewBatch } from '../../project/batches';
 import { markPlaced, piecesInFilledSpots } from '../../project/placedFromPhoto';
@@ -54,6 +57,8 @@ import type { Groups } from '../../project/groups';
 import { canShareFile, downloadUrl, revokeDownloadUrls, shareOrDownload } from '../../report/share';
 import { formatBytes } from '../../report/collect';
 import { logError, logInfo, logWarn } from '../../log/logger';
+import { settings } from '../settings';
+import { errorWords, plural, UNREADABLE_PHOTO } from '../words';
 
 /** The wizard steps the owner sees with printed markers (index = Project.setupStep value that shows it). */
 export const SETUP_STEPS: readonly string[] = [
@@ -76,23 +81,8 @@ export function setupSteps(p: Pick<Project, 'tracking'>): readonly string[] {
   return p.tracking === 'markers' ? SETUP_STEPS : SETUP_STEPS_NO_PRINT;
 }
 
-/** What the screen says for a photo that can't be opened (a damaged file, or a kind of picture this iPhone can't read). */
-export const UNREADABLE_PHOTO = 'This photo couldn’t be read. Take it again, or choose a different photo.';
-
-/** Words for an error, for the screen (callers log the error itself, with its technical text). */
-export function errorWords(err: unknown): string {
-  const e = err as { message?: string; name?: string } | null;
-  const m = e?.message || String(err);
-  if (e?.name === 'QuotaExceededError' || /quota/i.test(m)) return 'Your iPhone is out of storage space for Puzzle Lens. Free some space and try again.';
-  // The browser's own words for a photo it can't decode (review 2026-11-10), e.g. WebKit's "Cannot
-  // decode the data in the argument to createImageBitmap" or Chrome's "The source image could not be decoded."
-  if (
-    e?.name === 'EncodingError' ||
-    /createImageBitmap|could not be decoded|cannot be decoded|cannot decode|can't decode|unable to decode|unsupported image/i.test(m)
-  )
-    return UNREADABLE_PHOTO;
-  return m;
-}
+// Errors in plain words (M9 part 1: shared by every screen, in src/app/words.ts).
+export { errorWords, UNREADABLE_PHOTO };
 
 /** An object URL for a stored blob (freed when the screen closes or the id changes). */
 export function useBlobUrl(blobId: string | null | undefined, version: unknown = null): string | null {
@@ -254,6 +244,10 @@ export function PuzzleScreen() {
     read();
     return () => clearTimeout(t);
   }, [remindKey]);
+  // The title names the puzzle, also after renaming it (M9 part 1).
+  useEffect(() => {
+    if (project) setScreenTitle('puzzle', project.name);
+  }, [project?.name]);
   const reminder = useMemo<BackupReminder | null>(
     () => (project && reminderRows ? backupReminder(project, reminderRows) : null),
     [reminderRows, project?.lastBackup?.at, project?.backupSnoozedUntil],
@@ -384,7 +378,7 @@ export function PuzzleScreen() {
         return;
       }
       await reloadScan();
-      setScanNote(`Batch ${r.project.batch!.n} started: ${r.aside} pieces set aside. Spread the new pieces and tap Scan pieces.`);
+      setScanNote(`Batch ${r.project.batch!.n} started: ${plural(r.aside, 'piece')} set aside. Spread the new pieces and tap Scan (at the bottom).`);
     } catch (err) {
       logError('puzzle', 'The new batch could not be started', err);
       setError(errorWords(err));
@@ -402,7 +396,7 @@ export function PuzzleScreen() {
         return;
       }
       await reloadScan();
-      setScanNote(`${n} pieces moved to the bin. Tap "Restore" to bring them back.`);
+      setScanNote(`${plural(n, 'piece')} moved to the bin. Tap "Restore" to bring ${n === 1 ? 'it' : 'them'} back.`);
     } catch (err) {
       logError('puzzle', 'The scan could not be deleted', err);
       setError(errorWords(err));
@@ -417,7 +411,7 @@ export function PuzzleScreen() {
       const n = await restoreScan(p.id);
       logInfo('puzzle', `Scan restored from the bin: ${n} pieces${swapped ? ' (the newer scan went to the bin)' : ''}`);
       await reloadScan();
-      setScanNote(swapped ? `${n} pieces restored. The newer scan is now in the bin.` : `${n} pieces restored.`);
+      setScanNote(swapped ? `${plural(n, 'piece')} restored. The newer scan is now in the bin.` : `${plural(n, 'piece')} restored.`);
     } catch (err) {
       logError('puzzle', 'The scan could not be restored', err);
       setError(errorWords(err));
@@ -475,7 +469,9 @@ export function PuzzleScreen() {
           <dt>Pieces on the box</dt>
           <dd data-testid="puzzle-count">{p.pieceCount || '—'}</dd>
           <dt>Grid</dt>
-          <dd data-testid="puzzle-grid">{p.grid ? `${p.grid.cols} across × ${p.grid.rows} down (${p.grid.cols * p.grid.rows} pieces)` : 'Not chosen yet'}</dd>
+          <dd data-testid="puzzle-grid">
+            {p.grid ? `${p.grid.cols} across × ${p.grid.rows} down (${plural(p.grid.cols * p.grid.rows, 'piece')})` : 'Not chosen yet'}
+          </dd>
           <dt>Pieces read</dt>
           <dd data-testid="puzzle-pieces">
             {pieces === null ? '—' : pieces}
@@ -520,10 +516,10 @@ export function PuzzleScreen() {
       {reminder && (
         <div class="notice notice-warn" role="status" data-testid="backup-reminder">
           <p>
-            💾{' '}
+            <span aria-hidden="true">💾</span>{' '}
             {reminder.never ? (
               <>
-                <strong>No backup yet.</strong> Everything about this puzzle is only on this iPhone ({pieces} pieces read).
+                <strong>No backup yet.</strong> Everything about this puzzle is only on this iPhone ({plural(pieces ?? 0, 'piece')} read).
               </>
             ) : (
               <>
@@ -543,7 +539,9 @@ export function PuzzleScreen() {
               class="btn btn-primary btn-small"
               data-testid="backup-now"
               onClick={() => {
-                document.getElementById('backup')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                document
+                  .getElementById('backup')
+                  ?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
                 if (exp.kind !== 'ready' && exp.kind !== 'preparing') void prepareBackup();
               }}
             >
@@ -564,38 +562,48 @@ export function PuzzleScreen() {
         </div>
       )}
 
-      <h2>Set-up</h2>
-      <ol class="setup-progress" data-testid="setup-progress">
-        {setupSteps(p)
-          .slice(1)
-          .map((label, i) => {
-            const step = i + 1;
-            const state = p.setupStep > step ? 'done' : p.setupStep === step ? 'current' : 'todo';
-            return (
-              <li key={step} class={`setup-${state}`}>
-                <span class="setup-mark" aria-hidden="true">
-                  {state === 'done' ? '✓' : step}
-                </span>
-                <span>{label}</span>
-              </li>
-            );
-          })}
-      </ol>
-      {!setupDone && (
-        <button class="btn btn-primary btn-block" data-testid="continue-setup" onClick={() => go('new', p.id)}>
-          Continue set-up
-        </button>
+      {setupDone ? (
+        <p class="small muted setup-finished" data-testid="setup-finished">
+          <span aria-hidden="true">✓</span> Set-up finished
+        </p>
+      ) : (
+        <>
+          <h2>Set-up</h2>
+          <ol class="setup-progress" data-testid="setup-progress">
+            {setupSteps(p)
+              .slice(1)
+              .map((label, i) => {
+                const step = i + 1;
+                const state = p.setupStep > step ? 'done' : p.setupStep === step ? 'current' : 'todo';
+                return (
+                  <li key={step} class={`setup-${state}`}>
+                    <span class="setup-mark" aria-hidden="true">
+                      {state === 'done' ? '✓' : step}
+                    </span>
+                    <span>{label}</span>
+                  </li>
+                );
+              })}
+          </ol>
+          <button class="btn btn-primary btn-block" data-testid="continue-setup" onClick={() => go('new', p.id)}>
+            Continue set-up
+          </button>
+        </>
       )}
 
       {canScan(p) && (
         <>
           <h2>Pieces</h2>
-          <button class="btn btn-primary btn-block" data-testid="scan-pieces" onClick={() => go('scan', p.id)}>
-            📷 Scan pieces
-          </button>
+          {/* Scan pieces is in the action bar at the bottom (M9 part 1); until the counts arrive, alone. */}
+          {pieces === null && (
+            <ActionBar>
+              <ScanAction onScan={() => go('scan', p.id)} />
+            </ActionBar>
+          )}
           {/* Once the counts are known, so it reads the pieces once on opening, not again when they arrive. */}
           {pieces !== null && (
             <Catalog
+              onScan={() => go('scan', p.id)}
               projectId={p.id}
               version={`${pieces}|${trayN}|${tableN}|${pendingN}`}
               markers={p.tracking === 'markers'}
@@ -619,7 +627,7 @@ export function PuzzleScreen() {
               disabled={scanAction === 'busy'}
               onClick={() => (setScanNote(null), setScanAction('confirm-batch'))}
             >
-              🔄 Start a new batch…
+              <span aria-hidden="true">🔄</span> Start a new batch…
             </button>
           )}
           {scanAction === 'confirm-batch' && (
@@ -667,10 +675,10 @@ export function PuzzleScreen() {
           {scanAction === 'confirm-delete' && (
             <div class="notice notice-warn" data-testid="delete-scan-confirm">
               <p>
-                This moves the <strong>{pieces} pieces</strong> read so far, with their photos, to the bin. You can restore them later. The box picture and grid
-                stay.
+                This moves the <strong>{plural(pieces ?? 0, 'piece')}</strong> read so far, with their photos, to the bin. You can restore them later. The box
+                picture and grid stay.
               </p>
-              {bin && <p class="small">The bin already holds an older scan ({bin.pieces} pieces); it will be replaced.</p>}
+              {bin && <p class="small">The bin already holds an older scan ({plural(bin.pieces, 'piece')}); it will be replaced.</p>}
               <div class="row" style={{ flexWrap: 'wrap', gap: '8px' }}>
                 <button class="btn btn-primary" data-testid="delete-scan-rescan" onClick={() => void onDeleteScan(true)}>
                   Delete and scan again
@@ -702,8 +710,8 @@ export function PuzzleScreen() {
               ) : (
                 <div class="notice notice-warn" data-testid="restore-scan-confirm">
                   <p class="small">
-                    Restoring swaps the scans: the <strong>{pieces} pieces</strong> you have now go to the bin (two scans can't be mixed, because each one
-                    measures the table its own way).
+                    Restoring swaps the scans: the <strong>{plural(pieces ?? 0, 'piece')}</strong> you have now go to the bin (two scans can't be mixed, because
+                    each one measures the table its own way).
                   </p>
                   <div class="row" style={{ gap: '8px' }}>
                     <button class="btn btn-primary" data-testid="restore-scan-yes" onClick={() => void onRestoreScan()}>
@@ -727,7 +735,7 @@ export function PuzzleScreen() {
       </p>
       <p class="small" data-testid="last-backup">
         {p.lastBackup
-          ? `Last backup: ${new Date(p.lastBackup.at).toLocaleString()} (${p.lastBackup.pieces} pieces then).`
+          ? `Last backup: ${new Date(p.lastBackup.at).toLocaleString()} (${plural(p.lastBackup.pieces, 'piece')} then).`
           : 'No backup of this puzzle has left this iPhone yet.'}
       </p>
       {exp.kind !== 'ready' && (
@@ -819,6 +827,7 @@ const GROUP_LABEL: Record<'all' | 'border' | 'interior' | 'unsure', string> = { 
 
 /** The pieces on the table, with Border mode: corners (orange) and edges (teal) read from each piece's outline. */
 function Catalog({
+  onScan,
   projectId,
   version,
   markers,
@@ -829,6 +838,8 @@ function Catalog({
   onPiecesChanged,
   onReading,
 }: {
+  /** Opens the scan camera (from the action bar). */
+  onScan: () => void;
   projectId: string;
   version: unknown;
   markers: boolean;
@@ -910,7 +921,7 @@ function Catalog({
         }
         logInfo(
           'place',
-          `Placed ${todo} pieces on the box picture` +
+          `Placed ${plural(todo, 'piece')} on the box picture` +
             (next?.open
               ? `, among ${next.open.cells.length} empty spots (turn ${next.open.turn}, fit ${next.open.fit.toFixed(2)} vs ${next.open.runnerUp.toFixed(2)})`
               : ''),
@@ -967,6 +978,18 @@ function Catalog({
       })
       .catch((err) => logError('answer', 'The answer could not be saved', err));
   };
+  /** Takes a piece out of the puzzle again (Undo, Take out): back on the table or into its tray. */
+  const takeOut = (id: string) =>
+    undoFits(projectId, id).then((next) => {
+      onProject(next);
+      setJustPlaced((j) => (j?.id === id ? null : j));
+      onPiecesChanged();
+    });
+  /** Undo right after an answer in the live view (M9 part 1): ✓ Fits as takeOut; ✗ Doesn't fit offers that spot again. */
+  const undoLiveAnswer = (p: PieceRow, fits: boolean) =>
+    (fits ? takeOut(p.id) : undoAnswer(projectId, p.id, false).then(onProject)).then(() =>
+      logInfo('answer', `Undone in the live view: ${fits ? 'Fits' : "Doesn't fit"}`),
+    );
   /** Counts the picks, so each one looks once whether its panel needs bringing into view (also when the same piece is picked again). */
   const [panelAsk, setPanelAsk] = useState(0);
   /**
@@ -994,6 +1017,15 @@ function Catalog({
     if (top < (parseFloat(css.scrollMarginTop) || 0) || head.getBoundingClientRect().bottom > innerHeight - (parseFloat(css.scrollMarginBottom) || 0))
       el.scrollIntoView({ block: 'start' });
   }, [panelAsk]);
+  /** A panel opened from the action bar, brought into view once drawn (counted, so each tap asks once). */
+  const [panelView, setPanelView] = useState<{ id: string; n: number } | null>(null);
+  useLayoutEffect(() => {
+    if (panelView) document.getElementById(panelView.id)?.scrollIntoView({ block: 'start' });
+  }, [panelView]);
+  const openPanel = (id: string, open: boolean, set: (on: boolean) => void) => {
+    set(!open);
+    if (!open) setPanelView((v) => ({ id, n: (v?.n ?? 0) + 1 }));
+  };
   const bestSpot = (p: PieceRow) => {
     const t = shownPlaces.get(p.id)?.placement.top[0];
     return t ? { col: t.col, row: t.row, rot: t.rot } : null;
@@ -1013,7 +1045,7 @@ function Catalog({
     if (st === 'placed') {
       const t = c!.placement.top[0]!;
       const side = sideOf(p.id);
-      return `Column ${t.col + 1}, row ${t.row + 1} (${VERDICT_WORDS[c!.placement.verdict]}, ${pct(t.p)} %)${side ? `, ${SIDE_WORDS[side]}` : ''}.`;
+      return `Column ${t.col + 1}, row ${t.row + 1} (${VERDICT_WORDS[c!.placement.verdict]}${settings.testerMode.value ? `, ${pct(t.p)} %` : ''})${side ? `, ${SIDE_WORDS[side]}` : ''}.`;
     }
     const g = groups.get(p.id);
     const shape = g === 'corner' ? 'a corner piece' : g === 'edge' ? 'an edge piece' : g === 'interior' ? 'an inside piece' : null;
@@ -1024,16 +1056,13 @@ function Catalog({
   const tableBlock = (
     <>
       <button class="btn btn-block" data-testid="table-toggle" onClick={() => setTableOpen(true)}>
-        🗺 Show my table
-      </button>
-      <button class="btn btn-block" data-testid="live-toggle" onClick={() => setLiveOpen(true)}>
-        📷 Live view of my table
+        <span aria-hidden="true">🗺</span> Show my table
       </button>
       {liveOpen && (
         <LiveTable
           projectId={projectId}
           pieces={rows}
-          colourOf={(p) => STATE_COLOUR[states.get(p.id) ?? 'found']}
+          colourOf={(p) => OVERLAY_STATE[states.get(p.id) ?? 'found']}
           labelOf={(p) => spotLabel(shownPlaces.get(p.id))}
           infoOf={infoOf}
           answer={{
@@ -1045,6 +1074,7 @@ function Catalog({
               const b = bestSpot(p);
               if (b) answer(p, b, fits, 'live');
             },
+            onUndo: undoLiveAnswer,
           }}
           onPick={(p) => {
             setLiveOpen(false);
@@ -1054,21 +1084,26 @@ function Catalog({
           lines={matchLines}
           legend={
             <>
-              <span class="state-dot" style={{ background: STATE_COLOUR.placed }} />
-              spot known <span class="state-dot" style={{ background: STATE_COLOUR.shape }} />
-              shape read <span class="state-dot" style={{ background: STATE_COLOUR.found }} />
+              <span class="state-dot" style={{ background: OVERLAY_STATE.placed }} />
+              spot known <span class="state-dot" style={{ background: OVERLAY_STATE.shape }} />
+              shape read <span class="state-dot" style={{ background: OVERLAY_STATE.found }} />
               found.{matchLines.length > 0 ? ' Lines join pieces that fit together (✓ = square of 4).' : ''} Hold the phone about as high as for your scan. Tap
               a piece.
             </>
           }
-          onClose={() => setLiveOpen(false)}
+          onClose={() => {
+            setLiveOpen(false);
+            // An answer given there has its note (with Undo) on the page: bring it into view (check 2026-11-10: it
+            // was below the screen, so the Undo was out of reach after closing the live view).
+            requestAnimationFrame(() => document.querySelector('[data-testid="placed-note"]')?.scrollIntoView({ block: 'nearest' }));
+          }}
         />
       )}
       {findLive && (
         <LiveTable
           projectId={projectId}
           pieces={rows}
-          colourOf={(p) => (findLive.ids.includes(p.id) ? '#3ccf7a' : STATE_COLOUR[states.get(p.id) ?? 'found'])}
+          colourOf={(p) => (findLive.ids.includes(p.id) ? OVERLAY_STATE.placed : OVERLAY_STATE[states.get(p.id) ?? 'found'])}
           infoOf={infoOf}
           find={findLive.ids}
           lines={findLive.lines}
@@ -1082,8 +1117,8 @@ function Catalog({
           projectId={projectId}
           pieces={rows}
           mode="all"
-          colour={STATE_COLOUR.found}
-          colourOf={(p) => STATE_COLOUR[states.get(p.id) ?? 'found']}
+          colour={OVERLAY_STATE.found}
+          colourOf={(p) => OVERLAY_STATE[states.get(p.id) ?? 'found']}
           labelOf={(p) => spotLabel(shownPlaces.get(p.id))}
           infoOf={infoOf}
           onPick={(p) => {
@@ -1094,9 +1129,9 @@ function Catalog({
           title="Your table"
           legend={
             <>
-              <span class="state-dot" style={{ background: STATE_COLOUR.placed }} />
-              spot known (column·row) <span class="state-dot" style={{ background: STATE_COLOUR.shape }} />
-              shape read <span class="state-dot" style={{ background: STATE_COLOUR.found }} />
+              <span class="state-dot" style={{ background: OVERLAY_STATE.placed }} />
+              spot known (column·row) <span class="state-dot" style={{ background: OVERLAY_STATE.shape }} />
+              shape read <span class="state-dot" style={{ background: OVERLAY_STATE.found }} />
               found. Tap a piece to zoom in and see where it goes.
             </>
           }
@@ -1109,9 +1144,7 @@ function Catalog({
   const fillBlock =
     project.box && project.grid && boxUrl && places ? (
       <>
-        <button class={`btn btn-block ${fillOpen ? 'btn-on' : ''}`} aria-expanded={fillOpen} data-testid="fill-toggle" onClick={() => setFillOpen(!fillOpen)}>
-          🎯 Fill this spot
-        </button>
+        {fillOpen && <PanelHead id="fill-panel" title="Fill this spot" icon="🎯" testId="fill-close" onClose={() => setFillOpen(false)} />}
         {fillOpen && (
           <FillSpot
             project={project}
@@ -1120,6 +1153,7 @@ function Catalog({
             spots={openCells}
             pieces={unplaced}
             onAnswer={(p, spot, fits) => answer(p, spot, fits, 'fill')}
+            onUndo={undoLiveAnswer}
             filled={new Set(answersCtx.view.taken.keys())}
           />
         )}
@@ -1129,14 +1163,15 @@ function Catalog({
   const matchesBlock =
     pairs && project.grid ? (
       <>
-        <button
-          class={`btn btn-block ${matchesOpen ? 'btn-on' : ''}`}
-          aria-expanded={matchesOpen}
-          data-testid="matches-toggle"
-          onClick={() => setMatchesOpen(!matchesOpen)}
-        >
-          🧩 Which pieces join{pairs.list.pairs.length ? ` (${pairs.list.pairs.length})` : ''}
-        </button>
+        {matchesOpen && (
+          <PanelHead
+            id="matches-panel"
+            title={`Which pieces join${pairs.list.pairs.length ? ` (${pairs.list.pairs.length})` : ''}`}
+            icon="🧩"
+            testId="matches-close"
+            onClose={() => setMatchesOpen(false)}
+          />
+        )}
         {matchesOpen && (
           <MatchesPanel
             project={project}
@@ -1176,7 +1211,7 @@ function Catalog({
         data-testid="trays-toggle"
         onClick={() => (setTraysOpen(!traysOpen), setTrayGroup(null))}
       >
-        🎨 Sort into trays by colour
+        <span aria-hidden="true">🎨</span> Sort into trays by colour
       </button>
       {traysOpen && (
         <TraysPanel
@@ -1192,18 +1227,70 @@ function Catalog({
       )}
     </>
   );
+  // The main actions, always at hand at the bottom of the screen (M9 part 1, until the puzzle tabs).
+  const bar = (
+    <ActionBar>
+      <ScanAction onScan={onScan} />
+      {rows.length > 0 && (
+        <button class="action-bar-btn" data-testid="live-toggle" onClick={() => setLiveOpen(true)}>
+          <span class="action-bar-icon" aria-hidden="true">
+            👁
+          </span>
+          <span class="action-bar-label">Live view</span>
+        </button>
+      )}
+      {fillBlock && (
+        <button
+          class="action-bar-btn"
+          aria-expanded={fillOpen}
+          aria-controls="fill-panel"
+          data-testid="fill-toggle"
+          onClick={() => openPanel('fill-panel', fillOpen, setFillOpen)}
+        >
+          <span class="action-bar-icon" aria-hidden="true">
+            🎯
+          </span>
+          <span class="action-bar-label">Fill a spot</span>
+        </button>
+      )}
+      {rows.length > 0 && matchesBlock && (
+        <button
+          class="action-bar-btn"
+          aria-expanded={matchesOpen}
+          aria-controls="matches-panel"
+          data-testid="matches-toggle"
+          onClick={() => openPanel('matches-panel', matchesOpen, setMatchesOpen)}
+        >
+          <span class="action-bar-icon" aria-hidden="true">
+            🧩
+          </span>
+          <span class="action-bar-label">Joins</span>
+          {pairs!.list.pairs.length > 0 && (
+            // The count as a badge, so it isn't cut off on a narrow phone (check 2026-11-10: "Joins (3…").
+            <span class="action-bar-badge" data-testid="matches-count">
+              {pairs!.list.pairs.length}
+            </span>
+          )}
+        </button>
+      )}
+    </ActionBar>
+  );
   if (!rows.length)
     return allRows.some((q) => q.status === 'tray') ? (
       <div>
         <p class="muted small">All your scanned pieces are in trays.</p>
         {fillBlock}
         {traysBlock}
+        {bar}
       </div>
     ) : (
-      <p class="muted small" data-testid="catalog-empty">
-        {allRows.length ? 'No pieces on the table now.' : 'No pieces yet.'} Spread pieces face up{' '}
-        {markers ? 'inside the markers' : 'on the table, with small gaps'} and tap Scan pieces.
-      </p>
+      <>
+        <p class="muted small" data-testid="catalog-empty">
+          {allRows.length ? 'No pieces on the table now.' : 'No pieces yet.'} Spread pieces face up{' '}
+          {markers ? 'inside the markers' : 'on the table, with small gaps'} and tap Scan.
+        </p>
+        {bar}
+      </>
     );
   const n = { corner: 0, edge: 0, interior: 0, unsure: 0 };
   for (const g of groups.values()) n[g]++;
@@ -1227,26 +1314,27 @@ function Catalog({
     .sort((a, b) => (show === 'border' ? Number(groups.get(b.id) === 'corner') - Number(groups.get(a.id) === 'corner') : 0));
   return (
     <div>
-      <div class="chips catalog-groups" role="group" aria-label="Show pieces" data-testid="catalog-groups">
+      {bar}
+      <div class="page-filter catalog-groups" role="group" aria-label="Show pieces" data-testid="catalog-groups">
         {/* "Not sure" only when there is something not sure. */}
         {(['all', 'border', 'interior', 'unsure'] as const)
           .filter((k) => k !== 'unsure' || count.unsure > 0)
           .map((k) => (
-            <button key={k} class="chip" aria-pressed={show === k} data-testid={`group-${k}`} onClick={() => setShow(k)}>
-              {GROUP_LABEL[k]} {count[k]}
+            <button key={k} class="page-filter-btn" aria-pressed={show === k} data-testid={`group-${k}`} onClick={() => setShow(k)}>
+              {GROUP_LABEL[k]} <span class="page-filter-count">{count[k]}</span>
             </button>
           ))}
       </div>
       <p class="small" data-testid="progress">
-        <span class="state-dot" style={{ background: STATE_COLOUR.found }} />
-        {progress.found} found · <span class="state-dot" style={{ background: STATE_COLOUR.shape }} />
-        {progress.shape} shapes read · <span class="state-dot" style={{ background: STATE_COLOUR.placed }} />
+        <span class="state-dot state-found" />
+        {progress.found} found · <span class="state-dot state-shape" />
+        {progress.shape} shapes read · <span class="state-dot state-placed" />
         {progress.placed} placed on box
         {inPuzzle > 0 && (
           <>
             {' · '}
             <button class="link-btn" data-testid="in-puzzle" aria-expanded={inPuzzleOpen} onClick={() => setInPuzzleOpen(!inPuzzleOpen)}>
-              ✓ {inPuzzle} in the puzzle
+              <span aria-hidden="true">✓</span> {inPuzzle} in the puzzle
             </button>
           </>
         )}
@@ -1261,15 +1349,7 @@ function Catalog({
               <InPuzzleRow
                 key={r.id}
                 piece={r}
-                onTakeOut={() =>
-                  void undoFits(projectId, r.id)
-                    .then((next) => {
-                      onProject(next);
-                      if (justPlaced?.id === r.id) setJustPlaced(null);
-                      onPiecesChanged();
-                    })
-                    .catch((err) => logError('answer', 'Could not take the piece out again', err))
-                }
+                onTakeOut={() => void takeOut(r.id).catch((err) => logError('answer', 'Could not take the piece out again', err))}
               />
             ))}
         </div>
@@ -1286,7 +1366,8 @@ function Catalog({
       {photoPlaced && (
         <div class="notice notice-good" role="status" data-testid="photo-placed">
           <p>
-            📸 Your new photo of the puzzle: <strong>{photoPlaced.filled}</strong> {photoPlaced.filled === 1 ? 'spot' : 'spots'} filled since the last one.{' '}
+            <span aria-hidden="true">📸</span> Your new photo of the puzzle: <strong>{photoPlaced.filled}</strong> {photoPlaced.filled === 1 ? 'spot' : 'spots'}{' '}
+            filled since the last one.{' '}
             {photoPlaced.ids.length
               ? `${photoPlaced.ids.length === 1 ? 'The piece the app had for it is' : `The ${photoPlaced.ids.length} pieces the app had for them are`} now counted as in the puzzle.`
               : 'The app wasn’t sure which pieces went there, so none were marked.'}
@@ -1318,20 +1399,12 @@ function Catalog({
       {justPlaced && (
         <div class="notice notice-good row" role="status" data-testid="placed-note" style={{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span class="grow">
-            ✓ In the puzzle at column {justPlaced.col + 1}, row {justPlaced.row + 1}.
+            <span aria-hidden="true">✓</span> In the puzzle at column {justPlaced.col + 1}, row {justPlaced.row + 1}.
           </span>
           <button
             class="btn btn-small"
             data-testid="placed-undo"
-            onClick={() =>
-              void undoFits(projectId, justPlaced.id)
-                .then((next) => {
-                  onProject(next);
-                  setJustPlaced(null);
-                  onPiecesChanged();
-                })
-                .catch((err) => logError('answer', 'Could not take the piece out again', err))
-            }
+            onClick={() => void takeOut(justPlaced.id).catch((err) => logError('answer', 'Could not take the piece out again', err))}
           >
             Undo
           </button>
@@ -1343,12 +1416,12 @@ function Catalog({
       <div class="row" style={{ gap: '8px', flexWrap: 'wrap' }}>
         {project.grid && (
           <a class="btn btn-small" href={`#/progress/${encodeURIComponent(projectId)}`} data-testid="progress-link">
-            📈 Progress
+            <span aria-hidden="true">📈</span> Progress
           </a>
         )}
         {(project.answers?.length ?? 0) + (project.pairAnswers?.length ?? 0) > 0 && (
           <a class="btn btn-small" href={`#/accuracy/${encodeURIComponent(projectId)}`} data-testid="accuracy-link">
-            📊 How often is the app right?
+            <span aria-hidden="true">📊</span> How often is the app right?
           </a>
         )}
       </div>
@@ -1596,8 +1669,46 @@ function PieceThumb({
 /** Room kept around the piece panel when it is scrolled into view (clear of the iPhone's status bar and Home bar). */
 const SPOTS_SCROLL_MARGIN = {
   scrollMarginTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-  scrollMarginBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+  // Above the action bar too (M9 part 1).
+  scrollMarginBottom: 'calc(env(safe-area-inset-bottom, 0px) + var(--action-bar-h, 0px) + 12px)',
 };
+
+/**
+ * The bar of main actions fixed at the bottom of the puzzle page, above the Home bar (M9 part 1;
+ * it becomes the puzzle's tab bar later). The page leaves room for it below its last line.
+ */
+function ActionBar({ children }: { children: ComponentChildren }) {
+  return (
+    <nav class="action-bar" aria-label="Puzzle actions" data-testid="action-bar">
+      <div class="action-bar-inner">{children}</div>
+    </nav>
+  );
+}
+
+function ScanAction({ onScan }: { onScan: () => void }) {
+  return (
+    <button class="action-bar-btn action-bar-primary" data-testid="scan-pieces" onClick={onScan}>
+      <span class="action-bar-icon" aria-hidden="true">
+        📷
+      </span>
+      <span class="action-bar-label">Scan</span>
+    </button>
+  );
+}
+
+/** The heading of a panel opened from the action bar, with a way to close it where it is. */
+function PanelHead({ id, title, icon, testId, onClose }: { id: string; title: string; icon: string; testId: string; onClose: () => void }) {
+  return (
+    <div class="panel-head" id={id}>
+      <h3>
+        <span aria-hidden="true">{icon}</span> {title}
+      </h3>
+      <button class="btn btn-small" data-testid={testId} onClick={onClose}>
+        Close
+      </button>
+    </div>
+  );
+}
 const VERDICT_WORDS: Record<Placement['verdict'], string> = { strong: 'Strong', likely: 'Likely', several: 'Several spots look alike' };
 /** A chance in whole percent, never shown as a certain 100 %. */
 const pct = (p: number): number => Math.min(99, Math.round(p * 100));
@@ -1635,8 +1746,8 @@ function PlaceSummary({
     <>
       {!hasSpots && rows.length > 0 && (
         <p class="small muted" data-testid="open-spots-tip">
-          <strong>Most of the puzzle done?</strong> Tap <strong>📷 Scan pieces → 🖼 Choose a photo</strong> and pick one photo of the whole puzzle with its
-          holes. Your leftover pieces are then matched only to those empty spots, which is far more reliable than searching the whole picture.
+          <strong>Most of the puzzle done?</strong> Tap <strong>📷 Scan → 🖼 Choose a photo</strong> and pick one photo of the whole puzzle with its holes. Your
+          leftover pieces are then matched only to those empty spots, which is far more reliable than searching the whole picture.
         </p>
       )}
       {hasSpots && (
@@ -1678,7 +1789,7 @@ function PlaceSummary({
             {learned > 0 && (
               <span class="muted" data-testid="colours-learned">
                 {' '}
-                Colours learned from your {learned} pieces in the puzzle.
+                Colours learned from your {plural(learned, 'piece')} in the puzzle.
               </span>
             )}
           </>
@@ -1747,7 +1858,8 @@ function PieceSpots({
                     Column {best.col + 1}, row {best.row + 1}
                   </strong>{' '}
                   <span class={`legend-${place!.verdict}`}>
-                    ({VERDICT_WORDS[place!.verdict]}, {pct(best.p)} %)
+                    ({VERDICT_WORDS[place!.verdict]}
+                    {settings.testerMode.value ? `, ${pct(best.p)} %` : ''})
                   </span>
                   {side ? <span data-testid="spot-side"> · {SIDE_WORDS[side]}</span> : null}
                 </p>
@@ -1763,10 +1875,10 @@ function PieceSpots({
                     Tried it in column {best.col + 1}, row {best.row + 1}?
                   </span>
                   <button class="btn btn-small btn-fits" data-testid="spot-fits" onClick={() => onAnswer(true)}>
-                    ✓ Fits
+                    <span aria-hidden="true">✓</span> Fits
                   </button>
                   <button class="btn btn-small" data-testid="spot-not" onClick={() => onAnswer(false)}>
-                    ✗ Doesn't fit
+                    <span aria-hidden="true">✗</span> Doesn't fit
                   </button>
                 </div>
               )}
@@ -1800,7 +1912,7 @@ function PieceSpots({
             </p>
           )}
         </div>
-        <button class="btn btn-small" onClick={onClose}>
+        <button class="btn btn-small" data-testid="spot-close" onClick={onClose}>
           Close
         </button>
       </div>
@@ -1837,7 +1949,7 @@ function PieceSpots({
         <p class="small" data-testid="spot-in-puzzle-row">
           Put it in already, somewhere the app didn't know?{' '}
           <button class="btn btn-small btn-fits" data-testid="spot-in-puzzle" onClick={onInPuzzle}>
-            ✓ It's in the puzzle
+            <span aria-hidden="true">✓</span> It's in the puzzle
           </button>
         </p>
       )}

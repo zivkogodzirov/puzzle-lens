@@ -13,7 +13,15 @@ export interface Settings {
   liveFormat: LiveFormat;
   /** Frames per second the tracker analyses (battery vs smoothness). */
   trackingFps: 30 | 15;
+  /** The performance display on the Live camera screen (shown only in Tester mode; off by default since M9 part 1). */
   showHud: boolean;
+  /**
+   * Tester mode (M9 part 1, design plan §2.8): on, the app shows its testing tools (the 🧪 test steps,
+   * Device check, Send report, Activity log, the Live camera screen with its performance display) and
+   * developer numbers (tracking speed "/s", the gauge's height and tilt). Off, a cleaner look; nothing
+   * else changes. On by default while the owner tests each milestone.
+   */
+  testerMode: boolean;
   /** Preferred camera deviceId (empty = automatic: the physical "Back Camera"). */
   cameraDeviceId: string;
   /**
@@ -33,7 +41,8 @@ export const DEFAULT_SETTINGS: Settings = {
   units: 'mm',
   liveFormat: 'auto-4x3',
   trackingFps: 30,
-  showHud: true,
+  showHud: false,
+  testerMode: true,
   cameraDeviceId: '',
   snapMethod: '',
   scanMode: 'full',

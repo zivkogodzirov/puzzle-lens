@@ -10,6 +10,7 @@ import { getBlob, putBlob, updateProject } from '../../project/store';
 import type { Project } from '../../project/types';
 import { readerWorker } from '../workers';
 import { logError, logInfo } from '../../log/logger';
+import { errorWords, plural } from '../words';
 
 export function BoxFitNotice({ project, shown, onProject }: { project: Project; shown: Map<string, SpotChoice>; onProject: (p: Project) => void }) {
   const [busy, setBusy] = useState(false);
@@ -57,7 +58,7 @@ export function BoxFitNotice({ project, shown, onProject }: { project: Project; 
       onProject(next);
     } catch (err) {
       logError('place', 'The box picture could not be corrected', err);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorWords(err));
     }
     setBusy(false);
   };
@@ -71,7 +72,7 @@ export function BoxFitNotice({ project, shown, onProject }: { project: Project; 
       <p>
         <strong>Box picture check:</strong> your pieces show that the box picture is about {pc} % {a < 1 ? 'bigger' : 'smaller'} than the real puzzle (it shows{' '}
         {a < 1 ? 'a little more' : 'a little less'} of the scene), so spots near its edges are off by up to {Math.round(fit!.edgeShift * 100) / 100} of a piece.
-        Measured from {Math.min(fit!.x.n, fit!.y.n)} pieces the app is sure about.
+        Measured from {plural(Math.min(fit!.x.n, fit!.y.n), 'piece')} the app is sure about.
       </p>
       <div class="row" style={{ gap: '8px', flexWrap: 'wrap' }}>
         <button class="btn btn-small btn-primary" data-testid="box-fit-apply" disabled={busy} onClick={() => void apply()}>

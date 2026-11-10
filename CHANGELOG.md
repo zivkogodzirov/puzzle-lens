@@ -4,6 +4,22 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M9 (part 1): easier to read and use (2026-11-10; tested on the Mac, not yet on your iPhone)
+- **The first of 6 design stages** from the app review ("readable now"). Built by 4 builders working in parallel, each on its own part, then merged and tested together.
+- **Colours that read in light mode.** 31 text styles were too faint. Every colour is now a named colour with a light and a dark value, and a test measures every pair (text at least 4.5:1, lines and dots at least 3:1). For example: links 2.1 → 5.7, "likely" 1.4 → 6.4, the selected piece's outline 1.1 → 16.5. Dark mode looks as before, except "shape read", which is now violet instead of blue in both.
+- **Bigger buttons.** ✓ Fits / ✗ Doesn't fit (and ✓ They fit, ✗ No) are 56 points tall and side by side; small buttons at least 44. In Fill a spot the offered pieces show 2 across instead of 3, so the two answers fit.
+- **Outlines you can see on your cream table.** Every piece outline on a photo or in the live view has a dark edge under it. On your table the outlines stood out at only 1.0–2.9 before; the edge now stands out at about 5, and each line against the edge at 3.3–5.4. Drawing costs a little more: about +10–20 % for 40 pieces, about +2 ms a frame with 300 or more (Mac).
+- **Undo in the live view** for 10 seconds after ✓ Fits or ✗ Doesn't fit.
+- **A bar at the bottom of the puzzle page:** Scan · Live view · Fill a spot · Joins, always in reach. Fill a spot and Joins open with a Close button.
+- **The app reopens your last puzzle** when you start it (Home is one tap back). The set-up list folds to "✓ Set-up finished". The screen stays on while a puzzle page or Progress is open.
+- **The piece filters** (All, Border, Inside…) look like one control with the chosen one raised.
+- **Pinch-zoom works** on normal screens (not on the camera screens). The Home Screen app stays upright. The status bar follows light and dark mode.
+- **🧪 is a round button in the top bar**, on every screen including the camera ones.
+- **Tester mode** (Settings, on for now): switched off, it hides Live camera, Device check, Send report, the Activity log, the 🧪 button and the developer numbers (the "/s" speed, "cm high · tilt"). The speed display (HUD) on the Live camera screen now starts hidden.
+- **Words:** "1 piece found" instead of "1 pieces found" (and about 20 more); plain sentences instead of computer error text; "This puzzle is not on this iPhone." everywhere.
+- **Reduce Motion** turns off animations; the live view's pulsing ring stands still.
+- Screen titles in the app switcher show the puzzle's name.
+
 ### M8 (part 4): fixes from the app review, bugs and speed (2026-11-10; tested on the Mac with your photos, not yet on your iPhone)
 - **Checked twice.** Every change was checked by a second, independent check against the version before it. Then a separate review asked one question: did any of it make the app worse? Over 40 checks looked at the Scan screen, the puzzle page, memory, speed, your photos and data safety. They confirmed 7 small-to-medium problems and the final check found nothing new. 5 are fixed below. The other 2 were about extra scan work on photos that can't be used anyway: every way I tried to cut it also stopped some of your photos from being read, so it stays (a test with your photos now guards it).
 - **Your 41 photos, through the whole app:** the same pieces as before, apart from 2 photos of the half-finished puzzle (IMG_9226, IMG_9227) that now read right after a photo taken at another height. All 22 end results (a catalog per batch) are the same.

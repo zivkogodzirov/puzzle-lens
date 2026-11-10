@@ -17,6 +17,7 @@ import {
   removeNotAPiece,
   placementWithAnswers,
   spotSidesWithNeighbours,
+  undoAnswer,
   undoFits,
   wilson,
 } from '../../src/project/answers';
@@ -111,6 +112,27 @@ describe('answers', () => {
     p = await clearNotHere(pz.id, 'a');
     expect(answerView(p).notHere.size).toBe(0);
     expect(answerView({ ...p, grid: { cols: 36, rows: 28 } as never, answers: [{ ...p.answers![0]!, undone: false }] }).notHere.size).toBe(0);
+  });
+
+  it('Undo right after "doesn’t fit" (M9 part 1): only that answer is undone, earlier ones stay; the piece stays on the table', async () => {
+    const pz = await puzzle();
+    const a = piece(pz.id, 'a');
+    await db().pieces.put(a);
+    const shown = { placement: placement('likely', spot(3, 4, 0.6), spot(5, 6, 0.35), spot(7, 8, 0.03)), fits: true };
+    await answerSpot(pz.id, a, { col: 3, row: 4, rot: 0 }, false, shown, 'live');
+    let p = await answerSpot(pz.id, a, { col: 5, row: 6, rot: 0 }, false, shown, 'live');
+    expect([...answerView(p).notHere.get('a')!].sort()).toEqual(['3,4', '5,6']);
+    p = await undoAnswer(pz.id, 'a', false);
+    expect([...answerView(p).notHere.get('a')!]).toEqual(['3,4']);
+    expect(p.answers!.map((x) => Boolean(x.undone))).toEqual([false, true]);
+    expect((await db().pieces.get('a'))!.status).toBe('table');
+    // ✓ Fits then Undo, the same way as undoFits.
+    await answerSpot(pz.id, a, { col: 5, row: 6, rot: 0 }, true, shown, 'live');
+    expect((await db().pieces.get('a'))!.status).toBe('placed');
+    p = await undoAnswer(pz.id, 'a', true);
+    expect((await db().pieces.get('a'))!.status).toBe('table');
+    expect(answerView(p).taken.size).toBe(0);
+    expect([...answerView(p).notHere.get('a')!]).toEqual(['3,4']);
   });
 
   it('whole picture: a spot taken by another piece is left out, and a spot whose neighbour’s knob can’t meet this piece’s', () => {

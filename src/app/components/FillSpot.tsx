@@ -4,6 +4,7 @@
  * that area) and see the pieces that may go there with their chances, lit up on your table photo.
  */
 import { useMemo, useState } from 'preact/hooks';
+import { settings } from '../settings';
 import type { SpotChoice } from '../../cv/openSpots';
 import { candidatesFor, nearestSpot, type SpotCandidate } from '../../project/fillSpot';
 import type { PieceRow, Project } from '../../project/types';
@@ -31,6 +32,7 @@ export function FillSpot({
   spots,
   pieces,
   onAnswer,
+  onUndo,
   filled,
 }: {
   project: Project;
@@ -43,6 +45,8 @@ export function FillSpot({
   pieces: PieceRow[];
   /** Fits / Doesn't fit (M5 part 2) for a piece at the chosen spot. */
   onAnswer?: (piece: PieceRow, spot: { col: number; row: number; rot: 0 | 1 | 2 | 3 }, fits: boolean) => void;
+  /** Undo right after an answer in the live view (M9 part 1). */
+  onUndo?: (piece: PieceRow, fits: boolean) => Promise<void>;
   /** Spots already filled with a piece that fits ("c,r"). */
   filled?: Set<string>;
 }) {
@@ -206,7 +210,10 @@ export function FillSpot({
           colourOf={(p) => (cands.find((c) => c.id === p.id)?.chosen ? BEST : OTHER)}
           infoOf={(p) => {
             const c = cands.find((q) => q.id === p.id);
-            return c ? `${c.chosen ? `${WORDS[c.verdict]}, ` : ''}${pct(c.p)} % for column ${sel[0] + 1}, row ${sel[1] + 1}.` : 'A possible piece.';
+            if (!c) return 'A possible piece.';
+            // The % beside a word: for testing only (M9 part 1); without a word it stays.
+            const words = c.chosen ? (settings.testerMode.value ? `${WORDS[c.verdict]}, ${pct(c.p)} %` : WORDS[c.verdict]) : `${pct(c.p)} %`;
+            return `${words} for column ${sel[0] + 1}, row ${sel[1] + 1}.`;
           }}
           find={onTable.map((p) => p.id)}
           answer={
@@ -214,6 +221,7 @@ export function FillSpot({
               ? {
                   labelOf: () => `column ${sel[0] + 1}, row ${sel[1] + 1}`,
                   onAnswer: (p, fits) => onAnswer(p, { col: sel[0], row: sel[1], rot: rotAt(p.id) }, fits),
+                  onUndo,
                 }
               : undefined
           }
@@ -249,7 +257,7 @@ function Candidate({
 }) {
   const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
   return (
-    <div class="fill-cand" data-testid="fill-cand" style={{ borderColor: colour }}>
+    <div class={`fill-cand ${colour === BEST ? 'fill-cand-best' : 'fill-cand-other'}`} data-testid="fill-cand">
       {url ? <img src={url} alt="A piece" /> : <div class="catalog-empty" />}
       <div class="small">
         {c.chosen ? `${WORDS[c.verdict]}, ` : ''}

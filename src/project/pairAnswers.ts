@@ -44,7 +44,7 @@ export async function answerPair(
   const d = db();
   return d.transaction('rw', d.projects, async () => {
     const project = await d.projects.get(projectId);
-    if (!project) throw new Error('This puzzle is no longer on this iPhone.');
+    if (!project) throw new Error('This puzzle is not on this iPhone.');
     const now = Date.now();
     const a: PairAnswer = { a: pair.a, b: pair.b, dir: pair.dir, fits, at: now, p: pair.p, confirmed, from };
     const next: Project = { ...project, pairAnswers: [...(project.pairAnswers ?? []), a], updatedAt: Math.max(now, project.updatedAt + 1) };
@@ -58,7 +58,7 @@ export async function undoPairAnswer(projectId: string, key: string): Promise<Pr
   const d = db();
   return d.transaction('rw', d.projects, async () => {
     const project = await d.projects.get(projectId);
-    if (!project) throw new Error('This puzzle is no longer on this iPhone.');
+    if (!project) throw new Error('This puzzle is not on this iPhone.');
     const answers = [...(project.pairAnswers ?? [])];
     for (let i = answers.length - 1; i >= 0; i--)
       if (!answers[i]!.undone && pairKey(answers[i]!.a, answers[i]!.b, answers[i]!.dir) === key) {

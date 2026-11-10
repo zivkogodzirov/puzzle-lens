@@ -9,6 +9,9 @@
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
+import { TestButton } from './TestSteps';
+import { settings } from '../settings';
+import { errorWords } from '../words';
 import { cameraError, cameraState, cameraStream, startCamera, stopCamera } from '../../camera/camera';
 import { latestFrame, latestFrameAt, pumpError, startPump, stopPump } from '../../camera/framePump';
 import { frameToElement } from '../../camera/coords';
@@ -21,16 +24,20 @@ import type { AnchorPhoto } from '../../shared/apis';
 import { trackerWorker } from '../workers';
 import { OverlayPredictor } from '../livePredict';
 import { logInfo, logWarn } from '../../log/logger';
+import { OVERLAY_BAD, strokeHalo } from '../overlay';
 
 /** A piece is shown as gone from its spot after this many of the last GONE_CHECKS presence checks. */
 const GONE_OF = 3;
 const GONE_CHECKS = 4;
-const GONE_COLOUR = '#ff6b6b';
+const GONE_COLOUR = OVERLAY_BAD;
 
 /** Overview photos used to find the table (newest first). */
 const MAX_REF_PHOTOS = 3;
 /** A fix older than this is not drawn (the tracker stopped or lost the table). */
 const STALE_MS = 600;
+/** How long a note shows; one with Undo longer (M9 part 1: at least 8 s to change your mind). */
+const NOTE_MS = 4000;
+const UNDO_MS = 10_000;
 
 type RefState = { kind: 'loading' } | { kind: 'none' } | { kind: 'ready'; features: number; photos: number } | { kind: 'error'; message: string };
 
@@ -87,8 +94,15 @@ export function LiveTable({
   onPick?: (p: PieceRow) => void;
   /** Pieces to point out (pulsing, with an arrow when out of view). */
   find?: string[];
-  /** Fits / Doesn't fit (M5 part 2): the spot to ask about for a piece (words), and what to do with the answer. */
-  answer?: { labelOf: (p: PieceRow) => string | null; onAnswer: (p: PieceRow, fits: boolean) => void };
+  /**
+   * Fits / Doesn't fit (M5 part 2): the spot to ask about for a piece (words), and what to do with the
+   * answer; onUndo takes the answer back (the Undo next to the note, M9 part 1).
+   */
+  answer?: {
+    labelOf: (p: PieceRow) => string | null;
+    onAnswer: (p: PieceRow, fits: boolean) => void;
+    onUndo?: (p: PieceRow, fits: boolean) => Promise<void>;
+  };
   /** Lines between pieces that join (M6): ✓ for a pair confirmed by a square of 4. */
   lines?: MatchLine[];
   title: string;
@@ -99,7 +113,27 @@ export function LiveTable({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [refs, setRefs] = useState<RefState>({ kind: 'loading' });
   const [tapped, setTapped] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<{ text: string; undo?: () => void } | null>(null);
+  const noteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  /** Shows a note (replacing the one before) for a while; with `undo`, an Undo button. */
+  const showNote = (text: string, undo?: () => void) => {
+    clearTimeout(noteTimer.current);
+    setNote({ text, undo });
+    noteTimer.current = setTimeout(() => setNote(null), undo ? UNDO_MS : NOTE_MS);
+  };
+  useEffect(() => () => clearTimeout(noteTimer.current), []);
+  /** The Undo for an answer just given (the piece back on the table, or its spot offered again). */
+  const undoOf = (p: PieceRow, fits: boolean) => {
+    const onUndo = answer?.onUndo;
+    if (!onUndo) return undefined;
+    return () => {
+      clearTimeout(noteTimer.current);
+      setNote(null);
+      onUndo(p, fits)
+        .then(() => showNote(fits ? 'Undone: the piece is back on the table.' : 'Undone: that spot is offered again.'))
+        .catch((err) => logWarn('answer', 'The answer could not be undone', err));
+    };
+  };
   const [targets, setTargets] = useState<string[]>(find);
   /** Pieces that looked gone from their spot in at least GONE_OF of the last GONE_CHECKS checks (M5 part 4). */
   const gone = useRef(new Set<string>());
@@ -154,7 +188,7 @@ export function LiveTable({
         setRefs({ kind: 'ready', features: r.features, photos: r.photos });
       } catch (err) {
         logWarn('live', 'Live view could not start', err);
-        if (!gone) setRefs({ kind: 'error', message: String((err as Error)?.message ?? err) });
+        if (!gone) setRefs({ kind: 'error', message: errorWords(err) });
       }
     })();
     return () => {
@@ -314,6 +348,10 @@ export function LiveTable({
         const isGone = gone.current.has(p.id);
         const c = isGone ? GONE_COLOUR : col(p);
         const dim = want.size > 0 && !want.has(p.id);
+        const width = p.id === tappedRef.current ? 4 : 2.5;
+        // On a dark halo (M9 part 1: pale lines vanish on a cream table).
+        ctx.globalAlpha = dim ? 0.5 : 1;
+        strokeHalo(ctx, width);
         // Gone from its spot, or tracking unsure: dashed and hollow (PLAN §5 "red/hollow uncertain").
         const dashed = isGone || f.anchor.quality === 'weak';
         ctx.setLineDash(dashed ? [7, 5] : []);
@@ -324,7 +362,7 @@ export function LiveTable({
         }
         ctx.globalAlpha = dim ? 0.5 : 1;
         ctx.strokeStyle = c;
-        ctx.lineWidth = p.id === tappedRef.current ? 4 : 2.5;
+        ctx.lineWidth = width;
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.globalAlpha = 1;
@@ -364,17 +402,18 @@ export function LiveTable({
         ctx.fillStyle = l.colour;
         ctx.fillText(l.text, l.at[0], l.at[1]);
       }
-      // Pieces to find: a pulsing ring, or an arrow at the edge pointing to them.
-      const beat = 0.5 + 0.5 * Math.sin(now / 180);
+      // Pieces to find: a pulsing ring (still and thick with Reduce Motion on), or an arrow at the edge pointing to them.
+      const beat = pulses.length && matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0.5 + 0.5 * Math.sin(now / 180);
       for (const t of pulses) {
         const [x, y] = t.at;
         const margin = 28;
         if (x >= margin && y >= margin && x <= w - margin && y <= h - margin) {
           ctx.beginPath();
           ctx.arc(x, y, t.r + 6 + 8 * beat, 0, 2 * Math.PI);
+          ctx.globalAlpha = 0.5 + 0.5 * beat;
+          strokeHalo(ctx, 3 + 2 * beat);
           ctx.strokeStyle = t.colour;
           ctx.lineWidth = 3 + 2 * beat;
-          ctx.globalAlpha = 0.5 + 0.5 * beat;
           ctx.stroke();
           ctx.globalAlpha = 1;
         } else {
@@ -457,17 +496,18 @@ export function LiveTable({
           ‹ Back
         </button>
         <span class="title">{title}</span>
+        <TestButton variant="camera" />
       </div>
       {words && (
         <p class={`chip live-status live-status-${status.kind}`} data-testid="live-status" data-kind={refs.kind === 'ready' ? status.kind : refs.kind}>
           {words}
-          {refs.kind === 'ready' && status.perSec > 0 && <span class="live-rate"> · {Math.round(status.perSec)}/s</span>}
+          {refs.kind === 'ready' && status.perSec > 0 && settings.testerMode.value && <span class="live-rate"> · {Math.round(status.perSec)}/s</span>}
         </p>
       )}
 
       {refs.kind === 'none' && (
         <div class="notice notice-warn live-notice" data-testid="live-no-photo">
-          <p>There's no scan photo of your table to compare with yet. Scan your pieces first (Scan pieces → overview photo), then come back.</p>
+          <p>There's no scan photo of your table to compare with yet. Scan your pieces first (Scan → overview photo), then come back.</p>
         </div>
       )}
       {refs.kind === 'error' && (
@@ -499,8 +539,13 @@ export function LiveTable({
 
       <div class="live-table-bottom">
         {note && (
-          <p class="chip live-note" data-testid="live-note">
-            {note}
+          <p class="chip live-note" role="status" data-testid="live-note">
+            {note.text}
+            {note.undo && (
+              <button class="btn btn-small live-note-undo" data-testid="live-undo" onClick={note.undo}>
+                Undo
+              </button>
+            )}
           </p>
         )}
         {tp ? (
@@ -519,8 +564,7 @@ export function LiveTable({
                     const where = answer.labelOf(tp);
                     answer.onAnswer(tp, true);
                     setTapped(null);
-                    setNote(`✓ In the puzzle at ${where}.`);
-                    setTimeout(() => setNote(null), 4000);
+                    showNote(`✓ In the puzzle at ${where}.`, undoOf(tp, true));
                   }}
                 >
                   ✓ Fits
@@ -530,8 +574,7 @@ export function LiveTable({
                   data-testid="live-not"
                   onClick={() => {
                     answer.onAnswer(tp, false);
-                    setNote('Noted: the next best spot is shown now.');
-                    setTimeout(() => setNote(null), 4000);
+                    showNote('Noted: the next best spot is shown now.', undoOf(tp, false));
                   }}
                 >
                   ✗ Doesn't fit

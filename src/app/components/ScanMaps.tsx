@@ -1,4 +1,5 @@
 import type { Coverage } from '../../scan/coverage';
+import { TestStrip } from './TestSteps';
 import type { PieceRow, Vec2 } from '../../project/types';
 
 /**
@@ -53,16 +54,20 @@ export function PhotoResult({
 }) {
   return (
     <div class="photo-result" data-testid="photo-result" onClick={onClose}>
+      <TestStrip />
       <svg viewBox={`0 0 ${size.width} ${size.height}`} preserveAspectRatio="xMidYMid meet">
         <image href={url} x={0} y={0} width={size.width} height={size.height} />
-        {outlines.map((o, i) => (
-          <polygon
-            key={i}
-            points={o.points.reduce((s, v, k) => s + (k % 2 ? `,${v.toFixed(0)} ` : `${v.toFixed(0)}`), '')}
-            class={`res-outline res-${o.flag}`}
-            vector-effect="non-scaling-stroke"
-          />
-        ))}
+        {/* Every outline on a dark halo, all halos first (M9 part 1: pale lines vanish on a cream table). */}
+        {[true, false].map((halo) =>
+          outlines.map((o, i) => (
+            <polygon
+              key={`${halo ? 'h' : 'o'}${i}`}
+              points={o.points.reduce((s, v, k) => s + (k % 2 ? `,${v.toFixed(0)} ` : `${v.toFixed(0)}`), '')}
+              class={halo ? `res-halo res-halo-${o.flag}` : `res-outline res-${o.flag}`}
+              vector-effect="non-scaling-stroke"
+            />
+          )),
+        )}
       </svg>
       <p class="muted small">Tap to close</p>
     </div>

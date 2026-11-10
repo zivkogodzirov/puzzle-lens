@@ -99,7 +99,12 @@ test.describe('scan pieces without markers', () => {
     ).toBe(true);
     await page.getByTestId('mode-detail').click({ trial: true });
     await page.getByTestId('show-photo').click();
-    await expect(page.getByTestId('photo-result').locator('polygon')).toHaveCount(n, { timeout: 5_000 });
+    await expect(page.getByTestId('photo-result').locator('polygon.res-outline')).toHaveCount(n, { timeout: 5_000 });
+    // Every outline on a dark halo (M9 part 1), drawn under the lines.
+    const halo = page.getByTestId('photo-result').locator('polygon.res-halo');
+    await expect(halo).toHaveCount(n);
+    expect(await halo.first().evaluate((el) => [getComputedStyle(el).stroke, getComputedStyle(el).strokeWidth])).toEqual(['rgba(0, 0, 0, 0.6)', '6px']);
+    expect(await page.getByTestId('photo-result').locator('polygon').first().getAttribute('class')).toContain('res-halo');
     await page.screenshot({ path: test.info().outputPath('free-photo-result.png') });
     await page.getByTestId('photo-result').click();
 

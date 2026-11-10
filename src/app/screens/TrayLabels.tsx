@@ -4,6 +4,8 @@
  * the page to a Mac and print there.
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { TestButton } from '../components/TestSteps';
+import { plural } from '../words';
 import { go, routeArg } from '../router';
 import { db } from '../../db/db';
 import { getBlob, getProject } from '../../project/store';
@@ -154,6 +156,7 @@ ${pagesRef.current?.outerHTML ?? ''}</body></html>`;
             ‹ Back
           </button>
           <h1>Tray labels</h1>
+          <TestButton />
         </div>
         <div class="row two-up">
           <button class="btn btn-primary" data-testid="print-labels" disabled={!ready} onClick={print}>
@@ -197,7 +200,7 @@ ${pagesRef.current?.outerHTML ?? ''}</body></html>`;
                     <div>
                       <div class="tl-title">Tray {g.letter}</div>
                       <div class="tl-sub">
-                        {project.name} · {counts.get(g.index) ?? 0} pieces when printed
+                        {project.name} · {plural(counts.get(g.index) ?? 0, 'piece')} when printed
                       </div>
                       <div class="tl-swatch" style={{ background: g.hex }} />
                     </div>

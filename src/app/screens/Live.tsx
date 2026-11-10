@@ -1,23 +1,14 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { go } from '../router';
 import { settings } from '../settings';
-import {
-  cameraDevices,
-  cameraError,
-  cameraInfo,
-  cameraState,
-  cameraStream,
-  setTorch,
-  setZoom,
-  startCamera,
-  stopCamera,
-} from '../../camera/camera';
+import { cameraDevices, cameraError, cameraInfo, cameraState, cameraStream, setTorch, setZoom, startCamera, stopCamera } from '../../camera/camera';
 import { startPump, stopPump, pumpError, pumpMode } from '../../camera/framePump';
 import { beginExternalCapture, cancelExternalCapture, canSnapWithCamera, lastSnap, snapBusy, snapFromFile, snapWithCamera } from '../../camera/snap';
 import { resetHud } from '../../perf/hud';
 import { Hud } from '../components/Hud';
 import { MarkerOverlay } from '../components/MarkerOverlay';
 import { SnapSheet } from '../components/SnapSheet';
+import { TestButton } from '../components/TestSteps';
 
 export function LiveScreen() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -137,12 +128,15 @@ export function LiveScreen() {
             ))}
           </select>
         )}
-        <button class="chip" aria-pressed={settings.showHud.value} onClick={() => (settings.showHud.value = !settings.showHud.value)}>
-          HUD
-        </button>
+        {settings.testerMode.value && (
+          <button class="chip" aria-pressed={settings.showHud.value} onClick={() => (settings.showHud.value = !settings.showHud.value)}>
+            HUD
+          </button>
+        )}
+        <TestButton variant="camera" />
       </div>
 
-      {live && settings.showHud.value && <Hud />}
+      {live && settings.testerMode.value && settings.showHud.value && <Hud />}
 
       {live && pumpError.value && (
         <div class="notice notice-bad live-notice" data-testid="pump-error">

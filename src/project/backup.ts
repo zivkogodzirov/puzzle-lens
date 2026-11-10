@@ -90,7 +90,7 @@ export function backupFileName(project: Pick<Project, 'name'>, when = new Date()
 export async function collectBackup(projectId: string, appVersion = 'dev'): Promise<{ manifest: BackupManifest; files: ReportFileInput[] }> {
   const d = db();
   const row = await d.projects.get(projectId);
-  if (!row) throw new BackupError('This puzzle is no longer on this iPhone.');
+  if (!row) throw new BackupError('This puzzle is not on this iPhone.');
   const project = normalizeProject(row);
   const pieces = await d.pieces.where('projectId').equals(projectId).toArray();
   const snaps = await d.snaps.where('projectId').equals(projectId).toArray();

@@ -122,7 +122,7 @@ export function HelpScreen() {
           <li>
             Tap <strong>Start camera</strong>, then <strong>Allow</strong> when your iPhone asks.
           </li>
-          <li>Point the camera at your table. The small box at the top left is the performance display (the HUD button turns it on and off):</li>
+          <li>Point the camera at your table and tap the HUD button at the top: the small box at the top left is the performance display (the same button hides it):</li>
         </ol>
         <dl class="kv" data-testid="hud-explained">
           <dt>camera</dt>

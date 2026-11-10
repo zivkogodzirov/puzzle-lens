@@ -161,12 +161,53 @@ test.describe('live view of the table', () => {
     }, id);
     await page.reload();
     await page.evaluate((url) => ((window as unknown as { __fakeScene?: string }).__fakeScene = url), moved);
-    await expect(page.getByTestId('matches-toggle')).toContainText('Which pieces join (');
+    await expect(page.getByTestId('matches-toggle')).toContainText('Joins');
+    await expect(page.getByTestId('matches-count')).toBeVisible();
     await page.getByTestId('live-toggle').click();
     await expect(page.getByTestId('live-status')).toHaveAttribute('data-kind', 'good', { timeout: 60_000 });
     await expect.poll(async () => Number(await overlay.getAttribute('data-lines')), { timeout: 20_000 }).toBeGreaterThanOrEqual(4);
     await expect(page.getByTestId('live-table')).toContainText('Lines join pieces that fit together');
     await page.screenshot({ path: test.info().outputPath('live-view-lines.png') });
+
+    // Every outline on a dark halo (M9 part 1: pale lines vanish on a cream table): the overlay has
+    // pixels of the halo's own 0.6 black (alpha 153) along the outlines.
+    await expect
+      .poll(
+        () =>
+          overlay.evaluate((c: HTMLCanvasElement) => {
+            const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+            let n = 0;
+            for (let i = 0; i < d.length; i += 4) if (d[i]! < 8 && d[i + 1]! < 8 && d[i + 2]! < 8 && Math.abs(d[i + 3]! - 153) <= 3) n++;
+            return n;
+          }),
+        { timeout: 10_000 },
+      )
+      .toBeGreaterThan(2000);
+
+    // ✓ Fits in the live view, then Undo (M9 part 1): the note (role=status) offers Undo for at least
+    // 8 s, and Undo puts the piece back on the table.
+    const inView = Number(await overlay.getAttribute('data-drawn'));
+    let at = (await overlay.getAttribute('data-first'))!.split(',').map(Number);
+    await page.getByTestId('live-tap').click({ position: { x: at[0]!, y: at[1]! } });
+    await page.getByTestId('live-fits').click();
+    const fitsAt = Date.now();
+    const note = page.getByTestId('live-note');
+    await expect(note).toHaveAttribute('role', 'status');
+    await expect(note).toContainText('✓ In the puzzle at');
+    await expect.poll(async () => Number(await overlay.getAttribute('data-drawn'))).toBe(inView - 1);
+    await page.waitForTimeout(Math.max(0, 8_200 - (Date.now() - fitsAt)));
+    await expect(page.getByTestId('live-undo')).toBeVisible();
+    await page.getByTestId('live-undo').click();
+    await expect(note).toContainText('Undone');
+    await expect.poll(async () => Number(await overlay.getAttribute('data-drawn'))).toBe(inView);
+    // ✗ Doesn't fit has an Undo too.
+    at = (await overlay.getAttribute('data-first'))!.split(',').map(Number);
+    await page.getByTestId('live-tap').click({ position: { x: at[0]!, y: at[1]! } });
+    await page.getByTestId('live-not').click();
+    await expect(note).toContainText('Noted');
+    await page.getByTestId('live-undo').click();
+    await expect(note).toContainText('Undone: that spot is offered again.');
+    await page.screenshot({ path: test.info().outputPath('live-view-undo.png') });
 
     // Closing turns the camera off.
     await page.getByTestId('live-table-close').click();

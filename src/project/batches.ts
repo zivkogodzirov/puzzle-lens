@@ -32,7 +32,7 @@ export async function startNewBatch(projectId: string, now = Date.now()): Promis
   const d = db();
   return d.transaction('rw', d.projects, d.pieces, async () => {
     const project = await d.projects.get(projectId);
-    if (!project) throw new Error('This puzzle is no longer on this iPhone.');
+    if (!project) throw new Error('This puzzle is not on this iPhone.');
     let aside = 0;
     await d.pieces
       .where('projectId')

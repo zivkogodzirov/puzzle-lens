@@ -27,9 +27,10 @@ test('home screen loads, shows the install banner in a Safari tab, and logs no e
   expect(problems.consoleErrors, 'console errors on the home screen').toEqual([]);
 });
 
-test('no screen scrolls sideways, and the 🧪 tab sits in the side margin, clear of the content', async ({ page }) => {
+test('no screen scrolls sideways, and the 🧪 button sits in the top bar, inside the content', async ({ page }) => {
   // 2026-11-10 app review: Device check scrolled sideways by 61 px (WebKit drew a bare hidden file
   // input's button past its 1 px box), and the 40 px 🧪 tab covered card edges and text on every screen.
+  // M9 part 1: the 🧪 entry is a button in each screen's top bar (no edge tab there any more).
   for (const width of [375, 402, 430]) {
     await page.setViewportSize({ width, height: 800 });
     for (const screen of ['', 'device', 'help', 'settings', 'report', 'log'] as const) {
@@ -38,19 +39,26 @@ test('no screen scrolls sideways, and the 🧪 tab sits in the side margin, clea
         const main = document.querySelector('main.screen')!;
         const r = main.getBoundingClientRect();
         const contentRight = r.right - parseFloat(getComputedStyle(main).paddingRight);
-        const tab = document.querySelector('[data-testid=test-tab]')!.getBoundingClientRect();
+        const entries = document.querySelectorAll('[data-testid=test-tab]');
+        const tab = entries[0]!;
+        const box = tab.getBoundingClientRect();
         return {
           scrollWidth: document.documentElement.scrollWidth,
           clientWidth: document.documentElement.clientWidth,
           contentRight,
-          tabLeft: tab.left,
-          tabRight: tab.right,
+          entries: entries.length,
+          inTopBar: Boolean(tab.closest('.topbar')),
+          tabRight: box.right,
+          tabWidth: box.width,
+          tabHeight: box.height,
         };
       });
       const where = `#/${screen} at ${width} px`;
       expect(m.scrollWidth, `${where}: page width`).toBe(m.clientWidth);
-      expect(m.tabRight, `${where}: tab at the right edge`).toBeCloseTo(width, 0);
-      expect(m.tabLeft, `${where}: tab inside the side margin`).toBeGreaterThanOrEqual(m.contentRight - 0.5);
+      expect(m.entries, `${where}: one 🧪 entry`).toBe(1);
+      expect(m.inTopBar, `${where}: 🧪 in the top bar`).toBe(true);
+      expect(m.tabRight, `${where}: 🧪 inside the content`).toBeLessThanOrEqual(m.contentRight + 0.5);
+      expect(Math.min(m.tabWidth, m.tabHeight), `${where}: 🧪 at least 44 px`).toBeGreaterThanOrEqual(44);
     }
   }
 });

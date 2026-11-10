@@ -4,7 +4,7 @@
  * The simulated camera's clone is made un-sendable to force this path.
  */
 import { test, expect, fakeCameraStats, gotoScreen } from './fixtures';
-import { hudNumber, startLiveCamera } from './live-helpers';
+import { hudNumber, showHud, startLiveCamera } from './live-helpers';
 
 test.use({ fakeCameraOptions: { directFrames: false } });
 
@@ -48,6 +48,7 @@ test('fallback frames: leaving with the browser Back gesture also turns the came
   await page.evaluate(() => {
     location.hash = '#/live';
   });
+  await showHud(page);
   await page.getByTestId('start-camera').click();
   await expect(page.getByTestId('hud')).toContainText('copied (fallback)', { timeout: 15_000 });
   await page.goBack(); // a hash change, not the ‹ Home button

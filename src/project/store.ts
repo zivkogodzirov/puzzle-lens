@@ -114,7 +114,7 @@ export async function updateProject(id: string, patch: ProjectPatch): Promise<Pr
   const d = db();
   return d.transaction('rw', d.projects, async () => {
     const row = await d.projects.get(id);
-    if (!row) throw new Error('This puzzle is no longer on this iPhone.');
+    if (!row) throw new Error('This puzzle is not on this iPhone.');
     const next = normalizeProject({
       ...normalizeProject(row),
       ...patch,

@@ -95,7 +95,8 @@ export async function fakeCameraStats(page: Page): Promise<FakeCameraStats> {
 
 /** Opens a screen of the app by its #/ address, e.g. gotoScreen(page, 'live'). */
 export async function gotoScreen(page: Page, screen: '' | 'live' | 'device' | 'settings' | 'report' | 'help' | 'log'): Promise<void> {
-  await page.goto(screen ? `./#/${screen}` : './');
+  // Home by its address "#/": with no address at all, the app reopens the puzzle open last time (M9 part 1).
+  await page.goto(screen ? `./#/${screen}` : './#/');
   // "Attached", not "visible": the Live screen is pinned to the viewport (position: fixed), so its
   // container has no height of its own and Playwright would call it hidden.
   await expect(page.locator(`#app > .app.route-${screen || 'home'}`)).toBeAttached();

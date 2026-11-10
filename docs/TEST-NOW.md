@@ -1,4 +1,8 @@
-# M8, part 4: fixes from the app review, bugs and speed (and M8 parts 1 and 3, M7, M6, M5, still to check)
+# M9, part 1: easier to read and use (and M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+
+**New in M9 part 1** (the first of 6 design stages): colours that are easy to read in light mode, bigger ✓ Fits / ✗ Doesn't fit buttons side by side, a dark edge under every piece outline so they show on your cream table, **Undo** in the live view, a **bar at the bottom of the puzzle page** (Scan · Live view · Fill a spot · Joins), the app reopening your last puzzle, the 🧪 button in the top bar, and a **Tester mode** switch in Settings (on for now, so nothing you test with disappears).
+
+**Button names in the older steps below:** the puzzle page's big buttons moved into the bottom bar. "Scan pieces" is now **Scan**, "📷 Live view of my table" is **Live view**, "🎯 Fill this spot" is **Fill a spot**, and "🧩 Which pieces join" is **Joins**.
 
 **New in M8 part 4:** the fixes from the app review. Bugs: the note after a scan photo no longer covers the gauge, a photo of the finished puzzle now says how many loose pieces lie beside it, a misread "finished" count no longer overwrites your saved empty spots, and a tapped piece's panel no longer jumps. Speed (on the Mac, with your own photos): scan photos take about a fifth less time, the first photo after **Start a new batch** no longer freezes for 2 seconds, working out where pieces go is 3–6 times faster, and trays sort in about 0.05 s instead of half a second. Each change was checked against the version before it by a second, independent check, and your 41 photos give the same pieces as before.
 
@@ -15,6 +19,40 @@ These steps are for version **{version}** (Settings shows the version).
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## M9 part 1: easier to read and use
+Do these in **light mode** first (Settings › Display & Brightness › Light), then once more in dark mode.
+
+### Opening the app
+1. Close Puzzle Lens fully (swipe it away in the app switcher) and open it from the Home Screen. It opens straight on *The Kiss*. **‹ Home** takes you to your puzzles.
+2. At the top right of every screen there is a round **🧪** button (with a red dot when there are new steps). Tap it: these steps open. The strip on the right edge is gone.
+3. Turn the phone sideways: the Home Screen app stays upright. (If it still turns, remove the app from the Home Screen and add it again, then try once more.)
+4. Look at the time and battery at the top in light and dark mode: easy to read in both? On the camera screens (Scan, Live view) in light mode there may now be a light strip above the black camera picture: does it bother you?
+
+### The puzzle page
+1. At the bottom there is a bar: **Scan**, **Live view**, **Fill a spot**, **Joins** (with the number of pairs as a small blue badge). It stays while you scroll. Scroll to the very end: **Delete this puzzle…** is fully above the bar.
+2. Set-up is done, so instead of the list of steps there is one line: **✓ Set-up finished**.
+3. Above the pieces, **All / Border / Inside** (and the others) look like one control; the one you chose is raised and bold.
+4. The line "● found · ● shapes read · ● placed on box" is easy to read; the middle dot is now **purple**.
+5. Tap a piece: **✓ Fits** and **✗ Doesn't fit** are big buttons side by side, fully above the bar. Words like "strong" and "likely" are easy to read.
+6. Tap **Fill a spot** in the bar: the panel opens with a **Close** button. The pieces offered show 2 across, each with **✓ Fits** and **✗ No**. Close it. Do the same with **Joins**.
+7. Leave the puzzle page open without touching the phone for longer than your Auto-Lock time: the screen stays on. On Home it locks as usual.
+8. Pinch to zoom the text, then pinch back. Double-tapping a button doesn't zoom.
+
+### Outlines and the live view
+1. Tap **Live view** and point the phone at your pieces on the cream table. Every outline has a **dark edge**, so it's easy to see. Pieces whose shape was read are light violet now.
+2. Tap a piece with a spot, then **✓ Fits**. A note at the bottom has an **Undo** button that stays about 10 seconds. Tap **Undo**: "Undone: the piece is back on the table." (If you close the live view first, the puzzle page shows the note with its Undo.)
+3. Tap the same piece, **✗ Doesn't fit**, then **Undo**: "Undone: that spot is offered again."
+4. Pinching or double-tapping in the live view and on the Scan camera doesn't zoom the screen.
+5. Close it and open **Show my table**, and the last scan photo (**Scan** → **See the last photo**): the outlines there have the dark edge too.
+
+### Tester mode and words
+1. Open **Settings**: **Tester mode** at the top is **On**. Tap **Off**, go Home: Live camera, Device check, Send report, Activity log and the 🧪 button are gone. Open your puzzle → **Scan**: the "cm high · tilt" line under the gauge is gone; in **Live view** there's no "/s" after "Tracking ✓".
+2. Set Tester mode back to **On** (please keep it on while we test): everything is back. On the **Live camera** screen the speed display (HUD) now starts hidden: tap **HUD** to show it.
+3. If you ever see "1 pieces" or a message that looks like computer text ("undefined", "TypeError", words joined together), please send a screenshot.
+
+### Reduce Motion (optional)
+1. Settings › Accessibility › Motion › **Reduce Motion** on. In **Joins**, tap **📷 Point them out**: the rings around the pieces stand still (thick) instead of pulsing. Turn it off again if you like.
 
 ## M8 part 4: fixes from the app review (bugs and speed)
 
@@ -152,6 +190,8 @@ In the M8 part 3 follow-up I said a darker cloth might help pale pieces. I never
 - Your answers are kept with the puzzle, and in backups.
 
 ## Please tell me
+- M9 part 1: is the app easier to read in light mode? Anything still faint, too small, or covered by the bottom bar? Did the app reopen your puzzle, and does the screen stay on?
+- M9 part 1: are the outlines in the live view easier to see on your table now? Does the live view still feel smooth?
 - M8 part 4: does the scan note read well on your iPhone (Home Screen app and Safari)? Did **More ▾** show when the note was long?
 - M8 part 4: on your nearly finished puzzle photo, was the "About N loose pieces" number close?
 - M8 part 4: did the phone get warm on the Scan screen, or did the app reload by itself? Did every photo or file button still open the picker?
