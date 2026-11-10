@@ -20,6 +20,7 @@ import { rvfc } from '../types/media';
 import { cameraState, currentTrack, snapping } from './camera';
 import { wantsFullSizeTracking } from './snapMethod';
 import type { TrackerFrameResult, TrackerStatus } from '../shared/types';
+import { IDLE } from '../cv/idleGate';
 
 export type PumpMode = 'off' | 'mstp' | 'bitmap';
 export const pumpMode = signal<PumpMode>('off');
@@ -62,6 +63,10 @@ function onResult(r: TrackerFrameResult): void {
   prevResultAt = now;
   while (gaps.length && now - gaps[0]!.t > 1000) gaps.shift();
   latestFrame.value = r;
+  // For the automated tests: the live view's measured movement and stillness.
+  if ((window as unknown as { __liveDebug?: boolean }).__liveDebug)
+    ((window as unknown as Record<string, unknown>).__motion ??= [] as Array<[number, boolean]>) &&
+      (window as unknown as { __motion: Array<[number, boolean]> }).__motion.push([r.motionPx ?? -1, Boolean(r.idle)]);
   latestFrameAt = now;
   recordTrackerResult(r);
 }
@@ -106,7 +111,9 @@ function onStatus(st: TrackerStatus): void {
   hud.trackerMemory.value = st.memory;
   hud.trackerSkipped.value = st.framesSkipped;
   const b = st.bigFrames;
-  hud.bigFrames.value = b ? `${b.path === 'direct' ? 'full copy' : 'GPU shrink'} (full copy ${Math.round(b.directMs ?? 0)} ms, GPU ${Math.round(b.gpuMs ?? 0)} ms)` : '';
+  hud.bigFrames.value = b
+    ? `${b.path === 'direct' ? 'full copy' : 'GPU shrink'} (full copy ${Math.round(b.directMs ?? 0)} ms, GPU ${Math.round(b.gpuMs ?? 0)} ms)`
+    : '';
 
   // Errors: log each one once; show it on the HUD only while it is recent.
   const err = st.lastError;
@@ -235,7 +242,8 @@ function startBitmapLoop(v: HTMLVideoElement, gen: number): void {
   const tick = async (now: number) => {
     if (gen !== pumpGen || pumpMode.value !== 'bitmap') return;
     schedule();
-    const minGap = 1000 / settings.trackingFps.value - 2;
+    // Fewer frames while the phone is held still over the table (live view, M8 part 3).
+    const minGap = Math.max(1000 / settings.trackingFps.value - 2, latestFrame.value?.idle ? 1000 / IDLE.fps - 2 : 0);
     if (busy || now - lastSent < minGap || !v.videoWidth) return;
     busy = true;
     lastSent = now;
@@ -283,7 +291,10 @@ export function stopPump(): void {
     prevResultAt = 0;
     gaps = [];
   }
-  if (wasDirect) void peekTracker()?.api.detach().catch(() => {});
+  if (wasDirect)
+    void peekTracker()
+      ?.api.detach()
+      .catch(() => {});
 }
 
 /**

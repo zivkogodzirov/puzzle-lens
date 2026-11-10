@@ -262,6 +262,13 @@ export function ScanScreen() {
             findCoin: Boolean(coinType),
             pieceCount: project.pieceCount || undefined,
             grid: project.grid ? { cols: project.grid.cols, rows: project.grid.rows } : null,
+            // The newest photo of this batch at the same zoom: start detection at its scale (M8 part 3).
+            scaleHint: (() => {
+              const last = snaps
+                .filter((s) => (s.kind === 'overview' || s.kind === 'detail') && s.imgToTable && Math.abs(s.zoom - zoom) < 0.5)
+                .sort((a, b) => b.ts - a.ts)[0];
+              return last ? { pxPerMm: pxPerMmOf(last.imgToTable!, last.width, last.height), maxSide: Math.max(last.width, last.height) } : null;
+            })(),
           }),
           timeout,
         ]);

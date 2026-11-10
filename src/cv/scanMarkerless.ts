@@ -40,6 +40,13 @@ export interface ScanMarkerlessOptions {
   zoom: number;
   kind: 'overview' | 'detail';
   table: TableModel | null;
+  /**
+   * The expected scale (photo px per mm), e.g. from the previous photo of this scan at the same
+   * zoom (M8 part 3): detection starts there instead of at the nominal guess, which saves the second
+   * detection when the guess is far off. Checked against the pieces like the guess, so a wrong hint
+   * costs only that second detection.
+   */
+  ppmHint?: number | null;
 }
 
 export interface ScanMarkerlessResult {
@@ -128,7 +135,7 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
   let t = performance.now();
   // Start from the nominal scale for the zoom (hand-held at ~65–75 cm: 1× ≈ 4 px/mm, 2× ≈ 9 px/mm
   // at 12 MP); the pieces found then measure the real one (below).
-  let ppm = (opts.zoom >= 2 ? 9 : 4) * (Math.max(W, H) / 4032);
+  let ppm = opts.ppmHint && opts.ppmHint > 0.5 && opts.ppmHint < 60 ? opts.ppmHint : (opts.zoom >= 2 ? 9 : 4) * (Math.max(W, H) / 4032);
 
   const find = (pxPerMm: number) => {
     const f = scaleFrame(W, H, pxPerMm);
@@ -144,6 +151,8 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
       withGlareMask: false,
     });
     timings.find = (timings.find ?? 0) + performance.now() - t1;
+    // The piece finder's own steps (M8 part 3: where the time goes), summed over its runs.
+    for (const [k, v] of Object.entries(r.timings)) if (k !== 'total') timings[`find.${k}`] = (timings[`find.${k}`] ?? 0) + v;
     return { frame: f, res: r };
   };
   let { frame, res } = find(ppm);

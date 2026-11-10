@@ -443,7 +443,7 @@ function run(cv: Cv, sc: CvScope, rgba: PixelBuffer, opts: FindOptions): FindRes
   lap('glare');
 
   // 7–9. Blobs → pieces.
-  const prof = { outline: 0, colour: 0, flags: 0 };
+  const prof: BlobCtx['prof'] = { outline: 0, colour: 0, flags: 0 };
   const { pieces, regions } = withScope((s2) =>
     blobsToPieces(cv, s2, { prof, rgba, img, field, cls, pieceMask, cardZone, glare, geo, factor, sppm, prior, W, H }),
   );
@@ -1229,7 +1229,7 @@ function glareMask(cv: Cv, sc: CvScope, cls: Uint8Array, pieceMask: Uint8Array, 
 
 interface BlobCtx {
   /** Time spent per sub-step (ms), reported in FindResult.timings as "pieces.*". */
-  prof: { outline: number; colour: number; flags: number };
+  prof: { outline: number; colour: number; flags: number; [step: string]: number };
   rgba: PixelBuffer;
   img: SmallRgb;
   field: LightField;
@@ -1969,6 +1969,12 @@ function traceOutline(
   if (fw < 4 || fh < 4) return null;
   const n = fw * fh;
 
+  let tq = performance.now();
+  const lapO = (k: string) => {
+    const now = performance.now();
+    c.prof[`o.${k}`] = (c.prof[`o.${k}`] ?? 0) + now - tq;
+    tq = now;
+  };
   // Small mask → full-res ROI (smooth), inner and outer zones.
   const small = toMat(cv, sc, roi, rw, rh);
   const detM = sc.keep(new cv.Mat());
@@ -2021,8 +2027,10 @@ function traceOutline(
       po[p * 3 + ch] = I0[p * 3 + ch]! * b;
     }
   }
+  lapO('prep');
   const sig = SEG.refineSigmaMm * ppm;
   for (const m of [pIn, wIn, pOut, wOut]) cv.GaussianBlur(m, m, new cv.Size(0, 0), sig, sig, cv.BORDER_CONSTANT);
+  lapO('blur');
   const I: Float32Array = rgbM.data32F;
   const P: Float32Array = pIn.data32F;
   const WI: Float32Array = wIn.data32F;
@@ -2078,6 +2086,7 @@ function traceOutline(
   // No half-way pixels at all = an abrupt edge (inner and outer zones touch): sharp.
   const edgeSharp = grads.length >= 5 ? (grads[grads.length >> 1]! / 255) * ppm : Infinity;
 
+  lapO('member');
   if (useTexture) {
     const tex = textureMask(cv, sc, rgba, X0, Y0, fw, fh, ppm, inner, outerD);
     if (tex) {
@@ -2087,6 +2096,7 @@ function traceOutline(
     }
   }
 
+  lapO('texture');
   // Sub-pixel: trace on a 2× upsampled map when pixels are coarse.
   const U = ppm < 7 ? 2 : 1;
   let memU = mem;
@@ -2115,6 +2125,7 @@ function traceOutline(
       cv.bitwise_and(top, shifted, top);
     }
   }
+  lapO('wall');
   const contours = sc.keep(new cv.MatVector());
   const hier = sc.keep(new cv.Mat());
   cv.findContours(top, contours, hier, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE);
@@ -2165,6 +2176,37 @@ function traceOutline(
  * the textured parts that overlap the blob's inner zone, or null when texture can't tell piece
  * from table here (no fine texture, a grainy or glary patch of table, too little of either).
  */
+/** The k-th smallest value (0-based) of `a`, as after sorting it ascending; reorders `a` (quickselect). */
+export function kthSmallest(a: Float32Array, k: number): number {
+  let lo = 0;
+  let hi = a.length - 1;
+  while (lo < hi) {
+    // Median of three as the pivot.
+    const mid = (lo + hi) >> 1;
+    const x = a[lo]!;
+    const y = a[mid]!;
+    const z = a[hi]!;
+    const pivot = x < y ? (y < z ? y : x < z ? z : x) : x < z ? x : y < z ? z : y;
+    let i = lo;
+    let j = hi;
+    while (i <= j) {
+      while (a[i]! < pivot) i++;
+      while (a[j]! > pivot) j--;
+      if (i <= j) {
+        const t = a[i]!;
+        a[i] = a[j]!;
+        a[j] = t;
+        i++;
+        j--;
+      }
+    }
+    if (k <= j) hi = j;
+    else if (k >= i) lo = i;
+    else return a[k]!;
+  }
+  return a[k]!;
+}
+
 function textureMask(
   cv: Cv,
   sc: CvScope,
@@ -2207,17 +2249,25 @@ function textureMask(
     cv.GaussianBlur(sq, sq, new cv.Size(0, 0), sw, sw, cv.BORDER_REFLECT);
     return sq.data32F.slice();
   };
+  // The table's lower quartile and the piece's median (quickselect: the same values a full sort
+  // gives, in linear time; the sorts took ~90 % of the outline time, M8 part 3).
+  let nIn = 0;
+  let nOut = 0;
+  for (let p = 0; p < n; p++) {
+    if (inner[p]) nIn++;
+    else if (!outerD[p]) nOut++;
+  }
+  const inside = new Float32Array(nIn);
+  const outside = new Float32Array(nOut);
   const levels = (v: Float32Array): [number, number] | null => {
-    const outside: number[] = [];
-    const inside: number[] = [];
+    if (nIn < 50 || nOut < 50) return null;
+    let i = 0;
+    let o = 0;
     for (let p = 0; p < n; p++) {
-      if (inner[p]) inside.push(v[p]!);
-      else if (!outerD[p]) outside.push(v[p]!);
+      if (inner[p]) inside[i++] = v[p]!;
+      else if (!outerD[p]) outside[o++] = v[p]!;
     }
-    if (inside.length < 50 || outside.length < 50) return null;
-    outside.sort((a, b) => a - b);
-    inside.sort((a, b) => a - b);
-    return [outside[Math.floor(outside.length * 0.25)]!, inside[inside.length >> 1]!];
+    return [kthSmallest(outside, Math.floor(nOut * 0.25)), kthSmallest(inside, nIn >> 1)];
   };
   const first = levels(localVar(Infinity));
   if (!first) return null;

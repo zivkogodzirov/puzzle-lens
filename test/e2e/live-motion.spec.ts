@@ -196,3 +196,55 @@ test('the live outlines follow a panning camera; the prediction removes most of 
   expect(on.med).toBeLessThan(1);
   expect(on.p90).toBeLessThan(3);
 });
+
+test('battery (M8 part 3): held still, the live view analyses fewer frames; moving, all of them again', async ({ page }) => {
+  await page.addInitScript((u) => ((window as unknown as { __fakeScene?: string }).__fakeScene = u), scene);
+  await gotoScreen(page, '');
+  const id = 'e2e-idle';
+  await page.evaluate(async (pid) => {
+    const req = indexedDB.open('puzzle-lens');
+    const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
+    await new Promise<void>((res) => {
+      const tx = dbh.transaction('projects', 'readwrite');
+      tx.objectStore('projects').put({
+        id: pid,
+        name: 'Idle',
+        createdAt: 1,
+        updatedAt: 2,
+        pieceCount: 48,
+        grid: { cols: 8, rows: 6, source: 'suggested' },
+        box: null,
+        markerMap: null,
+        tableModel: null,
+        piecePitch: null,
+        setupStep: 6,
+        tracking: 'pieces',
+      });
+      tx.oncomplete = () => res();
+    });
+    dbh.close();
+  }, id);
+  await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}`), id);
+  await page.getByTestId('scan-pieces').click();
+  await page.getByTestId('allow-tilt').click();
+  await page.evaluate(() => setInterval(() => dispatchEvent(Object.assign(new Event('deviceorientation'), { alpha: 0, beta: 1, gamma: -1 })), 50));
+  await expect(page.getByTestId('snap')).toBeEnabled({ timeout: 60_000 });
+  await page.getByTestId('snap').click();
+  await expect(page.getByTestId('scan-note')).toContainText('Found', { timeout: 120_000 });
+  await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}`), id);
+  await page.getByTestId('live-toggle').click();
+  await expect(page.getByTestId('live-status')).toHaveAttribute('data-kind', 'good', { timeout: 60_000 });
+  const rate = async () => Number(((await page.getByTestId('live-status').innerText()).match(/(\d+)\/s/) ?? [])[1] ?? NaN);
+  await page.evaluate(() => ((window as unknown as Record<string, unknown>).__liveDebug = true));
+  // Held still: after a second, about 8 frames a second (the rate shown is over the last 2 s).
+  await page.waitForTimeout(4000);
+  const still = await rate();
+  // Moving: back to every frame the tracker can manage.
+  await page.evaluate(() => ((window as unknown as Record<string, unknown>).__fakeSceneMotion = { vx: 140, vy: 50, rot: 0.12, since: performance.now() }));
+  await page.waitForTimeout(2500);
+  const moving = await rate();
+  await page.evaluate(() => ((window as unknown as Record<string, unknown>).__fakeSceneMotion = undefined));
+  console.log(`live view: ${still}/s held still, ${moving}/s moving`);
+  expect(still).toBeLessThanOrEqual(9);
+  expect(moving).toBeGreaterThan(still + 3);
+});

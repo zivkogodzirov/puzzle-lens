@@ -45,6 +45,10 @@ export interface TrackerFrameResult {
   pieces: LivePieceStats | null;
   /** Live view without markers (M5): the table found from the pieces; null = not found in this frame, undefined = not looking. */
   anchor?: AnchorFix | null;
+  /** Live view: the phone has been still for a while, so fewer frames are analysed (M8 part 3). */
+  idle?: boolean;
+  /** Live view: how far the table moved in the picture since the last analysed frame (px). */
+  motionPx?: number;
 }
 
 export interface FrameInfo {

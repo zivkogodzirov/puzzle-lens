@@ -332,7 +332,8 @@ const api: ReaderApi = {
       checker ??= new PhotoChecker(c);
       const gray = toGray(c, rgba, 'RGBA');
       const check = checker.check(gray, { map: null, zoom: opts.zoom, kind: opts.kind });
-      let r = scanMarkerless(c, rgba, { catalog: opts.catalog, pitchMm: opts.pitchMm, zoom: opts.zoom, kind: opts.kind, table: opts.table });
+      const hint = opts.scaleHint ? (opts.scaleHint.pxPerMm * Math.max(rgba.width, rgba.height)) / opts.scaleHint.maxSide : null;
+      let r = scanMarkerless(c, rgba, { catalog: opts.catalog, pitchMm: opts.pitchMm, zoom: opts.zoom, kind: opts.kind, table: opts.table, ppmHint: hint });
       // The camera's zoom reading isn't always right (and a close-up may be taken at 1×): if the
       // photo couldn't be used, try once more assuming the other zoom.
       // Only when it found too few single pieces to measure a scale (a wrong zoom guess); a photo

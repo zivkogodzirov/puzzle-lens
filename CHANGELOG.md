@@ -4,6 +4,13 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M8 (part 3): faster scans, a lighter live view (2026-11-10; measured on the Mac with your photos, not yet on your iPhone)
+- **Scans are faster.** Your 18-megapixel photos were read in 7.4–11.5 s on the Mac; now **4.4–7.2 s** for the first photo of a scan, and **1.6–2.0 s** for the next ones taken at about the same height (the app starts from the previous photo's scale instead of guessing and searching twice). The pieces found are the same.
+  - Most of the time went into one small step: sorting every pixel around each piece to find two numbers; it now finds them directly (the same numbers).
+- **The live view saves battery while you hold the phone still**: after a second without movement it looks at about 7 frames a second instead of 25, and goes back to full speed as soon as you move. The small number after "Tracking ✓" shows it (e.g. **7/s**).
+- **Memory:** reading your 18 MP photos uses about 100 MB in the app's image helper, and doesn't grow from one photo to the next.
+- **Your new photos:** IMG_9127 (the border done and about 95 loose pieces inside it) was used for the timing; the app found 44 of its pieces, because the photo is taken at an angle and the far pieces are small: the scan screen asks for photos from straight above for this reason. IMG_9226 and IMG_9227 (the half-finished puzzle from a steep angle) are still too steep to be read as the puzzle.
+
 ### M8 (part 1): colours learned from your pieces (2026-11-10; tested on your photos, not yet on your iPhone)
 - **The problem:** on the whole box picture (a fresh puzzle, no holes photo), your real pieces were rarely placed right: your photos' colours under the lamp differ from the box picture in ways the one-time colour match can't undo (light parts yellower, shadows different). Of your 19 pieces with known spots, only **1** came first.
 - **New:** once **12 pieces are in the puzzle at known spots** (✓ Fits), the app learns how your photos' colours map to the box picture, from those pieces, and places every other piece again. It learns again after every 10 more. The puzzle page then says **"Colours learned from your N pieces in the puzzle"**. It only uses what it learned if that predicts the colours of pieces it didn't learn from clearly better; among the holes of a nearly finished puzzle it isn't needed (the colours come from the holes).

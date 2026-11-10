@@ -1,6 +1,8 @@
-# M8, part 1: colours learned from your pieces (and M7, M6, M5, still to check)
+# M8, parts 1 and 3: colours learned from your pieces, faster scans and a lighter live view (and M7, M6, M5, still to check)
 
 **New in M8 part 1:** once **12 pieces are in the puzzle at known spots** (✓ Fits), the app learns how your photos' colours map to the box picture and places every other piece again; the puzzle page says **"Colours learned from your N pieces in the puzzle"**. This is for a fresh puzzle on the whole picture (among the holes of a nearly finished puzzle it isn't needed). Measured on your 19 real pieces: right spot first **1 → 6**, in the top 5 **3 → 9**.
+
+**New in M8 part 3:** scans are faster (on the Mac your 18 MP photos now take 4–7 s for the first photo of a scan and under 2 s for the next ones at about the same height, instead of 7–12 s), and the live view looks at fewer frames while you hold the phone still, to save battery.
 
 **Nothing to test for it on *The Kiss*:** it uses its holes, where the colours come from the holes already. You'll see it on your next puzzle, after 12 pieces have gone in with ✓ Fits. The steps below are the ones still open from M7, M6 and M5.
 
@@ -9,6 +11,11 @@ These steps are for version **{version}** (Settings shows the version).
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## M8 part 3: faster scans, a lighter live view
+1. **Scan pieces** → take an overview photo, then another from about the same height. Does the second one come back noticeably faster than the first?
+2. Open **📷 Live view of my table** and hold the phone still for a few seconds: the small number after "Tracking ✓" drops to about **7/s**. Move the phone: it goes back up (20 or more).
+3. Run **Settings → Device check** once and send me the report (Report → Share): it tells me how fast your iPhone is with the new version.
 
 ## M7 part 4: pieces counted from a new puzzle photo
 1. Put **3 or 4** of your leftover pieces into their holes (any you're sure of).
@@ -95,6 +102,7 @@ These steps are for version **{version}** (Settings shows the version).
 - Your answers are kept with the puzzle, and in backups.
 
 ## Please tell me
+- M8 part 3: how long did a scan photo take on your iPhone (first and second)? Did the live view still feel smooth?
 - M8 part 1: if you tried it, did the spots get better after the colours were learned?
 - M7 part 4: after your new puzzle photo, were the right pieces counted as in the puzzle?
 - M7 part 3: did the backup save to Files (or your Mac), and how big was it?

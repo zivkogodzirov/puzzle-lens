@@ -34,6 +34,11 @@ export interface FreeScanOptions {
   /** The box's piece count and the chosen grid: for the finished-puzzle check. */
   pieceCount?: number;
   grid?: { cols: number; rows: number } | null;
+  /**
+   * The previous photo's scale at this zoom (px per mm) and its larger side (px), to start
+   * detection there (M8 part 3); scaled to this photo's size.
+   */
+  scaleHint?: { pxPerMm: number; maxSide: number } | null;
 }
 
 /** A piece straightened for box placement: RGBA PATCH_SIZE², and which sides read as flat (patch top, right, bottom, left). */

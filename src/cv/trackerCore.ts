@@ -11,6 +11,7 @@ import type { MarkerMap } from '../project/types';
 import { cvErrorMessage, wasmBytes, type Cv } from './loadCv';
 import { upscaleCoord, type FrameAnalyser, type FrameAnalysis } from './frameAnalyser';
 import { scaleFix, TableAnchor, type AnchorReference } from './anchor';
+import { IdleGate } from './idleGate';
 import type { PresencePiece } from './presence';
 import { cvCounters } from './scope';
 import type { ReadFrame } from '../shared/frameRead';
@@ -77,6 +78,8 @@ export class TrackerCore {
   readonly arrivals: number[] = [];
   readonly thumbs: Blob[] = [];
   private minIntervalMs = 0;
+  /** Fewer frames while the phone is held still over the table (live view, M8 part 3). */
+  private idle = new IdleGate();
   private lastProcessedAt = Number.NEGATIVE_INFINITY;
   private lastThumbAt = Number.NEGATIVE_INFINITY;
   private frameIndex = 0;
@@ -112,6 +115,7 @@ export class TrackerCore {
    * Markers are not looked for while it is on.
    */
   setAnchor(refs: AnchorReference[] | null, pieces: PresencePiece[] = []): number {
+    this.idle.reset();
     if (!refs?.length) {
       this.analyser.anchor?.dispose();
       this.analyser.anchor = null;
@@ -159,7 +163,7 @@ export class TrackerCore {
     this.noteArrival();
     try {
       const t0 = this.env.now();
-      if (this.paused || t0 - this.lastProcessedAt < this.minIntervalMs) {
+      if (this.paused || t0 - this.lastProcessedAt < this.idle.interval(this.minIntervalMs)) {
         this.counters.skipped++;
         return null;
       }
@@ -370,6 +374,12 @@ export class TrackerCore {
       frameInfo: extra.frameInfo,
       table,
       anchor: analysis.anchor === undefined ? undefined : analysis.anchor && scaleFix(analysis.anchor, scale),
+      // The live view: still → fewer frames (only while a table fix is being followed).
+      idle:
+        analysis.anchor === undefined
+          ? undefined
+          : this.idle.update(analysis.anchor ? scaleFix(analysis.anchor, scale).tableToImg : null, width, height, this.env.now()),
+      motionPx: analysis.anchor === undefined ? undefined : this.idle.moved,
       pieces: analysis.pieces
         ? {
             ...analysis.pieces,
