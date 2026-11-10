@@ -461,3 +461,54 @@ test('progress page (M7 part 2): in the puzzle, known spots on the box picture, 
   await expect(page.getByTestId('progress-batch')).toContainText('Batch 1');
   await page.screenshot({ path: test.info().outputPath('progress.png'), fullPage: true });
 });
+
+test('a new photo of the puzzle (M7 part 4): spots filled since are counted, their pieces marked as in the puzzle, with Undo', async ({ page }) => {
+  // First photo: the pieces' own cells and two more empty (turned 180° as above).
+  const cells: Array<[number, number]> = [...ids.map((pid) => pid.slice(1).split('c').map(Number).reverse() as [number, number]), [0, 7], [9, 0]];
+  const gaps = cells.map(([c, r]) => [9 - c, 7 - r] as [number, number]);
+  await seed(page, { gaps, thumb: jpeg(true, 10 * 8, 8 * 8) });
+  await expect(page.getByTestId('place-summary')).toContainText(/[1-9]\d* strong/, { timeout: 60_000 });
+  // A new photo where the spots of r1c2 and r3c7 (and the extra one at column 1, row 8) are filled.
+  const filled = new Set(['2,1', '7,3', '0,7']);
+  const gaps2 = cells.filter(([c, r]) => !filled.has(`${c},${r}`)).map(([c, r]) => [9 - c, 7 - r] as [number, number]);
+  await page.evaluate(async (g) => {
+    const req = indexedDB.open('puzzle-lens');
+    const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
+    const p = await new Promise<Record<string, unknown>>((res) => {
+      const r = dbh.transaction('projects').objectStore('projects').get('e2e-place');
+      r.onsuccess = () => res(r.result as Record<string, unknown>);
+    });
+    await new Promise<void>((res) => {
+      const tx = dbh.transaction('projects', 'readwrite');
+      tx.objectStore('projects').put({ ...p, openSpots: { ...(p.openSpots as object), gaps: g, ts: 99 }, updatedAt: Date.now() });
+      tx.oncomplete = () => res();
+    });
+    dbh.close();
+  }, gaps2);
+  await page.reload();
+  await expect(page.getByTestId('photo-placed')).toContainText('3 spots filled since the last one', { timeout: 60_000 });
+  await expect(page.getByTestId('photo-placed')).toContainText('The 2 pieces the app had for them are now counted as in the puzzle');
+  await expect(page.getByTestId('in-puzzle')).toContainText('2 in the puzzle');
+  await page.getByTestId('photo-placed').screenshot({ path: test.info().outputPath('photo-placed.png') });
+  await page.getByTestId('in-puzzle').click();
+  await expect(page.getByTestId('in-puzzle-list')).toContainText('from your puzzle photo');
+  // Undo puts both back on the table.
+  await page.getByTestId('photo-placed-undo').click();
+  await expect(page.getByTestId('in-puzzle')).toHaveCount(0);
+  await expect(page.locator('[data-testid="catalog"] .thumb-btn')).toHaveCount(6);
+});
+
+test('"It’s in the puzzle" (M7 part 4): a piece whose spot isn’t sure can be counted as in, without a spot', async ({ page }) => {
+  await seed(page, null);
+  await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
+  // Rule out the first piece's spots until none is left: its spot isn't known any more.
+  await page.locator('[data-testid="catalog"] .thumb-btn').nth(0).click();
+  for (let k = 0; k < 5 && (await page.getByTestId('spot-not').count()); k++) await page.getByTestId('spot-not').click();
+  await expect(page.getByTestId('spot-in-puzzle')).toBeVisible();
+  await page.getByTestId('spot-in-puzzle').click();
+  await expect(page.getByTestId('in-puzzle')).toContainText('1 in the puzzle');
+  await page.getByTestId('in-puzzle').click();
+  await expect(page.getByTestId('in-puzzle-list')).toContainText('In the puzzle (spot not known)');
+  await page.getByTestId('progress-link').click();
+  await expect(page.getByTestId('progress-placed')).toContainText('1');
+});

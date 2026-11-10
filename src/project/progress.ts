@@ -86,6 +86,8 @@ export interface ProgressInput {
   gapCount?: number | null;
   /** Spots filled since (answered "Fits"): "c,r". */
   taken: Set<string>;
+  /** A photo of the puzzle showed it complete (no empty spots). */
+  finished?: boolean;
 }
 
 export interface PuzzleProgress {
@@ -136,7 +138,13 @@ export function puzzleProgress(input: ProgressInput): PuzzleProgress {
   let toFind: number;
   let toFindExact: boolean;
   let doneFrom: PuzzleProgress['doneFrom'];
-  if (input.open) {
+  if (input.finished && !input.open) {
+    state.fill(1);
+    done = cells;
+    toFind = 0;
+    toFindExact = true;
+    doneFrom = 'photo';
+  } else if (input.open) {
     // The puzzle photo: every spot but the empty ones is in, plus those filled since.
     state.fill(1);
     let left = 0;

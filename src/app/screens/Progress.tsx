@@ -57,6 +57,7 @@ export function ProgressScreen() {
       open: cache?.open?.cells.length ? cache.open.cells : null,
       gapCount: !cache?.open?.cells.length && p.openSpots ? p.openSpots.gaps.length : null,
       taken: new Set(answers.view.taken.keys()),
+      finished: Boolean(p.finishedAt && !p.openSpots),
     });
     // Shape groups of the pieces not in the puzzle yet.
     const cell: [number, number] | null = p.piecePitch ? [p.piecePitch.wMm, p.piecePitch.hMm] : null;
@@ -121,7 +122,9 @@ export function ProgressScreen() {
         </div>
         <p class="muted small" data-testid="progress-source">
           {prog.doneFrom === 'photo'
-            ? `From your photo of the puzzle${project.openSpots ? ` (${project.openSpots.gaps.length} empty spots)` : ''}${s.placed ? `, and ${s.placed} ${s.placed === 1 ? 'piece' : 'pieces'} fitted since` : ''}.`
+            ? project.finishedAt && !project.openSpots
+              ? 'Your last photo of the puzzle shows it complete.'
+              : `From your photo of the puzzle${project.openSpots ? ` (${project.openSpots.gaps.length} empty spots)` : ''}${s.placed ? `, and ${s.placed} ${s.placed === 1 ? 'piece' : 'pieces'} fitted since` : ''}.`
             : s.placed
               ? `The pieces you said fit (✓ Fits). Photograph the nearly finished puzzle (Scan pieces) to count the rest.`
               : 'No pieces in the puzzle yet: tap ✓ Fits when a piece goes in, or photograph the puzzle when it is nearly finished.'}

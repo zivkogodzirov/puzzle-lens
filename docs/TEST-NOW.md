@@ -1,4 +1,6 @@
-# M7, parts 1–3: a new batch, the progress page, and backups (and M6, M5, still to check)
+# M7, parts 1–4: batches, progress, backups, and pieces counted from a new puzzle photo (and M6, M5, still to check)
+
+**New in M7 part 4:** a new photo of your puzzle counts the pieces that went in since the last one (with Undo), and a photo of the finished puzzle counts every piece. I tested it with your photos: holes, pieces, then your finished-puzzle photo IMG_9272: "All 21 empty spots are filled now", 17 pieces counted in, and Progress said 1008 of 1008. On the way I fixed a bug: after scanning loose pieces, a photo of the puzzle couldn't be read at all. Also new: **✓ It's in the puzzle** for a piece whose spot isn't sure.
 
 **New in M7 part 3: backups with reminders.** The puzzle page reminds you to back up when there's no backup yet, or when things changed and the last one is a few days old. The backup now holds everything (also each piece's spot and the scan bin). I tested it with your Kiss puzzle in the app: backed up, deleted, restored: everything came back.
 
@@ -10,11 +12,18 @@
 
 **I tested it myself** with a simulated camera in Safari's engine: the re-spread table wasn't matched, then after **Start a new batch** the next photo read all the pieces, and the counts showed them on the table and set aside.
 
-Allow about 5 minutes for the progress page, 5 for backups, 15 minutes for M6, 45 minutes for the M5 steps if you haven't done them yet, and 10 minutes for M7 part 1 (last). These steps are for version **{version}** (Settings shows the version).
+Allow about 10 minutes for the new puzzle photo, 5 for the progress page, 5 for backups, 15 minutes for M6, 45 minutes for the M5 steps if you haven't done them yet, and 10 minutes for M7 part 1 (last). These steps are for version **{version}** (Settings shows the version).
 
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## M7 part 4: pieces counted from a new puzzle photo
+1. Put **3 or 4** of your leftover pieces into their holes (any you're sure of).
+2. **Scan pieces** → take a photo of the whole puzzle from above, as you did for the holes photo. The note should say how many holes it found.
+3. Back on the puzzle page, a green note says **"Your new photo of the puzzle: N spots filled since the last one"** and which pieces are now counted as in the puzzle. Are they the ones you put in? (**Undo** puts them back.)
+4. Open **📈 Progress**: the filled holes are bright now.
+5. Tap a piece whose spot isn't sure (no green dot): under its spot there's **✓ It's in the puzzle**, for a piece you put in somewhere the app didn't know.
 
 ## M7 part 3: backups
 1. Open *The Kiss*. If you have never backed it up, a box says **💾 No backup yet**. Tap **Back up now**: the page goes down to Backup and prepares the file.
@@ -94,6 +103,7 @@ Allow about 5 minutes for the progress page, 5 for backups, 15 minutes for M6, 4
 - Your answers are kept with the puzzle, and in backups.
 
 ## Please tell me
+- M7 part 4: after your new puzzle photo, were the right pieces counted as in the puzzle?
 - M7 part 3: did the backup save to Files (or your Mac), and how big was it?
 - M7 part 2: does the progress page match your puzzle and table? Anything you'd like it to show?
 - M7 part 1: did the new batch work? How do you usually work: leftovers back in the box, or left on the table?

@@ -65,4 +65,9 @@ describe('puzzle progress', () => {
     expect(p.done).toBe(10);
     expect(p.doneFrom).toBe('photo');
   });
+
+  it('a photo showing the puzzle complete: every spot in', () => {
+    const p = puzzleProgress({ grid, pieces: [piece('a', 'table')], shown: new Map(), open: null, taken: new Set(), finished: true });
+    expect(p).toMatchObject({ done: 12, toFind: 0, doneFrom: 'photo' });
+  });
 });

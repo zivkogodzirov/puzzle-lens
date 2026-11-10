@@ -45,7 +45,7 @@ export interface ScanMarkerlessOptions {
 export interface ScanMarkerlessResult {
   /** Pieces with outlineMm / centreMm / areaMm2 / sizeMm / angleDeg in the CATALOG frame. */
   pieces: FoundPiece[];
-  /** Assembled areas and objects (outlineMm in the catalog frame); empty when not registered. */
+  /** Assembled areas and objects (outlineMm in the catalog frame; in this photo's own provisional frame when not registered). */
   regions: FoundRegion[];
   /** Photo provisional mm → catalog mm (identity for a new frame), null when not registered. */
   photoToCatalog: Mat3 | null;
@@ -240,9 +240,13 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
       ),
     };
   }
+  // Not placed on the catalog: no pieces, but the assembled areas stay (in this photo's own frame),
+  // so a photo of the finished puzzle taken after loose pieces were scanned is still recognised as
+  // one (M7 part 4: it can't be matched to the loose pieces; its areas were dropped, so the finished
+  // check never ran and the owner couldn't update the puzzle photo).
   const empty = (): ScanMarkerlessResult => ({
     pieces: [],
-    regions: [],
+    regions: res.regions,
     photoToCatalog: null,
     imgToCatalog: null,
     registered: false,

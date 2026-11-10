@@ -41,3 +41,13 @@ Allow about 10 minutes. Settings should show the version I sent you.
 1. Open *The Kiss*. If you've never backed it up, a box says **💾 No backup yet**. Tap **Back up now**.
 2. Tap **Share backup** and save it to Files (or send it to your Mac). Under Backup it says **Last backup:** with today's date, and the reminder is gone.
 3. (Optional) On Home, **Import a backup** and choose that file: it's added as "The Kiss (copy)", with the same pieces and spots. Delete the copy afterwards.
+
+## Part 4: pieces counted from a new puzzle photo
+
+**New:** when you photograph the nearly finished puzzle again, the holes filled since the last photo count their pieces as in the puzzle (with Undo); a photo of the finished puzzle counts every piece. **✓ It's in the puzzle** is for a piece you put in somewhere the app didn't know.
+
+1. Put **3 or 4** of your leftover pieces into their holes.
+2. **Scan pieces** → take a photo of the whole puzzle from above, as for the holes photo.
+3. Back on the puzzle page, a green note says **"Your new photo of the puzzle: N spots filled since the last one"** and which pieces now count as in the puzzle. Are they the right ones? (**Undo** puts them back.)
+4. Open **📈 Progress**: those holes are bright now.
+5. Tap a piece without a green dot: **✓ It's in the puzzle** is under its spot.

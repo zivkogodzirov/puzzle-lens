@@ -4,6 +4,13 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M7 (part 4): placed pieces without tapping each, and a full 1000-piece run (2026-11-10; tested with your photos and in the app, not yet on your iPhone)
+- **A new photo of the puzzle counts the pieces that went in.** When you photograph the nearly finished puzzle again (Scan pieces), the holes filled since the last photo had their pieces put in: the piece the app had for each (Strong or Likely) is now counted as in the puzzle. A note says how many, with **Undo**. Holes whose piece wasn't sure are left alone.
+- **A photo of the finished puzzle** (no holes left) counts every piece as in: 📈 Progress says 1008 of 1008.
+- **Fixed: after scanning loose pieces, a photo of the puzzle couldn't be read at all** ("This photo could not be matched…"), so you couldn't update the holes. Found with your photos: holes (IMG_9280), pieces (IMG_9276), then your photo of the finished puzzle (IMG_9272). Now it reads: "All 21 empty spots are filled now. 17 of the pieces the app had for them are counted as in the puzzle", and Progress shows 1008 of 1008.
+- **✓ It's in the puzzle** under a piece whose spot isn't sure: for a piece you put in somewhere the app didn't know. It counts as in, without a spot.
+- **A full 1000-piece practice run, end to end** (a computer-made 28 × 36 puzzle, 4 batches of 300/300/300/108, each with an overview and 4 close-ups, through the app's own code, with a simulated you trying each piece in the spots shown, answering truthfully): all 20 photos placed, 5.3 s per photo on the Mac; 972 of 988 pieces read, 1 counted twice, none mixed up; **75 % went in on the first try**; 762 in after the four batches. Then the end game: a photo of the nearly finished puzzle and the 145 pieces left matched only to its 246 holes: 86 more in, **848 of 1008 (84 %)** in all. The rest were pieces never read properly (a close-up or another scan helps) or not found in 5 tries.
+
 ### M7 (part 3): full backup, with reminders (2026-11-09; tested in the app with your Kiss photos, not yet on your iPhone)
 - **A reminder to back up** on the puzzle page: when there's no backup yet (once 20 or more pieces are read), or when things changed since the last one and it's 3 days old (or 100 things changed). **Back up now** prepares the file; **Not now** hides the reminder for a day. It counts once the backup has left the app (shared or downloaded).
 - **"Last backup: …"** under Backup, with how many pieces there were then.

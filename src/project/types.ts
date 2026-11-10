@@ -121,6 +121,8 @@ export interface Project {
    * then; and "Not now" on the reminder (until when). src/project/backupReminder.ts.
    */
   lastBackup?: { at: number; pieces: number; answers: number } | null;
+  /** When a photo of the puzzle showed it complete, no empty spots (M7 part 4). Cleared by a photo with empty spots. */
+  finishedAt?: number | null;
   backupSnoozedUntil?: number | null;
 }
 
@@ -245,7 +247,17 @@ export interface PieceRow {
   /** With status 'pending' (M5 part 3): known pieces this sighting may be (it may have been moved). */
   maybe?: string[] | null;
   /** With status 'placed' (M5 part 2): where it went in, and where it came from (to take it out again). */
-  placedAt?: { col: number; row: number; rot: 0 | 1 | 2 | 3; at: number; from: 'table' | 'tray'; tray: string | null } | null;
+  placedAt?: {
+    /** Its spot (column, row from 0), or −1, −1 when the owner put it in somewhere the app didn't know (M7 part 4). */
+    col: number;
+    row: number;
+    rot: 0 | 1 | 2 | 3;
+    at: number;
+    from: 'table' | 'tray';
+    tray: string | null;
+    /** How it was marked: ✓ Fits on a spot (default), "It's in the puzzle" without a spot, or a new puzzle photo showing its spot filled (M7 part 4). */
+    by?: 'answer' | 'tap' | 'photo';
+  } | null;
 }
 
 export interface PiecePatchInfo {

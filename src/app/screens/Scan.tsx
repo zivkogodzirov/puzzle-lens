@@ -6,6 +6,7 @@ import { TableCamera, type CaptureMeta } from '../components/TableCamera';
 import { deleteBlob, getProject, newId, projectBlobId, putBlob, updateProject } from '../../project/store';
 import { measurePitch, planMerge } from '../../project/catalog';
 import { snapsOfBatch } from '../../project/batches';
+import { markFromFinishedPhoto } from '../../project/placedFromPhoto';
 import { Coverage, sortingArea, type Area } from '../../scan/coverage';
 import { FREE_RULES, markerCentres, type CaptureKind } from '../../scan/autoCapture';
 import { applyH, invertH } from '../../geo/homography';
@@ -293,13 +294,25 @@ export function ScanScreen() {
           );
           setAutoPaused(true);
           let next = project;
+          const extra: string[] = [];
           try {
+            // The puzzle finished since the last photo of it (M7 part 4): the pieces the app had for
+            // its empty spots went in.
+            if (!f.finished.gaps.length && project.openSpots) {
+              const r = await markFromFinishedPhoto(project.id);
+              if (r.filled) {
+                logInfo('scan', `Finished puzzle photo: ${r.filled} spots filled since the last one; ${r.ids.length} pieces marked as in the puzzle`);
+                extra.push(
+                  `All ${r.filled} empty ${r.filled === 1 ? 'spot is' : 'spots are'} filled now. ${r.ids.length} of the pieces the app had for them ${r.ids.length === 1 ? 'is' : 'are'} counted as in the puzzle (Undo: "✓ in the puzzle" on the puzzle page).`,
+                );
+              }
+            }
             next = await saveOpenSpots(project, f.finished);
             setProject(next);
           } catch (err) {
             logError('scan', 'The empty spots could not be saved', err);
           }
-          setNote({ ok: true, lines: finishedLines(f.finished, next) });
+          setNote({ ok: true, lines: [...finishedLines(f.finished, next), ...extra] });
           return;
         }
         if (f.isNewFrame && f.pieces.filter((p) => !p.flags.cut).length < 5) {
@@ -701,11 +714,13 @@ export async function saveOpenSpots(project: Project, fin: FinishedCheck): Promi
     await putBlob(id, 'open-spots', fin.thumb);
     return updateProject(project.id, {
       openSpots: { cols: fin.cols, rows: fin.rows, gaps: fin.gaps, gapSides: fin.gapSides, thumbBlobId: id, ts: Date.now() },
+      finishedAt: null,
     });
   }
-  if (!fin.gaps.length && project.openSpots) {
-    const next = await updateProject(project.id, { openSpots: null });
-    await deleteBlob(id);
+  if (!fin.gaps.length) {
+    // Complete: no empty spots left (M7 part 4: the progress page counts every piece as in).
+    const next = await updateProject(project.id, { openSpots: null, finishedAt: Date.now() });
+    if (project.openSpots) await deleteBlob(id);
     return next;
   }
   return project;

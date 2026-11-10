@@ -37,6 +37,7 @@ import { answerPair, pairAnswerView, undoPairAnswer } from '../../project/pairAn
 import { answerSpot, answerView, clearNotHere, placedPieces, removeNotAPiece, undoFits } from '../../project/answers';
 import { resolvePending } from '../../project/pending';
 import { startNewBatch } from '../../project/batches';
+import { markPlaced, piecesInFilledSpots } from '../../project/placedFromPhoto';
 import { backupReminder, markBackedUp, snoozeBackupReminder, type BackupReminder } from '../../project/backupReminder';
 import { TableContrast } from '../components/TableContrast';
 import { BoxFitNotice } from '../components/BoxFitNotice';
@@ -762,6 +763,8 @@ function Catalog({
   const [matchesOpen, setMatchesOpen] = useState(false);
   /** Pieces to point out in the live view, with lines between those that join (M6). */
   const [findLive, setFindLive] = useState<{ ids: string[]; lines: MatchLine[] } | null>(null);
+  /** What a new puzzle photo changed (M7 part 4): spots filled since the last one, and the pieces marked as in the puzzle. */
+  const [photoPlaced, setPhotoPlaced] = useState<{ filled: number; ids: string[] } | null>(null);
   const boxUrl = useBlobUrl(project.box?.rectifiedBlobId, boxVersion(project.box));
   const placeKey = placeKeyOf(project);
   useEffect(() => {
@@ -788,6 +791,18 @@ function Catalog({
         setPlacing({ done: 0, total: todo });
         const next = await updatePlacements(project, unplaced, rw.api, (done, total) => live && setPlacing({ done, total }));
         if (live) setPlaces(next);
+        // A new photo of the puzzle (M7 part 4): its spots filled since the last photo had their pieces put in.
+        if (cached?.open?.cells.length && next?.open && cached.boxKey !== next.boxKey) {
+          const before = shownPlacements(cached, unplaced, { view: answerView(project), placed: placedPieces(everything) });
+          const went = piecesInFilledSpots(before, cached.open.cells, next.open.cells, everything);
+          const filledN = cached.open.cells.length - cached.open.cells.filter(([c, r]) => next.open!.cells.some(([c2, r2]) => c2 === c && r2 === r)).length;
+          if (filledN > 0) {
+            const ids = went.length ? await markPlaced(projectId, went, 'photo') : [];
+            logInfo('place', `New puzzle photo: ${filledN} spots filled since the last one; ${ids.length} pieces marked as in the puzzle`);
+            if (live) setPhotoPlaced({ filled: filledN, ids });
+            if (ids.length) onPiecesChanged();
+          }
+        }
         logInfo(
           'place',
           `Placed ${todo} pieces on the box picture` +
@@ -815,7 +830,7 @@ function Catalog({
   const pairs = useMemo(() => {
     if (!project.grid) return null;
     const filled = new Set<string>(answersCtx.view.taken.keys());
-    for (const r of allRows) if (r.status === 'placed' && r.placedAt) filled.add(`${r.placedAt.col},${r.placedAt.row}`);
+    for (const r of allRows) if (r.status === 'placed' && r.placedAt && r.placedAt.col >= 0) filled.add(`${r.placedAt.col},${r.placedAt.row}`);
     const model = pairModel({
       shown: shownPlaces,
       rows: allRows.filter(unplacedStatus),
@@ -1138,6 +1153,38 @@ function Catalog({
           }}
         />
       )}
+      {photoPlaced && (
+        <div class="notice notice-good" role="status" data-testid="photo-placed">
+          <p>
+            📸 Your new photo of the puzzle: <strong>{photoPlaced.filled}</strong> {photoPlaced.filled === 1 ? 'spot' : 'spots'} filled since the last one.{' '}
+            {photoPlaced.ids.length
+              ? `${photoPlaced.ids.length === 1 ? 'The piece the app had for it is' : `The ${photoPlaced.ids.length} pieces the app had for them are`} now counted as in the puzzle.`
+              : 'The app wasn’t sure which pieces went there, so none were marked.'}
+          </p>
+          <div class="row" style={{ gap: '8px', flexWrap: 'wrap' }}>
+            {photoPlaced.ids.length > 0 && (
+              <button
+                class="btn btn-small"
+                data-testid="photo-placed-undo"
+                onClick={() =>
+                  void (async () => {
+                    let next = project;
+                    for (const pid of photoPlaced.ids) next = await undoFits(projectId, pid);
+                    onProject(next);
+                    setPhotoPlaced(null);
+                    onPiecesChanged();
+                  })().catch((err) => logError('place', 'Could not take the pieces out again', err))
+                }
+              >
+                Undo
+              </button>
+            )}
+            <button class="btn btn-small" onClick={() => setPhotoPlaced(null)}>
+              OK
+            </button>
+          </div>
+        </div>
+      )}
       {justPlaced && (
         <div class="notice notice-good row" role="status" data-testid="placed-note" style={{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span class="grow">
@@ -1250,6 +1297,15 @@ function Catalog({
               .then(onProject)
               .catch((err) => logError('answer', 'Could not clear the answers', err))
           }
+          onInPuzzle={() =>
+            void markPlaced(projectId, [{ id: selected }], 'tap')
+              .then(() => {
+                logInfo('answer', 'Put in the puzzle (spot not known)');
+                setSelected(null);
+                onPiecesChanged();
+              })
+              .catch((err) => logError('answer', 'Could not mark it as in the puzzle', err))
+          }
           onRemove={() =>
             void removeNotAPiece(projectId, selected)
               .then((next) => {
@@ -1334,7 +1390,10 @@ function InPuzzleRow({ piece, onTakeOut }: { piece: PieceRow; onTakeOut: () => v
   return (
     <div class="row in-puzzle-row" data-testid="in-puzzle-row">
       {url ? <img src={url} class="spot-thumb" alt="A piece" /> : <span class="spot-thumb" />}
-      <span class="grow small">{at ? `Column ${at.col + 1}, row ${at.row + 1}` : 'In the puzzle'}</span>
+      <span class="grow small">
+        {at && at.col >= 0 ? `Column ${at.col + 1}, row ${at.row + 1}` : 'In the puzzle (spot not known)'}
+        {at?.by === 'photo' ? ' · from your puzzle photo' : ''}
+      </span>
       <button class="btn btn-small" data-testid="take-out" onClick={onTakeOut}>
         Take it out
       </button>
@@ -1497,6 +1556,7 @@ function PieceSpots({
   ruledOut = 0,
   onClearRuledOut,
   onRemove,
+  onInPuzzle,
   onClose,
   partners = null,
   pieceById,
@@ -1513,6 +1573,8 @@ function PieceSpots({
   onClearRuledOut?: () => void;
   /** "Not a puzzle piece": removes it from the list. */
   onRemove?: () => void;
+  /** "It's in the puzzle" without a known spot (M7 part 4). */
+  onInPuzzle?: () => void;
   /** The empty spots pieces are matched to (drawn faintly), or null for the whole picture. */
   spots: Array<[number, number]> | null;
   boxUrl: string | null;
@@ -1626,6 +1688,14 @@ function PieceSpots({
         </svg>
       )}
       {partners && pieceById && fits && <PiecePartners partners={partners} pieceById={pieceById} />}
+      {onInPuzzle && (!best || !fits || place?.verdict === 'several') && (
+        <p class="small" data-testid="spot-in-puzzle-row">
+          Put it in already, somewhere the app didn't know?{' '}
+          <button class="btn btn-small btn-fits" data-testid="spot-in-puzzle" onClick={onInPuzzle}>
+            ✓ It's in the puzzle
+          </button>
+        </p>
+      )}
       {onRemove && (
         <p class="small muted" data-testid="spot-remove-row">
           {sureRemove ? (
