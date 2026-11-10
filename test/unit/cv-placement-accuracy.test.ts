@@ -11,7 +11,8 @@
  * whose pieces weren't scanned, one piece per spot (src/cv/openSpots.ts).
  */
 import { describe, expect, it } from 'vitest';
-import { buildBoxGrid, patchStats, placePiece, spotStats, PLACE } from '../../src/cv/placement';
+import { buildBoxGrid, patchStats, placePiece, spotStats, PLACE, type ColourMatch } from '../../src/cv/placement';
+import { COLOUR_FIT, fitColour, type ColourSample } from '../../src/cv/colourFit';
 import { chooseSpots, type SpotShapes } from '../../src/cv/openSpots';
 import { fitBoxCorrection, fitMatters, refitPicture } from '../../src/cv/boxFit';
 import { SEG } from '../../src/cv/pieceFinder';
@@ -48,6 +49,9 @@ function misfit(pic: { data: Uint8Array; width: number; height: number; stride: 
     }
   return { data: out, width: W, height: H, stride: W * 4 };
 }
+
+if (process.env.COLOUR_MODE) COLOUR_FIT.mode = process.env.COLOUR_MODE as 'affine' | 'diagonal';
+if (process.env.COLOUR_RIDGE) COLOUR_FIT.ridge = Number(process.env.COLOUR_RIDGE);
 
 describe.skipIf(!RUN)('box placement accuracy (synthetic)', () => {
   for (const setName of SETS)
@@ -187,8 +191,33 @@ describe.skipIf(!RUN)('box placement accuracy (synthetic)', () => {
             pic = refitPicture(pic, pz.cols, pz.rows, fit!);
             box = buildBoxGrid(pic, pz.cols, pz.rows);
           }
-        const colour = ps ? { from: ps, to: box.stats } : null;
+        let colour: ColourMatch | null = ps ? { from: ps, to: box.stats } : null;
+        // PLACE_LEARN=N (M8): the owner confirms N pieces (the first N placed right with a Strong
+        // verdict, as "✓ Fits" would); the colour transform learned from them places the others.
+        // Reported on the other pieces only, before and after.
+        const learnN = Number(process.env.PLACE_LEARN ?? 0);
+        let confirmed = new Set<string>();
+        if (learnN > 0) {
+          const samples: ColourSample[] = [];
+          for (const p of pieces) {
+            if (samples.length >= learnN) break;
+            const pl = placePiece(box, p.patch, { flats: p.flats, flatsSure: p.sure, colour });
+            const [row, col] = p.id.slice(1).split('c').map(Number) as [number, number];
+            const t = pl.top[0];
+            if (pl.verdict === 'strong' && t && t.col === col && t.row === row) {
+              samples.push({ patch: p.patch, col, row, rot: t.rot });
+              confirmed.add(p.id);
+            }
+          }
+          const fit = fitColour(box, samples, 12, colour);
+          console.log(
+            `  ${key}: learned from ${samples.length} confirmed pieces: ${fit ? `held-out ΔE ${fit.heldOutBase.toFixed(1)} → ${fit.heldOut.toFixed(1)}${fit.useful ? '' : ' (not used)'}` : 'no fit'}`,
+          );
+          if (fit && (fit.useful || process.env.PLACE_LEARN_USE === 'always') && process.env.PLACE_LEARN_USE !== '0')
+            colour = { ...colour!, affine: fit.affine };
+        }
         for (const p of pieces) {
+          if (confirmed.has(p.id)) continue;
           const t0 = performance.now();
           const pl = placePiece(box, p.patch, { flats: p.flats, flatsSure: p.sure, colour });
           res.ms += performance.now() - t0;

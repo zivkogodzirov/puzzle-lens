@@ -35,12 +35,24 @@ test.setTimeout(180_000);
 // Blobs in IndexedDB need a persistent WebKit context (as in scan-bin.spec.ts).
 test.use({ persistentStorage: true });
 
-/** The art as a JPEG (base64), optionally turned 180° and shrunk to w × h. */
-function jpeg(turn180: boolean, w = art.width, h = art.height): string {
+/**
+ * The art as a JPEG (base64), optionally turned 180° and shrunk to w × h. `cast`: as a photo of a
+ * box lid under a warm lamp: light parts yellower, shadows bluer (a cast the one-time per-channel
+ * colour match can't undo, M8).
+ */
+function jpeg(turn180: boolean, w = art.width, h = art.height, cast = false): string {
   const full = createCanvas(art.width, art.height);
   const fctx = full.getContext('2d');
   const id = fctx.createImageData(art.width, art.height);
   id.data.set(art.rgba);
+  if (cast)
+    for (let i = 0; i < id.data.length; i += 4) {
+      const y = 0.3 * id.data[i]! + 0.59 * id.data[i + 1]! + 0.11 * id.data[i + 2]!;
+      const k = (y - 128) * 0.35;
+      id.data[i] = Math.max(0, Math.min(255, id.data[i]! + k));
+      id.data[i + 1] = Math.max(0, Math.min(255, id.data[i + 1]! + 0.6 * k));
+      id.data[i + 2] = Math.max(0, Math.min(255, id.data[i + 2]! - k));
+    }
   fctx.putImageData(id, 0, 0);
   const c = createCanvas(w, h);
   const ctx = c.getContext('2d');
@@ -79,6 +91,7 @@ async function seed(
   open: { gaps: Array<[number, number]>; thumb: string } | null,
   cache: { key: string; value: unknown } | null = null,
   pieceIds: string[] = ids,
+  castBox = false,
 ): Promise<void> {
   const patches = pieceIds.map((pid, i) => ({ id: pid, b64: patchFor(pid, i % 4) }));
   await gotoScreen(page, '');
@@ -168,7 +181,7 @@ async function seed(
       dbh.close();
       return 'ok';
     },
-    [jpeg(false), patches, art.width, art.height, open, cache] as const,
+    [jpeg(false, art.width, art.height, castBox), patches, art.width, art.height, open, cache] as const,
   );
   expect(seeded).toBe('ok');
   await page.evaluate(() => (location.hash = '#/puzzle/e2e-place'));
@@ -511,4 +524,19 @@ test('"It’s in the puzzle" (M7 part 4): a piece whose spot isn’t sure can be
   await expect(page.getByTestId('in-puzzle-list')).toContainText('In the puzzle (spot not known)');
   await page.getByTestId('progress-link').click();
   await expect(page.getByTestId('progress-placed')).toContainText('1');
+});
+
+test('learned colours (M8): after 12 pieces fit, the colours are learned from them and the rest placed again', async ({ page }) => {
+  const many = ['r0c0', 'r0c3', 'r0c6', 'r0c9', 'r2c1', 'r2c4', 'r2c7', 'r4c2', 'r4c5', 'r4c8', 'r6c0', 'r6c3', 'r6c6', 'r7c9'];
+  await seed(page, null, null, many, true);
+  await expect(page.getByTestId('place-summary')).toContainText(/[1-9]\d* strong/, { timeout: 60_000 });
+  await expect(page.getByTestId('colours-learned')).toHaveCount(0);
+  const thumbs = page.locator('[data-testid="catalog"] .thumb-btn');
+  for (let k = 0; k < 12; k++) {
+    await thumbs.nth(0).click();
+    await page.getByTestId('spot-fits').click();
+    await expect(page.getByTestId('in-puzzle')).toContainText(`${k + 1} in the puzzle`);
+  }
+  await expect(page.getByTestId('colours-learned')).toContainText('Colours learned from your 12 pieces in the puzzle', { timeout: 60_000 });
+  await page.getByTestId('place-summary').screenshot({ path: test.info().outputPath('colours-learned.png') });
 });

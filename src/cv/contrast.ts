@@ -6,7 +6,7 @@
  * The table's colour comes from the scans (measured around the pieces), moved into the box
  * picture's colours with the colour match placement measured (pieces' photos → box picture).
  */
-import type { ColourMatch } from './placement';
+import { applyColourMatch, type ColourMatch } from './placement';
 
 export type Lab = [number, number, number];
 
@@ -22,6 +22,12 @@ export const CONTRAST = {
 /** The table's colour moved into the box picture's colours (unchanged without a colour match). */
 export function tableInBox(table: Lab, match: ColourMatch | null): Lab {
   if (!match) return table;
+  // The learned transform (M8), when there is one.
+  if (match.affine?.length === 12) {
+    const v = Float32Array.from(table);
+    applyColourMatch(v, match);
+    return [v[0]!, v[1]!, v[2]!];
+  }
   return [0, 1, 2].map((c) => ((table[c]! - match.from.mean[c]!) / Math.max(1e-6, match.from.std[c]!)) * match.to.std[c]! + match.to.mean[c]!) as Lab;
 }
 

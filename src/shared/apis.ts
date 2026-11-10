@@ -137,7 +137,10 @@ export interface TrackerApi {
    * Live view without markers (M5): find the table in every frame from these photos of it
    * (photo px → table mm each; width/height = the size imgToTable is for). Null switches it off.
    */
-  setAnchor(refs: AnchorPhoto[] | null, pieces?: Array<{ id: string; outline: number[] }>): Promise<{ features: number; photos: number; ms: number; error?: string }>;
+  setAnchor(
+    refs: AnchorPhoto[] | null,
+    pieces?: Array<{ id: string; outline: number[] }>,
+  ): Promise<{ features: number; photos: number; ms: number; error?: string }>;
   /** Longest gap between camera frames inside [startAbs, endAbs] (ms since epoch). */
   maxFrameGap(startAbs: number, endAbs: number): number;
   status(): TrackerStatus;
@@ -185,6 +188,19 @@ export interface ReaderApi {
     colour: ColourMatch | null,
     open?: OpenSpotsInput | null,
   ): Promise<PlaceReply>;
+  /**
+   * The learned colour transform (M8): fitted from pieces whose spot is known (`samples`: each
+   * piece's straightened patch, spot and turn) on the box picture; returned as `base` with its
+   * `affine` set (only when it predicts held-out pieces' colours clearly better than `base`:
+   * `useful`), or null when there are too few pieces.
+   */
+  learnColour(
+    box: Blob,
+    boxKey: string,
+    grid: { cols: number; rows: number },
+    samples: Array<{ rgba: Uint8Array; col: number; row: number; rot: 0 | 1 | 2 | 3 }>,
+    base: ColourMatch | null,
+  ): Promise<{ colour: ColourMatch; n: number; before: number; after: number; heldOut: number; heldOutBase: number; useful: boolean } | null>;
 }
 
 export interface PlaceReply {

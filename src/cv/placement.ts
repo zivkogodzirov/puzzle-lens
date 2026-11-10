@@ -312,10 +312,34 @@ export function buildBoxGrid(picture: { data: ArrayLike<number>; width: number; 
 
 // ---- Matching ------------------------------------------------------------------------------------
 
-/** A colour transform from the pieces' Lab to the box picture's (per channel: (v − m1) / s1 × s2 + m2). */
+/**
+ * A colour transform from the pieces' Lab to the box picture's: per channel (v − m1) / s1 × s2 + m2;
+ * or, once learned from pieces whose spot is known (M8, src/cv/colourFit.ts), a full affine map
+ * Lab' = A · [L, a, b, 1] (`affine`, 12 numbers row by row), which then replaces the per-channel one.
+ */
 export interface ColourMatch {
   from: { mean: [number, number, number]; std: [number, number, number] };
   to: { mean: [number, number, number]; std: [number, number, number] };
+  affine?: number[] | null;
+}
+
+/** Applies a colour match to Lab values in place (3 per pixel). */
+export function applyColourMatch(lab: Float32Array, cm: ColourMatch): void {
+  const n = lab.length / 3;
+  const A = cm.affine;
+  if (A && A.length === 12) {
+    for (let i = 0; i < n; i++) {
+      const L = lab[i * 3]!;
+      const a = lab[i * 3 + 1]!;
+      const b = lab[i * 3 + 2]!;
+      lab[i * 3] = A[0]! * L + A[1]! * a + A[2]! * b + A[3]!;
+      lab[i * 3 + 1] = A[4]! * L + A[5]! * a + A[6]! * b + A[7]!;
+      lab[i * 3 + 2] = A[8]! * L + A[9]! * a + A[10]! * b + A[11]!;
+    }
+    return;
+  }
+  for (let i = 0; i < n; i++)
+    for (let c = 0; c < 3; c++) lab[i * 3 + c] = ((lab[i * 3 + c]! - cm.from.mean[c]!) / cm.from.std[c]!) * cm.to.std[c]! + cm.to.mean[c]!;
 }
 
 /** Mean and spread of the piece pixels' Lab over many patches (for a one-time colour match, RESEARCH §9.5). */
@@ -417,9 +441,7 @@ function patchLevel(patch: PiecePatch, cell: number, cm: ColourMatch | null): Pa
       }
     }
   const lab0 = toLab(rgb);
-  if (cm)
-    for (let i = 0; i < size * size; i++)
-      for (let c = 0; c < 3; c++) lab0[i * 3 + c] = ((lab0[i * 3 + c]! - cm.from.mean[c]!) / cm.from.std[c]!) * cm.to.std[c]! + cm.to.mean[c]!;
+  if (cm) applyColourMatch(lab0, cm);
   const lab: Float32Array[] = [lab0];
   const w: Float32Array[] = [w0];
   for (let r = 1; r < 4; r++) {

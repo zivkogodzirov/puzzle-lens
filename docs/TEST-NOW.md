@@ -1,18 +1,10 @@
-# M7, parts 1–4: batches, progress, backups, and pieces counted from a new puzzle photo (and M6, M5, still to check)
+# M8, part 1: colours learned from your pieces (and M7, M6, M5, still to check)
 
-**New in M7 part 4:** a new photo of your puzzle counts the pieces that went in since the last one (with Undo), and a photo of the finished puzzle counts every piece. I tested it with your photos: holes, pieces, then your finished-puzzle photo IMG_9272: "All 21 empty spots are filled now", 17 pieces counted in, and Progress said 1008 of 1008. On the way I fixed a bug: after scanning loose pieces, a photo of the puzzle couldn't be read at all. Also new: **✓ It's in the puzzle** for a piece whose spot isn't sure.
+**New in M8 part 1:** once **12 pieces are in the puzzle at known spots** (✓ Fits), the app learns how your photos' colours map to the box picture and places every other piece again; the puzzle page says **"Colours learned from your N pieces in the puzzle"**. This is for a fresh puzzle on the whole picture (among the holes of a nearly finished puzzle it isn't needed). Measured on your 19 real pieces: right spot first **1 → 6**, in the top 5 **3 → 9**.
 
-**New in M7 part 3: backups with reminders.** The puzzle page reminds you to back up when there's no backup yet, or when things changed and the last one is a few days old. The backup now holds everything (also each piece's spot and the scan bin). I tested it with your Kiss puzzle in the app: backed up, deleted, restored: everything came back.
+**Nothing to test for it on *The Kiss*:** it uses its holes, where the colours come from the holes already. You'll see it on your next puzzle, after 12 pieces have gone in with ✓ Fits. The steps below are the ones still open from M7, M6 and M5.
 
-**New in M7 part 2: 📈 Progress** on the puzzle page (next to 📊 How often is the app right?). It shows how many pieces are in the puzzle, the box picture filled in (bright = done, a **yellow dot** = the piece for that spot is on your table or in a tray, dark = still to find), the pieces by where they are, corners and edges left, how often the app was right, and the batch. I tested it in the app with your photos: **987 of 1008 in the puzzle (98 %)**, and 17 of your 21 holes have their piece on the table.
-
-**New in M7 part 1:** on your puzzle's page, under Pieces, **🔄 Start a new batch…**. Before, once you swept the pieces together (or put them back in the box) and spread out a new lot, no photo could be matched to the old table any more. Now a new batch sets the table's pieces aside (kept in the list), leaves the pieces in the puzzle and in trays where they are, and the next photo starts a fresh table.
-
-**Good to know:** pieces you spread out again are read as new pieces. I tried recognising them by their picture and measured it first: on computer-made 300-piece batches, 3.5–8.7 % of brand-new pieces would have been mixed up with old ones, so it's off. If there's room, leave the leftovers where they are, spread the new pieces around them and scan as usual: then every piece is recognised by where it lies.
-
-**I tested it myself** with a simulated camera in Safari's engine: the re-spread table wasn't matched, then after **Start a new batch** the next photo read all the pieces, and the counts showed them on the table and set aside.
-
-Allow about 10 minutes for the new puzzle photo, 5 for the progress page, 5 for backups, 15 minutes for M6, 45 minutes for the M5 steps if you haven't done them yet, and 10 minutes for M7 part 1 (last). These steps are for version **{version}** (Settings shows the version).
+These steps are for version **{version}** (Settings shows the version).
 
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
@@ -103,6 +95,7 @@ Allow about 10 minutes for the new puzzle photo, 5 for the progress page, 5 for 
 - Your answers are kept with the puzzle, and in backups.
 
 ## Please tell me
+- M8 part 1: if you tried it, did the spots get better after the colours were learned?
 - M7 part 4: after your new puzzle photo, were the right pieces counted as in the puzzle?
 - M7 part 3: did the backup save to Files (or your Mac), and how big was it?
 - M7 part 2: does the progress page match your puzzle and table? Anything you'd like it to show?

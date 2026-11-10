@@ -4,6 +4,12 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M8 (part 1): colours learned from your pieces (2026-11-10; tested on your photos, not yet on your iPhone)
+- **The problem:** on the whole box picture (a fresh puzzle, no holes photo), your real pieces were rarely placed right: your photos' colours under the lamp differ from the box picture in ways the one-time colour match can't undo (light parts yellower, shadows different). Of your 19 pieces with known spots, only **1** came first.
+- **New:** once **12 pieces are in the puzzle at known spots** (✓ Fits), the app learns how your photos' colours map to the box picture, from those pieces, and places every other piece again. It learns again after every 10 more. The puzzle page then says **"Colours learned from your N pieces in the puzzle"**. It only uses what it learned if that predicts the colours of pieces it didn't learn from clearly better; among the holes of a nearly finished puzzle it isn't needed (the colours come from the holes).
+- **Measured on your 19 real pieces** (each placed with colours learned from the other 18, so none from its own answer): right spot first **1 → 6**, in the top 5 **3 → 9**.
+- **On computer-made puzzles** it's about neutral (held-back test puzzles: 67.0 → 65.9 % and 85.4 → 84.8 %): their box pictures differ from the pieces only by an overall cast, which the one-time match already undoes. I tried several variants and kept the one that did best on your pieces without hurting the computer-made ones more than that.
+
 ### M7 (part 4): placed pieces without tapping each, and a full 1000-piece run (2026-11-10; tested with your photos and in the app, not yet on your iPhone)
 - **A new photo of the puzzle counts the pieces that went in.** When you photograph the nearly finished puzzle again (Scan pieces), the holes filled since the last photo had their pieces put in: the piece the app had for each (Strong or Likely) is now counted as in the puzzle. A note says how many, with **Undo**. Holes whose piece wasn't sure are left alone.
 - **A photo of the finished puzzle** (no holes left) counts every piece as in: 📈 Progress says 1008 of 1008.

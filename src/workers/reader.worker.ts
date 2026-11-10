@@ -22,6 +22,7 @@ import { findCoin } from '../cv/coin';
 import { readPiece } from '../cv/readPiece';
 import { readShape, READ_OK } from '../cv/shapeRead';
 import { buildBoxGrid, extractPatch, patchStats, placePiece, spotStats, PATCH_SIZE, type BoxGrid, type ColourMatch } from '../cv/placement';
+import { fitColour } from '../cv/colourFit';
 import { tableAround } from '../cv/colourGroups';
 import { orientSpots, SPOT_THUMB_CELL, straightenQuad } from '../cv/openSpots';
 import { puzzleQuad, readAssembledGrid, SEAM_OK, type AssembledGrid } from '../cv/assembledGrid';
@@ -234,6 +235,20 @@ async function thumbsAndPreview(
 
 /** The straightened box picture cut into cells, kept between placement calls. */
 let boxCache: { key: string; grid: BoxGrid } | null = null;
+
+/** The straightened box picture as a placement grid (kept for the next call with the same key). */
+async function boxGridFor(box: Blob, boxKey: string, grid: { cols: number; rows: number }): Promise<BoxGrid> {
+  if (!boxCache || boxCache.key !== boxKey || boxCache.grid.cols !== grid.cols || boxCache.grid.rows !== grid.rows) {
+    const reader = new PhotoReader(await decodeAtMost(box, await headerSize(box), 2048));
+    try {
+      const pixels = ensureRgba(await reader.read({ x: 0, y: 0, width: reader.width, height: reader.height }));
+      boxCache = { key: boxKey, grid: buildBoxGrid(pixels, grid.cols, grid.rows) };
+    } finally {
+      reader.close();
+    }
+  }
+  return boxCache.grid;
+}
 /** The one-time colour match needs at least this many pieces (a handful would pull it toward their colours). */
 const MIN_COLOUR_PIECES = 20;
 /** …or, for leftover pieces matched to the empty spots, half as many pieces as spots, and at least this many. */
@@ -618,6 +633,27 @@ const api: ReaderApi = {
     }
   },
 
+  async learnColour(box, boxKey, grid, samples, base) {
+    const bg = await boxGridFor(box, boxKey, grid);
+    const fit = fitColour(
+      bg,
+      samples.map((s) => ({ patch: { size: PATCH_SIZE, rgba: s.rgba }, col: s.col, row: s.row, rot: s.rot })),
+      12,
+      base,
+    );
+    if (!fit) return null;
+    const plain = base ?? { from: bg.stats, to: bg.stats };
+    return {
+      colour: fit.useful ? { ...plain, affine: fit.affine } : { ...plain, affine: null },
+      n: fit.n,
+      before: fit.before,
+      after: fit.after,
+      heldOut: fit.heldOut,
+      heldOutBase: fit.heldOutBase,
+      useful: fit.useful,
+    };
+  },
+
   async placePieces(
     box: Blob,
     boxKey: string,
@@ -627,16 +663,7 @@ const api: ReaderApi = {
     open: OpenSpotsInput | null = null,
   ): Promise<PlaceReply> {
     const t0 = performance.now();
-    if (!boxCache || boxCache.key !== boxKey || boxCache.grid.cols !== grid.cols || boxCache.grid.rows !== grid.rows) {
-      const reader = new PhotoReader(await decodeAtMost(box, await headerSize(box), 2048));
-      try {
-        const pixels = ensureRgba(await reader.read({ x: 0, y: 0, width: reader.width, height: reader.height }));
-        boxCache = { key: boxKey, grid: buildBoxGrid(pixels, grid.cols, grid.rows) };
-      } finally {
-        reader.close();
-      }
-    }
-    const bg = boxCache.grid;
+    const bg = await boxGridFor(box, boxKey, grid);
     const patches = pieces.map((p) => ({ size: PATCH_SIZE, rgba: p.rgba }));
     // Leftover pieces of a nearly finished puzzle: only its empty spots (turned to match the box picture).
     let spots: PlaceReply['open'] = null;

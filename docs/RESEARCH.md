@@ -458,7 +458,7 @@ So I'm designing and testing this from scratch.
 5. **Colour calibration:**
    1. White-balance and expose each photo from the grey patch on the marker sheets (white paper can blow out).
    2. Match colour statistics between piece pixels and the box picture (Reinhard / histogram). This is done **once**, on the first unsorted batch, or later on the whole catalog. It is never redone per sorted batch: a batch of only sky pieces would otherwise be pulled toward the picture's average colour.
-   3. Once ~30 placements are confirmed, fit a 3×3 + offset colour transform by RANSAC, and refit as more arrive.
+   3. Once ~30 placements are confirmed, fit a 3×3 + offset colour transform by RANSAC, and refit as more arrive. **Built in M8 part 1** (from 12 pieces, trimmed least squares on 4 × 4 blocks, on top of step 2 and pulled towards it, checked on held-out pieces): the owner's 19 real pieces on the whole picture, right spot first 1 → 6 of 19 (top 5 3 → 9), each with a transform from the other 18; synthetic about neutral (held-back test48 67.0 → 65.9 %, test300 85.4 → 84.8 %).
 6. **One piece per cell:**
    - Global assignment over −log p, using Hungarian/Jonker–Volgenant (plain JS O(n³) on 1000 × 1026 measured at 36–131 ms on the Mac (measured)) or a sparse auction (puzzle-helper: 2 ms).
    - Then Sinkhorn normalisation, so displayed top-5 probabilities respect one-piece-per-cell.

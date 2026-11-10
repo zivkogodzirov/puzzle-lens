@@ -14,7 +14,16 @@ import type { PieceRow, Project } from '../../project/types';
 import { db } from '../../db/db';
 import { readShape, READ_OK, type PieceKind } from '../../cv/shapeRead';
 import type { Placement } from '../../cv/placement';
-import { placeKeyOf, readPlacements, shownPlacements, stalePieces, unplacedStatus, updatePlacements, type PlacementCache } from '../../project/placements';
+import {
+  learnDue,
+  placeKeyOf,
+  readPlacements,
+  shownPlacements,
+  stalePieces,
+  unplacedStatus,
+  updatePlacements,
+  type PlacementCache,
+} from '../../project/placements';
 import type { SpotChoice } from '../../cv/openSpots';
 import { readerWorker } from '../workers';
 import { TablePhoto, TraysPanel, useColourGroups } from '../components/Trays';
@@ -782,14 +791,23 @@ function Catalog({
       if (live) setPlaces(cached?.boxKey === placeKey ? cached : null);
       // Pieces in trays are placed too: they still belong in the puzzle (and compete for empty spots).
       const unplaced = everything.filter(unplacedStatus);
-      const todo = stalePieces(cached, placeKey, unplaced).length;
+      // Pieces new or photographed again, or all of them once the colours can be learned from the pieces in the puzzle (M8).
+      const learnNow = learnDue(cached, placeKey, everything);
+      const todo = stalePieces(cached, placeKey, unplaced).length || (learnNow ? unplaced.length : 0);
       if (!todo) return;
       try {
         const rw = readerWorker();
         const info = await rw.ready;
         if (!info?.ok || !live) return;
         setPlacing({ done: 0, total: todo });
-        const next = await updatePlacements(project, unplaced, rw.api, (done, total) => live && setPlacing({ done, total }));
+        const next = await updatePlacements(project, unplaced, rw.api, (done, total) => live && setPlacing({ done, total }), everything);
+        if (next?.learned && learnNow)
+          logInfo(
+            'place',
+            next.colour?.affine
+              ? `Colours learned from ${next.learned.n} pieces in the puzzle (held-out ΔE ${next.learned.before.toFixed(1)} → ${next.learned.after.toFixed(1)})`
+              : `Colours not learned from ${next.learned.n} pieces in the puzzle (${next.learned.before ? `no better on held-out pieces: ΔE ${next.learned.before.toFixed(1)} vs ${next.learned.after.toFixed(1)}` : 'too few usable'})`,
+          );
         if (live) setPlaces(next);
         // A new photo of the puzzle (M7 part 4): its spots filled since the last photo had their pieces put in.
         if (cached?.open?.cells.length && next?.open && cached.boxKey !== next.boxKey) {
@@ -1249,6 +1267,7 @@ function Catalog({
           hasSpots={Boolean(project.openSpots)}
           rows={rows}
           placing={placing}
+          learned={places?.colour?.affine && places.learned?.n ? places.learned.n : 0}
           onWholePicture={() => {
             void updateProject(projectId, { openSpots: null })
               .then(onProject)
@@ -1473,6 +1492,7 @@ function PlaceSummary({
   hasSpots,
   rows,
   placing,
+  learned = 0,
   onWholePicture,
 }: {
   shown: Map<string, SpotChoice>;
@@ -1480,6 +1500,8 @@ function PlaceSummary({
   hasSpots: boolean;
   rows: PieceRow[];
   placing: { done: number; total: number } | null;
+  /** Pieces in the puzzle the colours were learned from (M8), 0 if not. */
+  learned?: number;
   onWholePicture: () => void;
 }) {
   const n = { strong: 0, likely: 0, several: 0, nofit: 0 };
@@ -1536,6 +1558,12 @@ function PlaceSummary({
             several spots look alike
             {n.nofit > 0 ? <span> · {n.nofit} fit none of the empty spots</span> : null}
             {none > 0 ? <span class="muted"> · {none} not placed yet (scanned before this version: scan again)</span> : null}. Tap a piece to see where it goes.
+            {learned > 0 && (
+              <span class="muted" data-testid="colours-learned">
+                {' '}
+                Colours learned from your {learned} pieces in the puzzle.
+              </span>
+            )}
           </>
         )}
       </p>

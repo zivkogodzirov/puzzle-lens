@@ -33,6 +33,33 @@ export interface PlacementCache {
   open?: PlaceReply['open'];
   /** Per piece: the patch time it was placed from, and the result. */
   byPiece: Record<string, { ts: number; placement: Placement }>;
+  /**
+   * The colour transform learned from pieces in the puzzle (M8): from how many, and the colour
+   * difference (ΔE, median over blocks of pieces it wasn't fitted from) with the current match
+   * (`before`) and with it (`after`). Its transform is in `colour.affine` when it was better.
+   */
+  learned?: { n: number; before: number; after: number } | null;
+}
+
+/** Pieces in the puzzle at a known spot needed before the colours are learned (M8), and how many more before learning again. */
+export const LEARN = { min: 12, step: 10 };
+
+/** Pieces in the puzzle at a known spot, with their straightened picture (the samples for learning colours). */
+export function learnSamples(pieces: PieceRow[]): PieceRow[] {
+  return pieces.filter((p) => p.status === 'placed' && p.placedAt && p.placedAt.col >= 0 && p.placedAt.by !== 'tap' && p.patch);
+}
+
+/**
+ * Whether the colours should be learned (again) now: on the whole picture (among empty spots the
+ * colours are matched to those spots already), once LEARN.min pieces are in at known spots, and
+ * again after every LEARN.step more.
+ */
+export function learnDue(cache: PlacementCache | null, placeKey: string, pieces: PieceRow[]): boolean {
+  if (placeKey.includes('|open:')) return false;
+  const n = learnSamples(pieces).length;
+  if (n < LEARN.min) return false;
+  const fresh = cache && cache.boxKey === placeKey ? cache : null;
+  return !fresh?.learned || n >= fresh.learned.n + LEARN.step;
 }
 
 /** Identifies the box picture as straightened now, and the grid. */
@@ -69,18 +96,38 @@ export function stalePieces(cache: PlacementCache | null, placeKey: string, piec
 export async function updatePlacements(
   project: Project,
   pieces: PieceRow[],
-  reader: Pick<ReaderApi, 'placePieces'>,
+  reader: Pick<ReaderApi, 'placePieces'> & Partial<Pick<ReaderApi, 'learnColour'>>,
   onProgress?: (done: number, total: number) => void,
+  /** Every piece of the puzzle (to learn colours from those in it, M8); defaults to `pieces`. */
+  all: PieceRow[] = pieces,
 ): Promise<PlacementCache | null> {
   const boxKey = boxKeyOf(project);
   const placeKey = placeKeyOf(project);
   if (!boxKey || !placeKey || !project.box || !project.grid) return null;
   const old = await readPlacements(project.id);
   const cache: PlacementCache = old && old.boxKey === placeKey ? old : { boxKey: placeKey, colour: null, open: null, byPiece: {} };
-  const todo = stalePieces(cache, placeKey, pieces);
-  if (!todo.length) return cache;
+  let todo = stalePieces(cache, placeKey, pieces);
+  const learn = Boolean(reader.learnColour) && learnDue(cache, placeKey, all);
+  if (!todo.length && !learn) return cache;
   const box = await getBlob(project.box.rectifiedBlobId);
   if (!box) return cache;
+  // Learn the colours from the pieces in the puzzle (M8), then place every piece again with them.
+  if (learn) {
+    const samples: Array<{ rgba: Uint8Array; col: number; row: number; rot: 0 | 1 | 2 | 3 }> = [];
+    const used = learnSamples(all);
+    for (const p of used) {
+      const b = await getBlob(p.patch!.blobId);
+      if (b) samples.push({ rgba: new Uint8Array(await b.arrayBuffer()), col: p.placedAt!.col, row: p.placedAt!.row, rot: p.placedAt!.rot });
+    }
+    const got = await reader.learnColour!(box, boxKeyOf(project)!, { cols: project.grid.cols, rows: project.grid.rows }, samples, cache.colour);
+    // Counted even when it isn't used (too few usable pieces, or no better than the current match on
+    // pieces it wasn't fitted from), so it isn't tried again before LEARN.step more pieces are in.
+    cache.learned = got ? { n: used.length, before: got.heldOutBase, after: got.heldOut } : { n: used.length, before: 0, after: 0 };
+    if (got?.useful) {
+      cache.colour = got.colour;
+      todo = pieces.filter((p) => unplacedStatus(p) && p.patch);
+    }
+  }
   let open: OpenSpotsInput | null = null;
   if (project.openSpots) {
     const thumb = await getBlob(project.openSpots.thumbBlobId);
