@@ -5,7 +5,7 @@
  * goes back on the table.
  */
 import { createCanvas } from '@napi-rs/canvas';
-import { test, expect, gotoScreen } from './fixtures';
+import { test, expect, gotoScreen, openTab } from './fixtures';
 
 const S = 56;
 const COLOURS: Array<[number, number, number]> = [
@@ -109,11 +109,13 @@ test('pieces are grouped by colour, light up on the photo, go into a tray and ba
     [pieces, COLOURS.map(patch), photo(pieces)] as const,
   );
   expect(seeded).toBe('ok');
-  await page.evaluate(() => (location.hash = '#/puzzle/e2e-trays'));
+  await page.evaluate(() => (location.hash = '#/puzzle/e2e-trays/pieces'));
 
   // The table view: every piece on the photo, outlined by its state (no box picture: none placed); tap one.
+  // M9 part 4: the progress line is on the Pieces tab, "Show my table" on the Table tab.
   await expect(page.getByTestId('progress')).toContainText('9 found');
   await expect(page.getByTestId('progress')).toContainText('0 placed on box');
+  await openTab(page, 'table');
   await page.getByTestId('table-toggle').click();
   await expect(page.getByTestId('table-photo-svg').locator('.lit-outline')).toHaveCount(9);
   // Every outline on a dark halo, 2.4 × its width, that taps go through (M9 part 1).
@@ -127,11 +129,13 @@ test('pieces are grouped by colour, light up on the photo, go into a tray and ba
   await page.getByTestId('table-photo-svg').locator('.lit-outline').first().click();
   await expect(page.getByTestId('table-photo-info')).toBeVisible();
   await page.getByTestId('table-photo-pick').click();
-  await expect(page.getByTestId('table-photo')).toHaveCount(0);
+  // The full-screen photo closes (M9 part 4: the Table tab's own photo stays in the tab).
+  await expect(page.locator('.photo-result.table-photo')).toHaveCount(0);
   await expect(page.getByTestId('piece-spots')).toBeVisible();
   // Its card is a sheet over the page (M9 part 3): closed before the page goes on.
   await page.getByTestId('spot-close').click();
   await expect(page.getByTestId('spot')).toHaveCount(0);
+  await openTab(page, 'pieces');
 
   // Three colours, three groups (6 trays asked for, but only 3 colours): the darkest is A.
   await page.getByTestId('trays-toggle').click();
@@ -142,7 +146,7 @@ test('pieces are grouped by colour, light up on the photo, go into a tray and ba
   await expect(page.getByTestId('tray-few-colours')).toContainText('Only 3 different colours');
   await page.getByTestId('tray-group-A').click();
   await expect(page.getByTestId('tray-detail')).toContainText('3 pieces on the table');
-  // The catalog shows only group A, each with its badge.
+  // The grid below (M9 part 4: on the Sort into trays page) shows only group A, each with its badge.
   await expect(page.getByTestId('catalog').locator('.thumb-btn')).toHaveCount(3);
   await expect(page.getByTestId('tray-tag')).toHaveText(['A', 'A', 'A']);
 
@@ -157,12 +161,15 @@ test('pieces are grouped by colour, light up on the photo, go into a tray and ba
   await page.getByTestId('tray-move').click();
   await expect(page.getByTestId('tray-note')).toContainText('3 pieces in tray A');
   await expect(page.getByTestId('tray-summary')).toContainText('In trays: A 3');
-  await expect(page.getByTestId('puzzle-status-counts')).toContainText('6 on the table, 3 in trays');
   await expect(page.getByTestId('tray-count')).toContainText('Fixed while pieces are in trays');
   await expect(page.getByTestId('catalog').locator('.thumb-btn')).toHaveCount(6);
+  // The counts on the Pieces tab (Back from the page).
+  await page.getByTestId('navbar-back').click();
+  await expect(page.getByTestId('puzzle-status-counts')).toContainText('6 on the table, 3 in trays');
 
-  // Still so after closing and opening the app.
+  // Still so after closing and opening the app (on the same tab).
   await page.reload();
+  await expect(page.getByTestId('tab-pieces')).toHaveAttribute('aria-current', 'page');
   await page.getByTestId('trays-toggle').click();
   await expect(page.getByTestId('tray-group-A')).toContainText('3 in tray');
   await expect(page.getByTestId('tray-summary')).toContainText('In trays: A 3');
@@ -176,9 +183,9 @@ test('pieces are grouped by colour, light up on the photo, go into a tray and ba
   await expect(page.getByTestId('print-labels')).toBeEnabled();
   await page.screenshot({ path: test.info().outputPath('trays-labels.png'), fullPage: true });
 
-  // Back on the table.
+  // Back on the table (from the labels, back to the Sort into trays page: M9 part 4).
   await page.getByTestId('labels-back').click();
-  await page.getByTestId('trays-toggle').click();
+  await expect(page.getByTestId('sort-page')).toBeVisible();
   await page.getByTestId('tray-back-A').click();
   await expect(page.getByTestId('tray-note')).toContainText('Tray A: 3 pieces back on the table');
   await expect(page.getByTestId('tray-summary')).toHaveCount(0);

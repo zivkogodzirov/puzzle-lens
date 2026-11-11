@@ -7,7 +7,7 @@
  */
 import { generatePuzzle, renderScene } from '../synth/index';
 import type { SceneOptions } from '../synth/types';
-import { test, expect, gotoScreen } from './fixtures';
+import { test, expect, gotoScreen, openTab } from './fixtures';
 
 const W = 4032;
 const H = 3024;
@@ -161,8 +161,11 @@ test.describe('live view of the table', () => {
     }, id);
     await page.reload();
     await page.evaluate((url) => ((window as unknown as { __fakeScene?: string }).__fakeScene = url), moved);
-    await expect(page.getByTestId('matches-toggle')).toContainText('Joins');
+    // M9 part 4: "Which pieces join" is on the Pieces tab, the live view on the Table tab.
+    await openTab(page, 'pieces');
+    await expect(page.getByTestId('matches-toggle')).toContainText('Which pieces join');
     await expect(page.getByTestId('matches-count')).toBeVisible();
+    await openTab(page, 'table');
     await page.getByTestId('live-toggle').click();
     await expect(page.getByTestId('live-status')).toHaveAttribute('data-kind', 'good', { timeout: 60_000 });
     await expect.poll(async () => Number(await overlay.getAttribute('data-lines')), { timeout: 20_000 }).toBeGreaterThanOrEqual(4);

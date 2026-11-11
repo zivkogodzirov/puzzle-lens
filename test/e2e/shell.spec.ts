@@ -2,14 +2,14 @@
  * The app shell and the puzzle page (M9 part 1, "readable now"): the last puzzle reopened at
  * launch, screen titles and focus, pinch-zoom allowed, the set-up checklist hidden once done, the
  * page filter, the screen kept awake on puzzle screens, and the action bar at the bottom of the
- * puzzle page that never covers the page's last lines or the piece panel's ✓ Fits row.
+ * puzzle page that never covers the page's last lines or the piece panel's ✓ Fits row (M9 part 4: the tab bar).
  */
 import { createCanvas } from '@napi-rs/canvas';
 import type { Page } from '@playwright/test';
 import { extractPatch } from '../../src/cv/placement';
 import type { Vec2 } from '../../src/project/types';
 import { generatePuzzle } from '../synth/index';
-import { test, expect, gotoScreen } from './fixtures';
+import { test, expect, gotoScreen, openTab } from './fixtures';
 
 test.setTimeout(180_000);
 // Blobs in IndexedDB need a persistent WebKit context (as in scan-bin.spec.ts).
@@ -150,7 +150,9 @@ test('the last puzzle opens at launch, with Home one step back; an address wins'
   // The Home Screen app opens at its start address, with no #/… part.
   await page.goto('./');
   await expect(page.getByTestId('puzzle-screen')).toBeVisible();
-  await expect(page.getByTestId('puzzle-name')).toHaveText('Half set up');
+  await expect(page.getByTestId('navbar').locator('h1')).toHaveText('Half set up');
+  // On its Table tab (M9 part 4, decision 3).
+  await expect(page.getByTestId('tab-table')).toHaveAttribute('aria-current', 'page');
   expect(new URL(page.url()).hash).toBe('#/puzzle/shell-setup');
   await expect(page).toHaveTitle('Half set up · Puzzle Lens');
   // Home is one Back away (the browser's Back, like the edge swipe), and the ‹ Home button goes there too.
@@ -188,7 +190,8 @@ test('each screen has its own title, and its heading gets the focus', async ({ p
     ['#/settings', 'Settings · Puzzle Lens', 'Settings'],
     ['#/help', 'Setup guide · Puzzle Lens', 'Setup guide'],
     ['#/puzzle/shell-setup', 'Half set up · Puzzle Lens', 'Half set up'],
-    ['#/progress/shell-done', 'Progress · Harbour at dusk · Puzzle Lens', 'Progress'],
+    // The old Progress address: the puzzle's Picture tab (M9 part 4).
+    ['#/progress/shell-done', 'Harbour at dusk · Puzzle Lens', 'Harbour at dusk'],
     ['#/', 'Puzzle Lens', 'Puzzle Lens'],
   ] as const) {
     await page.evaluate((h) => (location.hash = h), hash);
@@ -196,8 +199,8 @@ test('each screen has its own title, and its heading gets the focus', async ({ p
     await expect(page.locator('h1').first()).toContainText(heading);
     await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe('H1');
   }
-  // Renaming the puzzle renames the title.
-  await page.evaluate(() => (location.hash = '#/puzzle/shell-setup'));
+  // Renaming the puzzle (on its More tab) renames the title.
+  await page.evaluate(() => (location.hash = '#/puzzle/shell-setup/more'));
   await page.getByTestId('rename').click();
   await page.getByTestId('rename-input').fill('Lighthouse');
   await page.getByTestId('rename-save').click();
@@ -206,12 +209,15 @@ test('each screen has its own title, and its heading gets the focus', async ({ p
 
 test('the set-up checklist shows only until set-up is finished', async ({ page }) => {
   await seed(page, null);
+  // The set-up steps are on the More tab (M9 part 4); the Table tab says to finish the set-up, and there is no Scan yet.
   await page.evaluate(() => (location.hash = '#/puzzle/shell-setup'));
+  await expect(page.getByTestId('table-continue-setup')).toBeVisible();
+  await expect(page.getByTestId('scan-pieces')).toHaveCount(0);
+  await openTab(page, 'more');
   await expect(page.getByTestId('setup-progress')).toBeVisible();
   await expect(page.getByTestId('continue-setup')).toBeVisible();
   await expect(page.getByTestId('setup-finished')).toHaveCount(0);
-  await expect(page.getByTestId('action-bar')).toHaveCount(0);
-  await page.evaluate(() => (location.hash = '#/puzzle/shell-done'));
+  await page.evaluate(() => (location.hash = '#/puzzle/shell-done/more'));
   await expect(page.getByTestId('setup-finished')).toContainText('Set-up finished');
   await expect(page.getByTestId('setup-progress')).toHaveCount(0);
   await expect(page.getByTestId('continue-setup')).toHaveCount(0);
@@ -246,37 +252,45 @@ test('the screen stays awake on the puzzle screens, and not elsewhere', async ({
   await page.evaluate(() => (location.hash = '#/puzzle/shell-done'));
   await expect(page.getByTestId('puzzle-screen')).toBeVisible();
   await expect.poll(held).toBe(1);
+  // Every tab, and the old Progress address (now the Picture tab).
+  for (const tab of ['picture', 'pieces', 'more'] as const) {
+    await openTab(page, tab);
+    await expect.poll(held).toBe(1);
+  }
   await page.evaluate(() => (location.hash = '#/progress/shell-done'));
+  await expect(page.getByTestId('tab-picture')).toHaveAttribute('aria-current', 'page');
   await expect.poll(held).toBe(1);
   await page.evaluate(() => (location.hash = '#/settings'));
   await expect.poll(held).toBe(0);
 });
 
-test('the action bar: main actions at once, never over the last lines or the ✓ Fits row; the page filter', async ({ page }) => {
+test('the tab bar (was the action bar): at once, never over the last lines or the ✓ Fits row; the page filter', async ({ page }) => {
   await seed(page, 'shell-done', true);
   for (const size of [
     { width: 402, height: 874 },
     { width: 375, height: 667 },
   ]) {
     await page.setViewportSize(size);
-    await page.goto('./#/puzzle/shell-done');
+    await page.goto('./#/puzzle/shell-done/pieces');
     await page.reload();
     // Home Screen app safe areas (WebKit in Playwright reports 0).
     await page.addStyleTag({ content: ':root { --safe-top: 62px !important; --safe-bottom: 34px !important; }' });
     await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
-    const bar = page.getByTestId('action-bar');
-    // In view at once, at the top of the page, with the four actions.
+    // M9 part 4: the tab bar replaced the action bar; Scan is in the navigation bar.
+    const bar = page.getByTestId('puzzle-tabs');
+    // In view at once, at the bottom of the screen, with the four tabs.
     await expect(bar).toBeInViewport({ ratio: 1 });
-    for (const id of ['scan-pieces', 'live-toggle', 'fill-toggle', 'matches-toggle']) await expect(bar.getByTestId(id)).toBeInViewport({ ratio: 1 });
+    for (const id of ['tab-table', 'tab-picture', 'tab-pieces', 'tab-more']) await expect(bar.getByTestId(id)).toBeInViewport({ ratio: 1 });
+    await expect(page.getByTestId('scan-pieces')).toBeInViewport({ ratio: 1 });
     const barTop = async () => (await bar.boundingBox())!.y;
-    expect(await barTop()).toBeGreaterThan(size.height - 69 - 34 - 4);
+    expect(await barTop()).toBeGreaterThan(size.height - 49 - 34 - 4);
     // Scrolled to the end: the page's last line sits above the bar.
     await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
     const lastBottom = await page.evaluate(() => {
       const main = document.querySelector('main')!;
       let bottom = 0;
       for (const el of main.querySelectorAll('*')) {
-        if ((el as HTMLElement).closest('.action-bar')) continue;
+        if ((el as HTMLElement).closest('.tabbar')) continue;
         const r = el.getBoundingClientRect();
         if (r.height > 0) bottom = Math.max(bottom, r.bottom);
       }
@@ -295,19 +309,26 @@ test('the action bar: main actions at once, never over the last lines or the ✓
     expect(answer.y + answer.height).toBeLessThanOrEqual(size.height - 34);
     // Each answer on one line (check 2026-11-10: "Doesn't fit" wrapped at 375 px).
     for (const id of ['spot-fits', 'spot-not']) expect((await page.getByTestId(id).boundingBox())!.height, id).toBeLessThanOrEqual(60);
-    // No label in the bar cut off (the Joins count is a badge).
-    expect(await bar.evaluate((b) => [...b.querySelectorAll('.action-bar-label')].filter((l) => l.scrollWidth > l.clientWidth + 1).length)).toBe(0);
+    // No label in the bar cut off.
+    expect(await bar.evaluate((b) => [...b.querySelectorAll('.tabbar-label')].filter((l) => l.scrollWidth > l.clientWidth + 1).length)).toBe(0);
     await page.screenshot({ path: test.info().outputPath(`panel-${size.width}x${size.height}.png`) });
     await page.getByTestId('spot-close').click();
 
-    // The bar opens a panel and brings it into view, clear of the bar; tapped again, it closes.
-    await page.evaluate(() => scrollTo(0, 0));
+    // Fill a spot (Picture tab) opens the spot sheet over the bar (M9 part 4: was a panel in the page): its answers on
+    // screen, above the Home bar; its ✕ closes it.
+    await openTab(page, 'picture');
     await page.getByTestId('fill-toggle').click();
-    await expect(page.getByTestId('fill-toggle')).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.locator('#fill-panel')).toBeInViewport();
-    await page.getByTestId('fill-toggle').click();
-    await expect(page.locator('#fill-panel')).toHaveCount(0);
+    await expect(page.getByTestId('fill-sheet')).toBeInViewport();
+    await expect.poll(() => page.getByTestId('fill-sheet').evaluate((e) => e.hasAttribute('data-opening'))).toBe(false);
+    const fill = page.getByTestId('fill-best').getByTestId('fill-fits');
+    if (await fill.count()) {
+      const fb = (await fill.first().boundingBox())!;
+      expect(fb.y + fb.height).toBeLessThanOrEqual(size.height - 34);
+    }
+    await page.getByTestId('fill-sheet-close').click();
+    await expect(page.getByTestId('fill-sheet')).toHaveCount(0);
   }
+  await openTab(page, 'pieces');
 
   // The page filter: one pressed at a time.
   await page.getByTestId('group-border').click();
@@ -327,6 +348,6 @@ test('the action bar: main actions at once, never over the last lines or the ✓
   await expect(note).toContainText('Placed at');
   await expect(note).toBeInViewport({ ratio: 1 });
   const nb = (await note.boundingBox())!;
-  expect(nb.y + nb.height).toBeLessThanOrEqual((await page.getByTestId('action-bar').boundingBox())!.y);
-  await page.screenshot({ path: test.info().outputPath('action-bar.png') });
+  expect(nb.y + nb.height).toBeLessThanOrEqual((await page.getByTestId('puzzle-tabs').boundingBox())!.y);
+  await page.screenshot({ path: test.info().outputPath('tab-bar.png') });
 });

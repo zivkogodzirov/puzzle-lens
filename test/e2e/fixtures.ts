@@ -31,7 +31,21 @@ export const test = base.extend<Fixtures>({
   persistentStorage: [false, { option: true }],
 
   context: async (
-    { context, persistentStorage, playwright, browserName, headless, viewport, screen, userAgent, isMobile, hasTouch, deviceScaleFactor, baseURL, acceptDownloads },
+    {
+      context,
+      persistentStorage,
+      playwright,
+      browserName,
+      headless,
+      viewport,
+      screen,
+      userAgent,
+      isMobile,
+      hasTouch,
+      deviceScaleFactor,
+      baseURL,
+      acceptDownloads,
+    },
     use,
   ) => {
     if (!persistentStorage) {
@@ -66,12 +80,29 @@ export const test = base.extend<Fixtures>({
   problems: [
     async ({ page }, use, testInfo) => {
       const problems: PageProblems = { pageErrors: [], consoleErrors: [], consoleWarnings: [] };
-      page.on('pageerror', (err) => problems.pageErrors.push(`${err.name}: ${err.message}\n${err.stack ?? ''}`.trim()));
+      // WebKit reports a load it cut off because the page was reloaded or left ("Cannot load blob:… / http:… due to
+      // access control checks") as a page error. That is the test navigating, not the app failing (PLAN known issues,
+      // M8 part 4: the old code had it too), so such an error within 3 s of a navigation (it comes just before the
+      // navigation event) is only noted, not failed. Any other page error fails the test as before.
+      const navTimes: number[] = [];
+      const cutOff: Array<{ at: number; text: string }> = [];
+      page.on('framenavigated', (f) => {
+        if (f === page.mainFrame()) navTimes.push(Date.now());
+      });
+      page.on('pageerror', (err) => {
+        const text = `${err.name}: ${err.message}\n${err.stack ?? ''}`.trim();
+        if (/Cannot load [\s\S]* due to access control checks/.test(text)) cutOff.push({ at: Date.now(), text });
+        else problems.pageErrors.push(text);
+      });
       page.on('console', (msg) => {
         if (msg.type() === 'error') problems.consoleErrors.push(msg.text());
         else if (msg.type() === 'warning') problems.consoleWarnings.push(msg.text());
       });
       await use(problems);
+      for (const c of cutOff) {
+        if (navTimes.some((t) => Math.abs(t - c.at) < 3000)) problems.consoleWarnings.push(`(navigation) ${c.text}`);
+        else problems.pageErrors.push(c.text);
+      }
       await attachProblems(testInfo, problems);
       expect(problems.pageErrors, 'uncaught errors in the page').toEqual([]);
     },
@@ -100,6 +131,21 @@ export async function gotoScreen(page: Page, screen: '' | 'live' | 'device' | 's
   // "Attached", not "visible": the Live screen is pinned to the viewport (position: fixed), so its
   // container has no height of its own and Playwright would call it hidden.
   await expect(page.locator(`#app > .app.route-${screen || 'home'}`)).toBeAttached();
+}
+
+/** A puzzle's tabs (M9 part 4): Table (the default), Picture, Pieces, More. */
+export type PuzzleTab = 'table' | 'picture' | 'pieces' | 'more';
+
+/**
+ * Taps one of the open puzzle's tabs in the tab bar and waits for it: what moved off the old puzzle page
+ * (Fill a spot → Picture, the pieces and Joins → Pieces, backup, scanned pieces and details → More) is
+ * found after this.
+ */
+export async function openTab(page: Page, tab: PuzzleTab): Promise<void> {
+  const btn = page.getByTestId(`tab-${tab}`);
+  await btn.click();
+  await expect(btn).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByTestId(`tab-panel-${tab}`)).toBeAttached();
 }
 
 export { expect };

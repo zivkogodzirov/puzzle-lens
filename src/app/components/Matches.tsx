@@ -1,5 +1,6 @@
 /**
- * "Which pieces join" on the puzzle page (M6, the Matches screen of PLAN §5, with "What next"):
+ * "Which pieces join" (M6, the Matches screen of PLAN §5, with "What next"), on its own page from the puzzle's
+ * Pieces tab (#/joins/<id>, M9 part 4: it opened inline before):
  * pairs of pieces that probably join, from where each piece goes on the box picture
  * (src/project/pairs.ts), most likely first. Squares of four pieces whose pairs all agree are marked
  * ✓. Each pair shows the two pieces as photographed and their two spots on the box picture; the
@@ -10,7 +11,7 @@ import type { PairModel, PairSuggestion, BlockSuggestion } from '../../project/p
 import { blockSuggestions, confirmedPairs, pairKey, pairSuggestions, PAIRS } from '../../project/pairs';
 import type { PairAnswerView } from '../../project/pairAnswers';
 import type { PieceRow, Project } from '../../project/types';
-import { useBlobUrl } from '../screens/Puzzle';
+import { useBlobUrl } from '../screens/puzzle/shared';
 import { Icon } from '../ui/icons';
 import { toast } from '../ui/toast';
 import { settings } from '../settings';

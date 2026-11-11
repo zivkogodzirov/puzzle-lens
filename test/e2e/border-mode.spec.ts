@@ -61,21 +61,22 @@ test('Border mode groups pieces by shape and counts them against the grid', asyn
     });
     dbh.close();
   }, pieces);
-  await page.evaluate(() => (location.hash = '#/puzzle/e2e-border'));
+  await page.evaluate(() => (location.hash = '#/puzzle/e2e-border/pieces'));
   await expect(page.getByTestId('group-all')).toContainText('6');
   await expect(page.getByTestId('group-border')).toContainText('3');
   await expect(page.getByTestId('group-interior')).toContainText('2');
-  await expect(page.getByTestId('group-unsure')).toContainText('1');
+  // M9 part 4: "Check" (not sure, to check, faint) took the place of "Not sure".
+  await expect(page.getByTestId('group-check')).toContainText('1');
   await page.getByTestId('group-border').click();
   await expect(page.getByTestId('border-counts')).toContainText('Corners 1 of 4');
   await expect(page.getByTestId('border-counts')).toContainText('Edges 2 of 120');
   await expect(page.locator('[data-testid="catalog"] [data-group]')).toHaveCount(3);
   await expect(page.locator('[data-testid="catalog"] [data-group]').first()).toHaveAttribute('data-group', 'corner');
-  await page.getByTestId('group-unsure').click();
+  await page.getByTestId('group-check').click();
   await expect(page.locator('[data-testid="catalog"] [data-group]')).toHaveCount(1);
   await expect(page.getByTestId('border-warning')).toHaveCount(0);
 
-  // No "Not sure" button when nothing is not sure.
+  // Check stays, with 0, when nothing is to check (M9 part 4: the four segments are always there).
   await page.evaluate(async () => {
     const req = indexedDB.open('puzzle-lens');
     const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
@@ -88,5 +89,6 @@ test('Border mode groups pieces by shape and counts them against the grid', asyn
   });
   await page.reload();
   await expect(page.getByTestId('group-all')).toContainText('5');
+  await expect(page.getByTestId('group-check')).toContainText('0');
   await expect(page.getByTestId('group-unsure')).toHaveCount(0);
 });

@@ -1,7 +1,7 @@
 /**
  * Draws the toast from ui/toast.ts (call `toast({ … })` from anywhere). The role=status region is always
- * there, so VoiceOver announces each new toast. Placed above the puzzle page's action bar (--action-bar-h)
- * or the tab bar, and above the Home bar (safe area). A screen can move it with the CSS variable
+ * there, so VoiceOver announces each new toast. Placed above the puzzle's tab bar (--action-bar-h, M9 part 4)
+ * and above the Home bar (safe area). A screen can move it with the CSS variable
  * --toast-bottom on `.app` (e.g. over a camera's own bottom controls). A toast closes when the screen changes:
  * its Undo belongs to the screen it was shown on.
  */
@@ -16,7 +16,10 @@ const OVER_PAGE = '.live, .photo-result, [role="dialog"]:not([data-testid="spot"
 
 export function ToastHost() {
   const t = currentToast.value;
-  const where = `${route.value}/${routeArg.value ?? ''}`;
+  // A puzzle's tabs and its pages (Which pieces join, Sort into trays) count as one place: an answer's Undo stays
+  // while you move between them (review 2026-11-11).
+  const place = route.value === 'joins' || route.value === 'sort' ? 'puzzle' : route.value;
+  const where = `${place}/${routeArg.value ?? ''}`;
   const first = useRef(true);
   useEffect(() => {
     if (first.current) first.current = false;

@@ -1,12 +1,22 @@
+/**
+ * Home (M9 part 4, design plan §4 item 1): a Large Title, Settings as an icon in the bar, and each puzzle as a
+ * card: its box picture with the name on a dark band, and "24 of 80 in place" with a bar (set-up not finished:
+ * which step is next). The whole card opens the puzzle on its Table tab. Then New puzzle, "Import a backup"
+ * as a footer link (it opens the file picker), the setup guide, and Diagnostics in Tester mode.
+ */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { APP_VERSION, isStandalone, previousEndedUnexpectedly } from '../env';
 import { hasPendingMemoryResult } from '../../device/memoryRunner';
 import { go } from '../router';
-import { listProjects } from '../../project/store';
+import { LAST_SETUP_STEP, listProjects } from '../../project/store';
 import { importBackup } from '../../project/backup';
 import type { Project } from '../../project/types';
-import { logError, logInfo } from '../../log/logger';
-import { boxVersion, errorWords, setupStatus, useBlobUrl } from './Puzzle';
+import { db } from '../../db/db';
+import { placeKeyOf, readPlacements } from '../../project/placements';
+import { answerView } from '../../project/answers';
+import { puzzleProgress } from '../../project/progress';
+import { logError, logInfo, logWarn } from '../../log/logger';
+import { boxVersion, errorWords, setupStatus, useBlobUrl } from './puzzle/shared';
 import { settings } from '../settings';
 import { plural } from '../words';
 import { NavBar } from '../ui/NavBar';
@@ -15,23 +25,72 @@ import { Callout } from '../ui/Callout';
 import { ListRow, ListSection } from '../ui/List';
 import { Icon } from '../ui/icons';
 
-/** One puzzle as a list row: its box picture (or a puzzle icon), name, pieces and grid, set-up status; opens the puzzle. */
-function PuzzleRow({ p }: { p: Project }) {
+/**
+ * How many spots of the puzzle are done, as its Picture tab counts them (src/project/progress.ts), without
+ * reading every piece: only the pieces put in the puzzle, the stored empty spots of the last puzzle photo,
+ * and the "It fits" answers. Null without a grid.
+ */
+async function inPlace(p: Project): Promise<{ done: number; cells: number } | null> {
+  if (!p.grid) return null;
+  const [placed, cache] = await Promise.all([db().pieces.where('[projectId+status]').equals([p.id, 'placed']).toArray(), readPlacements(p.id)]);
+  const key = placeKeyOf(p);
+  const places = key && cache?.boxKey === key ? cache : null;
+  const taken = new Set(answerView(p).taken.keys());
+  const open = places?.open?.cells.length ? places.open.cells.filter(([c, r]) => !taken.has(`${c},${r}`)) : null;
+  const prog = puzzleProgress({
+    grid: p.grid,
+    pieces: placed,
+    shown: new Map(),
+    open,
+    gapCount: !places?.open?.cells.length && p.openSpots ? p.openSpots.gaps.length : null,
+    taken,
+    finished: Boolean(p.finishedAt && !p.openSpots),
+  });
+  return { done: prog.done, cells: prog.cells };
+}
+
+/** One puzzle as a card: box picture (or the puzzle icon) with its name on a band, then how far it is; opens the puzzle. */
+function PuzzleCard({ p }: { p: Project }) {
   const thumb = useBlobUrl(p.box?.rectifiedBlobId, boxVersion(p.box));
+  const setupDone = p.setupStep >= LAST_SETUP_STEP;
+  const [prog, setProg] = useState<{ done: number; cells: number } | null>(null);
+  useEffect(() => {
+    let live = true;
+    if (setupDone)
+      inPlace(p)
+        .then((v) => live && setProg(v))
+        .catch((err) => logWarn('home', 'How far a puzzle is could not be read', err));
+    return () => {
+      live = false;
+    };
+  }, [p.id, p.updatedAt]);
+  const meta = `${p.pieceCount ? plural(p.pieceCount, 'piece') : 'Piece count not set'}${p.grid ? ` · ${p.grid.cols} × ${p.grid.rows}` : ''}`;
   return (
-    <ListRow
-      icon={thumb ? <img src={thumb} alt="" /> : <Icon name="puzzle" />}
-      title={<strong class="puzzle-title">{p.name}</strong>}
-      subtitle={
-        <>
-          {p.pieceCount ? plural(p.pieceCount, 'piece') : 'Piece count not set'}
-          {p.grid ? ` · ${p.grid.cols} × ${p.grid.rows}` : ''}
-          <span class="puzzle-row-status">{setupStatus(p)}</span>
-        </>
-      }
-      href={`#/puzzle/${encodeURIComponent(p.id)}`}
-      testId="puzzle-card"
-    />
+    <li>
+      <a class="home-card" href={`#/puzzle/${encodeURIComponent(p.id)}`} data-testid="puzzle-card">
+        <span class={`home-card-picture${thumb ? '' : ' is-empty'}`}>
+          {thumb ? <img src={thumb} alt="" /> : <Icon name="puzzle" size={40} />}
+          <strong class="home-card-name">{p.name}</strong>
+        </span>
+        <span class="home-card-body">
+          {setupDone ? (
+            <>
+              <span class="home-card-progress" data-testid="puzzle-card-progress">
+                {prog ? `${prog.done} of ${prog.cells} in place` : p.grid ? ' ' : 'Grid not set'}
+              </span>
+              {prog && (
+                <span class="home-card-bar" aria-hidden="true">
+                  <span style={{ width: `${(100 * prog.done) / Math.max(1, prog.cells)}%` }} />
+                </span>
+              )}
+            </>
+          ) : (
+            <span class="home-card-progress home-card-setup">{setupStatus(p)}</span>
+          )}
+          <span class="home-card-meta">{meta}</span>
+        </span>
+      </a>
+    </li>
   );
 }
 
@@ -80,20 +139,18 @@ function YourPuzzles() {
 
   return (
     <section data-testid="your-puzzles">
-      <Button variant="filled" block testId="new-puzzle" onClick={() => go('new')}>
-        <Icon name="plus" size={20} /> New puzzle
-      </Button>
       {projects === null && <p class="muted small">Loading…</p>}
       {projects?.length === 0 && <p class="muted small">No puzzles yet. Tap "New puzzle" to start your first one.</p>}
       {projects && projects.length > 0 && (
-        <div class="home-puzzles">
-          <ListSection header="Your puzzles">
-            {projects.map((p) => (
-              <PuzzleRow key={p.id} p={p} />
-            ))}
-          </ListSection>
-        </div>
+        <ul class="home-cards" role="list" aria-label="Your puzzles">
+          {projects.map((p) => (
+            <PuzzleCard key={p.id} p={p} />
+          ))}
+        </ul>
       )}
+      <Button variant="filled" block testId="new-puzzle" onClick={() => go('new')}>
+        <Icon name="plus" size={20} /> New puzzle
+      </Button>
       {note && (
         <Callout kind="good" testId="import-done">
           {note}
@@ -104,12 +161,14 @@ function YourPuzzles() {
           {error}
         </Callout>
       )}
-      {/* A label, so a tap anywhere on it opens the file picker (the input inside is hidden). */}
-      <label class={`btn btn-plain btn-small file-btn home-import${importing ? ' is-busy' : ''}`} data-testid="import-backup">
-        <Icon name="download" size={20} />
-        {importing ? 'Importing…' : 'Import a backup'}
-        <input ref={input} class="hidden-input" type="file" data-testid="import-file" disabled={importing} onChange={() => void onImport()} />
-      </label>
+      {/* A footer link (design plan §4 item 1). A label, so a tap anywhere on it opens the file picker (the input inside is hidden). */}
+      <div class="home-import">
+        <label class={`btn btn-plain btn-small file-btn${importing ? ' is-busy' : ''}`} data-testid="import-backup">
+          <Icon name="download" size={20} />
+          {importing ? 'Importing…' : 'Import a backup'}
+          <input ref={input} class="hidden-input" type="file" data-testid="import-file" disabled={importing} onChange={() => void onImport()} />
+        </label>
+      </div>
     </section>
   );
 }
@@ -121,7 +180,11 @@ export function HomeScreen() {
   const tester = settings.testerMode.value;
   return (
     <main class="screen">
-      <NavBar title="Puzzle Lens" large back={false} />
+      <NavBar title="Puzzle Lens" large back={false}>
+        <a class="btn-icon home-settings" href="#/settings" aria-label="Settings" data-testid="tool-settings">
+          <Icon name="settings" />
+        </a>
+      </NavBar>
 
       {!isStandalone.value && (
         <Callout kind="warn" icon={<Icon name="share" />} title="Install first, then start your puzzle there." testId="install-banner">
@@ -199,7 +262,6 @@ export function HomeScreen() {
 
       <ListSection>
         <ListRow icon={<Icon name="compass" />} tone="accent" title="Setup guide" subtitle="Step by step" href="#/help" testId="tool-help" />
-        <ListRow icon={<Icon name="settings" />} title="Settings" subtitle="Units, camera, data" href="#/settings" testId="tool-settings" />
       </ListSection>
 
       <p class="muted small home-version">Version {APP_VERSION}</p>

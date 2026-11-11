@@ -7,7 +7,7 @@
  * lesson: it lands on "It fits" or on nothing, never on another button).
  */
 import type { Locator, Page } from '@playwright/test';
-import { test, expect } from './fixtures';
+import { test, expect, openTab } from './fixtures';
 import { cardSettled, pieceRow, seedCard, thumbs } from './place-seed';
 
 test.setTimeout(180_000);
@@ -211,8 +211,9 @@ test('Point it out: the live view pulses this piece; closing it brings the card 
 
 test('Fill a spot: a candidate’s picture opens its card on that spot; the answers there are “Not there” / “It fits”', async ({ page }) => {
   await seedCard(page);
-  await page.getByTestId('fill-toggle').click();
-  // r3c7's spot: column 8, row 4.
+  // Fill a spot is on the Picture tab (M9 part 4).
+  await openTab(page, 'picture');
+  // r3c7's spot: column 8, row 4 (a tap on the map opens its spot sheet).
   const svg = page.getByTestId('fill-picture');
   const b = await box(svg);
   await svg.click({ position: { x: (7.5 / 10) * b.width, y: (3.5 / 8) * b.height } });
@@ -316,8 +317,8 @@ test('a quick tap right after opening lands on It fits or on nothing, never on a
 test('Reduce Motion: the card appears at once; a tap on It fits right away counts and It fits doesn’t move under the finger', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await seedCard(page);
-  // The pieces at the bottom of the screen, just above the action bar (where the old panel opened out of sight).
-  const bar = (await box(page.getByTestId('action-bar'))).y;
+  // The pieces at the bottom of the screen, just above the tab bar (where the old panel opened out of sight).
+  const bar = (await box(page.getByTestId('puzzle-tabs'))).y;
   await page.evaluate((bottom) => {
     const g = document.querySelector('[data-testid="catalog"]')!.getBoundingClientRect();
     scrollBy(0, g.bottom - bottom + 4);

@@ -74,10 +74,10 @@ export function AccuracyScreen() {
   const pa = state?.pairs;
   return (
     <main class="screen">
-      {/* One puzzle's answers: back to that puzzle (under its name). All puzzles: back to Settings, where it opens from. */}
+      {/* One puzzle's answers: back to that puzzle's More tab, where it opens from (under the puzzle's name). All puzzles: back to Settings, where it opens from. */}
       <TopBar
         title="How often is the app right?"
-        back={id ? { label: state?.name ?? 'Puzzle', route: 'puzzle', arg: id } : { label: 'Settings', route: 'settings' }}
+        back={id ? { label: state?.name ?? 'Puzzle', route: 'puzzle', arg: id, sub: 'more' } : { label: 'Settings', route: 'settings' }}
       />
       {!a ? (
         <p class="muted small">Loading…</p>

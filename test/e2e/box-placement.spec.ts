@@ -7,7 +7,7 @@ import { createCanvas } from '@napi-rs/canvas';
 import { extractPatch } from '../../src/cv/placement';
 import type { Vec2 } from '../../src/project/types';
 import { generatePuzzle } from '../synth/index';
-import { test, expect, gotoScreen } from './fixtures';
+import { test, expect, gotoScreen, openTab } from './fixtures';
 
 const pz = generatePuzzle({ cols: 10, rows: 8, cellMm: [17.8, 19.4], seed: 5 });
 const art = pz.art;
@@ -184,7 +184,9 @@ async function seed(
     [jpeg(false, art.width, art.height, castBox), patches, art.width, art.height, open, cache] as const,
   );
   expect(seeded).toBe('ok');
-  await page.evaluate(() => (location.hash = '#/puzzle/e2e-place'));
+  // M9 part 4: the pieces, their summary and Joins are on the Pieces tab; Fill a spot, the empty spots, the box
+  // picture's fit and Progress on Picture; "How often is the app right?" on More.
+  await page.evaluate(() => (location.hash = '#/puzzle/e2e-place/pieces'));
 }
 
 /**
@@ -220,18 +222,18 @@ test('pieces are placed on the box picture; tapping one shows its spot', async (
   await eachPieceAtItsCell(page);
   await page.screenshot({ path: test.info().outputPath('box-placement.png'), fullPage: true });
 
-  // Fill this spot: tap the cell of piece r3c7 (row 3, column 7): that piece is offered for it.
-  await page.getByTestId('fill-toggle').click();
+  // Fill this spot: tap the cell of piece r3c7 (row 3, column 7) on the Picture tab's map: its spot sheet offers that piece (M9 part 4).
+  await openTab(page, 'picture');
   await tapCell(page, 'fill-picture', 7, 3);
-  await expect(page.getByTestId('fill-spot-name')).toContainText('Column 8, row 4');
+  await expect(page.getByTestId('fill-spot-name')).toHaveText('Column 8 · Row 4');
   await expect(page.getByTestId('fill-best').getByTestId('fill-cand')).toHaveCount(1);
   await expect(page.getByTestId('fill-best')).toContainText('%');
-  // One cell to the right (arrow), then back by tapping the close-up (9 × 8 cells, from column 1 here).
+  // One cell to the right (arrow), then back by tapping the close-up (5 × 3 cells, from column 6, row 3 here).
   await page.getByRole('button', { name: 'Right' }).click();
-  await expect(page.getByTestId('fill-spot-name')).toContainText('Column 9, row 4');
+  await expect(page.getByTestId('fill-spot-name')).toHaveText('Column 9 · Row 4');
   await expect(page.getByTestId('fill-best')).toHaveCount(0);
-  await tapCell(page, 'fill-zoom', 7, 3, { x0: 1, y0: 0, w: 9, h: 8 });
-  await expect(page.getByTestId('fill-spot-name')).toContainText('Column 8, row 4');
+  await tapCell(page, 'fill-zoom', 7, 3, { x0: 5, y0: 2, w: 5, h: 3 });
+  await expect(page.getByTestId('fill-spot-name')).toHaveText('Column 8 · Row 4');
   await expect(page.getByTestId('fill-best').getByTestId('fill-cand')).toHaveCount(1);
   await page.screenshot({ path: test.info().outputPath('fill-spot.png'), fullPage: true });
 });
@@ -241,10 +243,12 @@ test('with empty spots from an upside-down finished-puzzle photo: pieces go only
   const cells: Array<[number, number]> = [...ids.map((pid) => pid.slice(1).split('c').map(Number).reverse() as [number, number]), [0, 7], [9, 0]];
   const gaps = cells.map(([c, r]) => [9 - c, 7 - r] as [number, number]);
   await seed(page, { gaps, thumb: jpeg(true, 10 * 8, 8 * 8) });
+  await openTab(page, 'picture');
   await expect(page.getByTestId('open-spots')).toContainText('8 empty spots', { timeout: 60_000 });
   // Saved before knob shapes were read: the page says how to switch them on.
   await expect(page.getByTestId('knobs-off')).toContainText('choose your photo of the puzzle with its holes again');
   await expect(page.getByTestId('knobs-off')).toContainText('scan your leftover pieces again (all of them');
+  await openTab(page, 'pieces');
   await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
   // The card's "Whole picture": the 8 empty spots outlined, this piece's spot marked.
   await eachPieceAtItsCell(page, async () => {
@@ -254,24 +258,30 @@ test('with empty spots from an upside-down finished-puzzle photo: pieces go only
   });
   await page.screenshot({ path: test.info().outputPath('box-placement-open-spots.png'), fullPage: true });
   // Fill this spot among the empty spots: a tap snaps to the nearest one (a tap far from all is in the unit tests).
-  await page.getByTestId('fill-toggle').click();
+  await openTab(page, 'picture');
   await expect(page.getByTestId('fill-picture').locator('rect.spot-open')).toHaveCount(8);
   await tapCell(page, 'fill-picture', 4, 4);
-  await expect(page.getByTestId('fill-spot-name')).toContainText('Column 5, row 6');
+  await expect(page.getByTestId('fill-spot-name')).toHaveText('Column 5 · Row 6');
   await expect(page.getByTestId('fill-best').getByTestId('fill-cand')).toHaveCount(1);
+  await page.getByTestId('fill-sheet-close').click();
+  await expect(page.getByTestId('fill-sheet')).toHaveCount(0);
   // A spot whose piece wasn't scanned (one of the two extra gaps): nobody fits it.
   await tapCell(page, 'fill-picture', 0, 7);
-  await expect(page.getByTestId('fill-spot-name')).toContainText('Column 1, row 8');
+  await expect(page.getByTestId('fill-spot-name')).toHaveText('Column 1 · Row 8');
   await expect(page.getByTestId('fill-best')).toHaveCount(0);
+  await page.getByTestId('fill-sheet-close').click();
+  await expect(page.getByTestId('fill-sheet')).toHaveCount(0);
   // Back to the whole picture.
   await page.getByTestId('whole-picture').click();
   await expect(page.getByTestId('open-spots')).toHaveCount(0);
+  await openTab(page, 'pieces');
   await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
 });
 
 test('a box picture that is too big: the pieces show it, and the app corrects it (or not, on "Not now")', async ({ page }) => {
   await seed(page, null, misfitCache(art.width, art.height));
   await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
+  await openTab(page, 'picture');
   await expect(page.getByTestId('box-fit')).toContainText('bigger than the real puzzle', { timeout: 30_000 });
   await expect(page.getByTestId('box-fit')).toContainText('up to 0.2');
   await page.screenshot({ path: test.info().outputPath('box-fit.png'), fullPage: true });
@@ -296,16 +306,20 @@ test('a box picture that is too big: the pieces show it, and the app corrects it
   expect(box.corners[2]![0]).toBeCloseTo(9.8 * cw, -1);
   expect(box.corners[2]![1]).toBeCloseTo(7.88 * ch, -1);
   // The real pieces are placed again on the corrected picture.
+  await openTab(page, 'pieces');
   await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
 });
 
 test('"Not now" on the box picture correction is remembered', async ({ page }) => {
   await seed(page, null, misfitCache(art.width, art.height));
+  await openTab(page, 'picture');
   await expect(page.getByTestId('box-fit')).toBeVisible({ timeout: 60_000 });
   await page.getByTestId('box-fit-dismiss').click();
   await expect(page.getByTestId('box-fit')).toHaveCount(0);
   await page.reload();
+  await openTab(page, 'pieces');
   await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
+  await openTab(page, 'picture');
   await expect(page.getByTestId('box-fit')).toHaveCount(0);
 });
 
@@ -342,19 +356,26 @@ test('Fits / Doesn’t fit (M5 part 2): ruled-out spots, a piece into the puzzle
   await page.getByTestId('spot-fits').click();
   await expect(page.getByTestId('in-puzzle')).toContainText('1 in the puzzle');
 
-  // Fill this spot: r3c7's spot (column 8, row 4); "Fits" there fills it.
-  await page.getByTestId('fill-toggle').click();
+  // Fill this spot: r3c7's spot (column 8, row 4); "It fits" there fills it (M9 part 4: the spot sheet closes, with Undo in a toast).
+  await openTab(page, 'picture');
   await tapCell(page, 'fill-picture', 7, 3);
   await expect(page.getByTestId('fill-best').getByTestId('fill-cand')).toHaveCount(1);
   await page.getByTestId('fill-best').getByTestId('fill-fits').click();
+  await expect(page.getByTestId('fill-sheet')).toHaveCount(0);
+  await expect(page.getByTestId('toast-text')).toContainText('Placed at 8·4');
+  await tapCell(page, 'fill-picture', 7, 3);
   await expect(page.getByTestId('fill-filled')).toBeVisible();
-  await expect(page.getByTestId('in-puzzle')).toContainText('2 in the puzzle');
+  await page.getByTestId('fill-sheet-close').click();
+  await expect(page.getByTestId('fill-sheet')).toHaveCount(0);
   // The filled spot of r1c2 offers nobody either.
   await tapCell(page, 'fill-picture', 2, 1);
   await expect(page.getByTestId('fill-filled')).toBeVisible();
 
   // "Not a piece": r6c8 (last in id order now that two are in the puzzle) is removed at one tap (M9 part 3: then Undo).
-  await page.getByTestId('fill-toggle').click();
+  await page.getByTestId('fill-sheet-close').click();
+  await expect(page.getByTestId('fill-sheet')).toHaveCount(0);
+  await openTab(page, 'pieces');
+  await expect(page.getByTestId('in-puzzle')).toContainText('2 in the puzzle');
   await expect(thumbs).toHaveCount(4);
   await thumbs.nth(3).click();
   await page.getByTestId('spot-remove').click();
@@ -367,6 +388,7 @@ test('Fits / Doesn’t fit (M5 part 2): ruled-out spots, a piece into the puzzle
   await expect(page.getByTestId('in-puzzle-list')).toContainText('Column 3, row 2');
 
   // Accuracy: two first-choice answers, both right (the undone one and the taken-back "doesn't fit" are left out).
+  await openTab(page, 'more');
   await page.getByTestId('accuracy-link').click();
   await expect(page.getByTestId('accuracy')).toContainText('2 answers');
   await expect(page.getByTestId('acc-all')).toContainText('2 of 2');
@@ -399,17 +421,19 @@ test('pieces to check (M5 part 3): "same piece" merges it into the known one, "a
     dbh.close();
   });
   await page.reload();
-  await expect(page.getByTestId('pending-panel')).toContainText('2 pieces to check', { timeout: 30_000 });
+  await expect(page.getByTestId('pending-panel')).toContainText('Pieces to check (2)', { timeout: 30_000 });
   await expect(page.getByTestId('pending-tag')).toHaveCount(2);
   const thumbs = page.locator('[data-testid="catalog"] .thumb-btn');
   await expect(thumbs).toHaveCount(8);
+  // M9 part 4: the callout sits under the Pieces tab's header, whose place summary grows once the spots are found.
+  await expect(page.getByTestId('place-summary')).toContainText('On the box picture', { timeout: 60_000 });
   await page.getByTestId('pending-toggle').click();
   await expect(page.getByTestId('pending-row')).toHaveCount(2);
   await page.getByTestId('pending-panel').screenshot({ path: test.info().outputPath('pending.png') });
   // The first is r1c2, moved: merged (7 pieces left); the second is a new piece.
   await page.getByTestId('pending-row').nth(0).getByTestId('pending-same').nth(0).click();
   await expect(thumbs).toHaveCount(7);
-  await expect(page.getByTestId('pending-panel')).toContainText('1 piece to check');
+  await expect(page.getByTestId('pending-panel')).toContainText('Pieces to check (1)');
   await page.getByTestId('pending-new').click();
   await expect(page.getByTestId('pending-panel')).toHaveCount(0);
   await expect(thumbs).toHaveCount(7);
@@ -439,7 +463,10 @@ test('which pieces join (M6): a square of 4 first, then a pair; They fit / Don�
   await expect(page.getByTestId('match-next')).toContainText('These two join');
   await expect(page.getByTestId('match-next')).toContainText('side by side');
   await expect(page.getByTestId('match-next')).toContainText('Column 7–8, row 6');
+  // M9 part 4: the joins are a page of their own; the count is on the Pieces tab's row.
+  await page.getByTestId('navbar-back').click();
   await expect(page.getByTestId('matches-count')).toHaveText('1');
+  await page.getByTestId('matches-toggle').click();
   // Don't fit: not suggested again; Undo brings it back.
   await page.getByTestId('match-next').getByTestId('match-not').click();
   await expect(page.getByTestId('toast-text')).toContainText('isn’t suggested again');
@@ -454,7 +481,7 @@ test('which pieces join (M6): a square of 4 first, then a pair; They fit / Don�
   await page.getByTestId('match-unjoin').first().click();
   await expect(page.getByTestId('match-joined')).toContainText('4 pairs joined');
   // A piece's partners: r2c3 (the square's top left; first in id order) has r2c4 on its right and r3c3 below it.
-  await page.getByTestId('matches-toggle').click();
+  await page.getByTestId('navbar-back').click();
   // (M9 part 3: behind the card's "Partners (2)".)
   await page.locator('[data-testid="catalog"] .thumb-btn').nth(1).click();
   await expect(page.getByTestId('spot-partners')).toHaveText(/Partners \(2\)/);
@@ -469,6 +496,7 @@ test('which pieces join (M6): a square of 4 first, then a pair; They fit / Don�
   await page.getByTestId('spot').screenshot({ path: test.info().outputPath('partners.png') });
   await page.getByTestId('spot-close').click();
   // Accuracy: 5 pairs tried and kept (the "don't fit" and the taken-back one are left out), 4 from the square.
+  await openTab(page, 'more');
   await page.getByTestId('accuracy-link').click();
   await expect(page.getByTestId('acc-pairs')).toContainText('4 pairs tried');
   await expect(page.getByTestId('acc-pairs-square')).toContainText('3 of 3');
@@ -484,8 +512,9 @@ test('progress page (M7 part 2): in the puzzle, known spots on the box picture, 
   await page.locator('[data-testid="catalog"] .thumb-btn').nth(0).click();
   await page.getByTestId('spot-fits').click();
   await expect(page.getByTestId('in-puzzle')).toContainText('1 in the puzzle');
-  await page.getByTestId('progress-link').click();
-  await expect(page.getByTestId('progress-done')).toContainText('1 of 80 pieces in the puzzle');
+  // Progress is on the Picture tab (M9 part 4; it was its own page).
+  await openTab(page, 'picture');
+  await expect(page.getByTestId('progress-done')).toContainText('1 of 80 · 79 to go');
   await expect(page.getByTestId('progress-source')).toContainText('The pieces you said fit');
   // The five pieces left show their spots; the rest of the picture is dark.
   await expect(page.getByTestId('progress-map').locator('ellipse')).toHaveCount(5);
@@ -493,7 +522,8 @@ test('progress page (M7 part 2): in the puzzle, known spots on the box picture, 
   await expect(page.getByTestId('progress-placed')).toContainText('1');
   await expect(page.getByTestId('progress-left')).toContainText('79 spots still empty');
   await expect(page.getByTestId('progress-left')).toContainText('the piece is known for 5');
-  await expect(page.getByTestId('progress-accuracy')).toContainText('First choice of spot right 1 of 1');
+  // How often the app is right: on More in Tester mode (M9 part 4), not on Picture.
+  await expect(page.getByTestId('progress-accuracy')).toHaveCount(0);
   await expect(page.getByTestId('progress-batch')).toContainText('Batch 1');
   await page.screenshot({ path: test.info().outputPath('progress.png'), fullPage: true });
 });
@@ -522,14 +552,18 @@ test('a new photo of the puzzle (M7 part 4): spots filled since are counted, the
     dbh.close();
   }, gaps2);
   await page.reload();
-  await expect(page.getByTestId('photo-placed')).toContainText('3 spots filled since the last one', { timeout: 60_000 });
-  await expect(page.getByTestId('photo-placed')).toContainText('The 2 pieces the app had for them are now counted as in the puzzle');
-  await expect(page.getByTestId('in-puzzle')).toContainText('2 in the puzzle');
-  await page.getByTestId('photo-placed').screenshot({ path: test.info().outputPath('photo-placed.png') });
+  await expect(page.getByTestId('in-puzzle')).toContainText('2 in the puzzle', { timeout: 60_000 });
   await page.getByTestId('in-puzzle').click();
   await expect(page.getByTestId('in-puzzle-list')).toContainText('from your puzzle photo');
+  // What the photo changed: on the Picture tab.
+  await openTab(page, 'picture');
+  await expect(page.getByTestId('photo-placed')).toContainText('3 spots filled since the last one', { timeout: 60_000 });
+  await expect(page.getByTestId('photo-placed')).toContainText('The 2 pieces the app had for them are now counted as in the puzzle');
+  await page.getByTestId('photo-placed').screenshot({ path: test.info().outputPath('photo-placed.png') });
   // Undo puts both back on the table.
   await page.getByTestId('photo-placed-undo').click();
+  await expect(page.getByTestId('photo-placed')).toHaveCount(0);
+  await openTab(page, 'pieces');
   await expect(page.getByTestId('in-puzzle')).toHaveCount(0);
   await expect(page.locator('[data-testid="catalog"] .thumb-btn')).toHaveCount(6);
 });
@@ -550,7 +584,7 @@ test('"It’s in the puzzle" (M7 part 4): a piece whose spot isn’t sure can be
   await expect(page.getByTestId('in-puzzle')).toContainText('1 in the puzzle');
   await page.getByTestId('in-puzzle').click();
   await expect(page.getByTestId('in-puzzle-list')).toContainText('In the puzzle (spot not known)');
-  await page.getByTestId('progress-link').click();
+  await openTab(page, 'picture');
   await expect(page.getByTestId('progress-placed')).toContainText('1');
 });
 

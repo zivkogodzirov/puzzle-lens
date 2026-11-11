@@ -19,7 +19,7 @@ import type { SpotChoice } from '../../cv/openSpots';
 import type { SidePartners } from '../../project/pairs';
 import { frameSide, SIDE_WORDS } from '../../project/progress';
 import type { PieceRow, Project } from '../../project/types';
-import { useBlobUrl } from '../screens/Puzzle';
+import { useBlobUrl } from '../screens/puzzle/shared';
 import { settings } from '../settings';
 import { Icon } from '../ui/icons';
 import { Sheet } from '../ui/Sheet';

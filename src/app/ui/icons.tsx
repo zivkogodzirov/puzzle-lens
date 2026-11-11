@@ -23,7 +23,7 @@
  *
  * ---------------------------------------------------------------------------------------------------------
  * Emoji and symbols in the app today → the icon that replaces them (for the screen-by-screen switch in
- * M9 part 2 round 2). Places are src/app/<file>:<line> as of this commit. One glyph per concept:
+ * M9 part 2 round 2). Places are src/app/<file>:<line> as of that commit (M9 part 4 split screens/Puzzle.tsx into screens/puzzle/). One glyph per concept:
  * camera = Scan, scan-eye = Live view, image = a picture from Photos, puzzle = pieces, target = Fill a spot,
  * link = Joins (pairs), inbox = Trays, flask-conical = Tester (🧪).
  *

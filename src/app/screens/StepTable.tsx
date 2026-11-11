@@ -8,7 +8,7 @@ import { MARKER_COUNT, MARKER_PLACES, suggestedMarkerCentres } from '../../marke
 import type { Project, SnapRow } from '../../project/types';
 import type { TableSetupResult } from '../../cv/tableSetup';
 import { logError, logInfo } from '../../log/logger';
-import { errorWords } from './Puzzle';
+import { errorWords } from './puzzle/shared';
 
 type Phase =
   | { kind: 'intro' }

@@ -9,11 +9,10 @@ import { ReportScreen } from './screens/Report';
 import { HelpScreen } from './screens/Help';
 import { LogScreen } from './screens/Log';
 import { MarkerSheetsScreen, NewPuzzleScreen } from './screens/NewPuzzle';
-import { PuzzleScreen } from './screens/Puzzle';
+import { PuzzleScreen } from './screens/puzzle/PuzzleScreen';
 import { TrayLabelsScreen } from './screens/TrayLabels';
 import { TestSteps } from './components/TestSteps';
 import { AccuracyScreen } from './screens/Accuracy';
-import { ProgressScreen } from './screens/Progress';
 import { useShell } from './shell';
 import { UiGallery } from './screens/UiGallery';
 import { UiHost } from './ui/Host';
@@ -32,12 +31,12 @@ export function App() {
       {r === 'help' && <HelpScreen />}
       {r === 'log' && <LogScreen />}
       {r === 'new' && <NewPuzzleScreen />}
-      {r === 'puzzle' && <PuzzleScreen />}
+      {/* M9 part 4 pieces: the Pieces tab's pages (#/joins/<id>, #/sort/<id>) are drawn by the puzzle screen, which stays mounted (no reload). */}
+      {(r === 'puzzle' || r === 'joins' || r === 'sort') && <PuzzleScreen />}
       {r === 'markers' && <MarkerSheetsScreen />}
       {r === 'scan' && <ScanScreen />}
       {r === 'trays' && <TrayLabelsScreen />}
       {r === 'accuracy' && <AccuracyScreen />}
-      {r === 'progress' && <ProgressScreen />}
       {r === 'ui' && <UiGallery />}
       <UiHost />
       <TestSteps />

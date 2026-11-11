@@ -2,13 +2,13 @@
  * Navigation bar (M9 part 2, design plan §3.5): sticky at the top of a screen on a see-through material,
  * full width under the status bar. A hairline appears under it once the page scrolls.
  * - Back is an accent chevron plus the **parent** screen's title, and always goes to that parent
- *   (e.g. Progress → "‹ Harbour" → the puzzle page), not the browser's history;
+ *   (e.g. Tray labels → "‹ Harbour" → the puzzle's Pieces tab), not the browser's history;
  * - trailing: the screen's own 44 px buttons (children; use `.navbar-btn` for words, `.btn-icon` for an
  *   icon), then the 🧪 test-steps button (Tester mode);
  * - `large`: the title is a Large Title (34 px) under the bar, for root screens; once it has scrolled
  *   away, the small title shows in the bar.
  *
- *   <NavBar title="Progress" back={{ label: puzzle.name, route: 'puzzle', arg: puzzle.id }}>
+ *   <NavBar title="Tray labels" back={{ label: puzzle.name, route: 'puzzle', arg: puzzle.id, sub: 'pieces' }}>
  *     <button class="navbar-btn">Edit</button>
  *   </NavBar>
  *
@@ -18,7 +18,7 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { TestButton } from '../components/TestSteps';
-import { go, type Route } from '../router';
+import { type Route, goBack } from '../router';
 
 export interface NavBack {
   /** The parent screen's title, as its own heading says it (e.g. "Home", "Settings", the puzzle's name). */
@@ -26,6 +26,8 @@ export interface NavBack {
   route: Route;
   /** The parent's argument, e.g. the puzzle id for `#/puzzle/<id>`. */
   arg?: string | null;
+  /** The part after the argument, e.g. a puzzle's tab for `#/puzzle/<id>/more` (M9 part 4). */
+  sub?: string | null;
   /** The button's VoiceOver name (default "Back to <label>"). */
   ariaLabel?: string;
 }
@@ -81,7 +83,7 @@ export function NavBar({ title, back = false, large = false, testButton = true, 
                 class="navbar-back"
                 aria-label={back.ariaLabel ?? `Back to ${back.label}`}
                 data-testid="navbar-back"
-                onClick={() => go(back.route, back.arg)}
+                onClick={() => goBack(back.route, back.arg, back.sub)}
               >
                 <Chevron />
                 <span class="navbar-back-label">{back.label}</span>

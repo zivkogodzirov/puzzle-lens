@@ -6,7 +6,7 @@
 import { useEffect, useRef } from 'preact/hooks';
 import { holdAwake } from '../camera/wakeLock';
 import { getCurrentProjectId, getProject } from '../project/store';
-import { hashFor, route, routeArg, type Route } from './router';
+import { hashFor, route, routeArg, routeSub, type Route } from './router';
 import { logInfo, logWarn } from '../log/logger';
 
 export const APP_NAME = 'Puzzle Lens';
@@ -26,19 +26,21 @@ const SCREEN_NAME: Record<Route, string> = {
   scan: 'Scan pieces',
   trays: 'Tray labels',
   accuracy: 'How often is the app right?',
-  progress: 'Progress',
   ui: 'Components',
+  // M9 part 4 pieces: pages pushed from a puzzle's Pieces tab.
+  joins: 'Which pieces join',
+  sort: 'Sort into trays',
 };
 
 /** Screens about one puzzle (`#/<screen>/<puzzle id>`): their title names the puzzle. */
-const PUZZLE_SCREENS: ReadonlySet<Route> = new Set(['puzzle', 'new', 'markers', 'scan', 'trays', 'accuracy', 'progress']);
+const PUZZLE_SCREENS: ReadonlySet<Route> = new Set(['puzzle', 'new', 'markers', 'scan', 'trays', 'accuracy', /* M9 part 4 pieces: */ 'joins', 'sort']);
 
-/** Screens that keep the screen on while open (the camera keeps it on by itself). */
-const AWAKE_SCREENS: ReadonlySet<Route> = new Set(['puzzle', 'progress']);
+/** Screens that keep the screen on while open (the camera keeps it on by itself): every tab of a puzzle (M9 part 4). */
+const AWAKE_SCREENS: ReadonlySet<Route> = new Set(['puzzle', /* M9 part 4 pieces: pages pushed from the Pieces tab */ 'joins', 'sort']);
 
 /**
- * The page title: "Puzzle Lens" on Home, "Harbour · Puzzle Lens" on a puzzle's page,
- * "Progress · Harbour · Puzzle Lens" on its other screens, "Settings · Puzzle Lens" elsewhere.
+ * The page title: "Puzzle Lens" on Home, "Harbour · Puzzle Lens" on a puzzle's page (all its tabs),
+ * "Tray labels · Harbour · Puzzle Lens" on its other screens, "Settings · Puzzle Lens" elsewhere.
  */
 export function screenTitle(r: Route, puzzleName?: string | null): string {
   if (r === 'home') return APP_NAME;
@@ -90,7 +92,8 @@ export function useShell(): void {
 
 /**
  * At launch with no address (the Home Screen app opens at its start address), reopens the puzzle
- * open last time, if it still exists, with Home one Back step behind it. An address (a deep link, a
+ * open last time, if it still exists, on its Table tab (`#/puzzle/<id>`, M9 part 4 decision 3), with Home
+ * one Back step behind it. An address (a deep link, a
  * reload of any screen, `#/` for Home) wins.
  */
 export async function reopenLastPuzzle(waitMs = 2000): Promise<void> {
@@ -113,6 +116,7 @@ async function reopen(moved: () => boolean): Promise<void> {
     history.pushState(null, '', hashFor('puzzle', p.id));
     route.value = 'puzzle';
     routeArg.value = p.id;
+    routeSub.value = null;
     logInfo('app', `Reopened the last puzzle: ${p.name}`);
   } catch (err) {
     logWarn('app', 'The last puzzle could not be reopened', err);

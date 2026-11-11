@@ -40,7 +40,7 @@ import { MARKER_SHEET_PRINT_CSS, markerSheetSvg, markerSheetsHtml, SHEET_COUNT }
 import { CHECK_BAR_MM, MARKER_COUNT } from '../../markers/layout';
 import { shareOrDownload } from '../../report/share';
 import { logError, logInfo, logWarn } from '../../log/logger';
-import { errorWords, setupSteps, UNREADABLE_PHOTO, useBlobUrl } from './Puzzle';
+import { errorWords, setupSteps, UNREADABLE_PHOTO, useBlobUrl } from './puzzle/shared';
 import { StepTable } from './StepTable';
 import { PAPER } from '../tokens';
 

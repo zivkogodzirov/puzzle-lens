@@ -1,12 +1,14 @@
-# M9, part 3: tap a piece, answer, undo (and M9 parts 1–2, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+# M9, part 4: four tabs in each puzzle (and M9 parts 1–3, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+
+**New in M9 part 4** (design stage 4 of 6): each puzzle now has **four tabs** at the bottom instead of one long page: **Table** (your table photo with its labels, the live view, a "Next step"), **Picture** (progress and the box picture as a map: tap a spot to see its pieces), **Pieces** (all your pieces, with Which pieces join and Sort into trays as pages of their own) and **More** (backup, new lot, scanned pieces, puzzle details, delete). **Scan** is the camera button at the top. Home shows each puzzle as a card with its picture and progress.
+
+**Where things are now (for the older steps below):** Scan → the **camera button** at the top of a puzzle. Live view and Show my table → the **Table** tab. Fill a spot, Progress and "Photograph the puzzle so far" → the **Picture** tab. Which pieces join, Sort into trays, the filters and Pieces to check → the **Pieces** tab. Backup, Start a new batch (now "new lot of pieces"), Delete / Restore scanned pieces, rename, set-up and Delete this puzzle → the **More** tab. How often is the app right? → More (Tester mode).
 
 **New in M9 part 3** (design stage 3 of 6): tapping a piece opens a **card from the bottom** with a close-up of the box picture and two big answers, **Not there** and **It fits**; every answer has an **Undo**; **"Not a piece"** is one tap with Undo. The words are new everywhere: "It fits / Not there", and "Very likely / Maybe" instead of Strong / Likely (percentages only in Tester mode). Outlines on photos and in the live view speak one language: **solid = fine, dashed = have a look** (with a small badge saying why), one label per piece that never overlap, a **?** button that explains it, and a **Pieces in view** list.
 
 **New in M9 part 2** (design stage 2 of 6): the whole app now uses one set of building blocks: iPhone-style top bars whose **‹ back** goes to the screen you came from, lists, coloured message boxes, a sheet that slides up from the bottom to confirm big deletions, and a dark **Undo** message above the bottom bar. One set of line icons replaces the emoji. Nothing about how the app finds or places pieces changed.
 
 **New in M9 part 1** (the first of 6 design stages): colours that are easy to read in light mode, bigger ✓ Fits / ✗ Doesn't fit buttons side by side, a dark edge under every piece outline so they show on your cream table, **Undo** in the live view, a **bar at the bottom of the puzzle page** (Scan · Live view · Fill a spot · Joins), the app reopening your last puzzle, the 🧪 button in the top bar, and a **Tester mode** switch in Settings (on for now, so nothing you test with disappears).
-
-**Button names in the older steps below:** the puzzle page's big buttons moved into the bottom bar. "Scan pieces" is now **Scan**, "📷 Live view of my table" is **Live view**, "🎯 Fill this spot" is **Fill a spot**, and "🧩 Which pieces join" is **Joins**.
 
 **New in M8 part 4:** the fixes from the app review. Bugs: the note after a scan photo no longer covers the gauge, a photo of the finished puzzle now says how many loose pieces lie beside it, a misread "finished" count no longer overwrites your saved empty spots, and a tapped piece's panel no longer jumps. Speed (on the Mac, with your own photos): scan photos take about a fifth less time, the first photo after **Start a new batch** no longer freezes for 2 seconds, working out where pieces go is 3–6 times faster, and trays sort in about 0.05 s instead of half a second. Each change was checked against the version before it by a second, independent check, and your 41 photos give the same pieces as before.
 
@@ -23,6 +25,40 @@ These steps are for version **{version}** (Settings shows the version).
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## M9 part 4: four tabs in each puzzle
+### Home
+1. Each puzzle is a card: its box picture with the name on a dark band, and "N of M in place" with a green bar. Tap a card: the puzzle opens on its **Table** tab.
+2. The gear at the top right opens Settings. **Import a backup** (under New puzzle) still opens the Files picker (Cancel).
+
+### Table
+1. At the top: "N pieces on the table · M with a sure spot" and a small ring "X of Y".
+2. Your last scan photo shows right in the tab, with outlines and labels. Tap a piece: its card opens. **Pieces in view** lists them; **?** explains the outlines; the map button shows the photo full screen.
+3. **Start live view** opens the camera (it never starts by itself).
+4. If a **Next step · … pieces join · Show me** bar shows above the tabs, tap it: the pieces and the box picture, with **They fit / Not there** and Undo.
+5. The **camera button** at the top opens Scan.
+
+### Picture
+1. A ring and "N of total · N to go".
+2. The box picture: bright = in the puzzle, dim = still to find, a **blue circle** = that spot's piece is on your table. Pinch or double-tap to zoom, drag to move, **− / +** to zoom out. The page itself doesn't zoom.
+3. Tap a spot with a blue circle: a sheet with the piece's picture, how sure, **Not there / It fits** and **Show on my table**. Try **It fits**, then **Undo**.
+4. **Show on my table**: the Table tab opens and the camera points out the pieces for that spot.
+5. **Fill a spot** opens the sheet on a spot whose piece is waiting; **Next / Previous** move between them.
+6. **Photograph the puzzle so far** opens Scan; Back brings you back to Picture.
+
+### Pieces
+1. **All · Border · Inside · Check**: the pieces change each time and the numbers match. Pieces are 4 across.
+2. **Which pieces join** and **Sort into trays** open as pages with **‹ Pieces** to go back; you come back to the same place and filter.
+3. Tap a piece: its card opens.
+
+### More
+1. One list: **Back up now** (with the last backup), **Start a new lot of pieces…**, **Removed scans**, **Delete scanned pieces…**, **Puzzle details** (picture, name — tap to rename —, pieces, grid, size, set-up), **How it works**, **Delete this puzzle…**. Tap Cancel on anything that deletes.
+2. When a backup is due, the More tab has a **red dot**, and once a day a **"Back up now?"** message appears when you open the puzzle. **Back up** prepares the file; share it to Files: the dot goes.
+
+### Everywhere
+1. **‹ Home** (or swiping back) from any tab goes straight to your puzzles, not to the previous tab.
+2. Close the app fully and open it again: it reopens your puzzle on **Table**.
+3. Nothing hides under the tab bar at the bottom of any tab.
 
 ## M9 part 3: tap a piece, answer, undo
 ### The piece card
@@ -240,6 +276,7 @@ In the M8 part 3 follow-up I said a darker cloth might help pale pieces. I never
 - Your answers are kept with the puzzle, and in backups.
 
 ## Please tell me
+- M9 part 4: do the four tabs (Table, Picture, Pieces, More) make sense? Is anything you used before hard to find now? Does the zoomable box picture on Picture work well with your thumb?
 - M9 part 3: does the piece card make it easier to find the spot (the close-up)? Are "It fits / Not there" and "Very likely / Maybe" clear? Are the dashed outlines and badges easy to understand on your cream table?
 - M9 part 2: do the new top bars, lists and message boxes feel more like an iPhone app? Anything harder to find than before? Is the Undo message in a good place, or does it get in the way?
 - M9 part 1: is the app easier to read in light mode? Anything still faint, too small, or covered by the bottom bar? Did the app reopen your puzzle, and does the screen stay on?

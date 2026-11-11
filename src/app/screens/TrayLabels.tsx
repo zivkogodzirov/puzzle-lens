@@ -1,7 +1,8 @@
 /**
  * Tray labels to print (#/trays/<projectId>, M4): one label per colour group (6 per A4 page): the
  * tray's letter on its colour and pictures of up to 8 of its pieces. Print from the iPhone, or send
- * the page to a Mac and print there.
+ * the page to a Mac and print there. Opened from the puzzle's Sort into trays page (#/sort/<id>, M9 part 4); Back
+ * returns there.
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { StepNavBar } from '../components/StepNavBar';
@@ -9,7 +10,7 @@ import { TopBar } from '../components/TopBar';
 import { Callout } from '../ui/Callout';
 import { Icon } from '../ui/icons';
 import { plural } from '../words';
-import { go, routeArg } from '../router';
+import { go, routeArg, goBack } from '../router';
 import { db } from '../../db/db';
 import { getBlob, getProject } from '../../project/store';
 import type { PieceRow, Project } from '../../project/types';
@@ -81,7 +82,7 @@ export function TrayLabelsScreen() {
   if (!project || !pieces)
     return (
       <main class="screen">
-        <TopBar title="Tray labels" back={{ label: 'Puzzle', route: 'puzzle', arg: id }} />
+        <TopBar title="Tray labels" back={{ label: 'Sort into trays', route: 'sort', arg: id }} />
         <p class="muted">Loading…</p>
       </main>
     );
@@ -156,8 +157,8 @@ ${pagesRef.current?.outerHTML ?? ''}</body></html>`;
   return (
     <main class="screen tray-labels" data-testid="tray-labels">
       <style>{LABEL_CSS}</style>
-      {/* Back to the puzzle, under its name. The bar has the no-print class: on paper only the labels show, as before. */}
-      <StepNavBar title="Tray labels" backLabel={project.name} onBack={() => go('puzzle', project.id)} backTestId="labels-back" noPrint />
+      {/* Back to the Sort into trays page (M9 part 4: a page of the puzzle's Pieces tab, where the trays are). The bar has the no-print class: on paper only the labels show, as before. */}
+      <StepNavBar title="Tray labels" backLabel="Sort into trays" onBack={() => goBack('sort', project.id)} backTestId="labels-back" noPrint />
       <div class="no-print">
         <div class="row two-up">
           <button class="btn btn-primary" data-testid="print-labels" disabled={!ready} onClick={print}>

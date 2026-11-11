@@ -5,7 +5,7 @@
 import { createCanvas } from '@napi-rs/canvas';
 import { generatePuzzle, renderScene } from '../synth/index';
 import { withCoin } from '../helpers/coinImage';
-import { test, expect, gotoScreen } from './fixtures';
+import { test, expect, gotoScreen, openTab } from './fixtures';
 
 const W = 4032;
 const H = 3024;
@@ -54,6 +54,7 @@ test.describe('coin for true size', () => {
     await expect(page.getByTestId('scan-note')).toContainText('Coin found', { timeout: 150_000 });
     await page.screenshot({ path: test.info().outputPath('coin-found.png') });
     await page.getByTestId('camera-close').click();
+    await openTab(page, 'more');
     const size = await page.getByTestId('puzzle-size').innerText();
     expect(size).toContain('measured with your coin');
     const m = size.match(/([\d.]+) × ([\d.]+) mm/)!;

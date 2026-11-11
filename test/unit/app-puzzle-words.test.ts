@@ -1,5 +1,5 @@
 /**
- * Words on the puzzle page and in the set-up (src/app/screens/Puzzle.tsx): errors in plain words,
+ * Words on the puzzle page and in the set-up (src/app/screens/puzzle/shared.ts): errors in plain words,
  * and the set-up steps of the way the puzzle is set up (review 2026-11-10). The screen module reads
  * the address, the window and the document when imported, so those are stubbed first.
  */
@@ -7,14 +7,14 @@ import 'fake-indexeddb/auto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { normalizeProject } from '../../src/project/store';
 
-let m: typeof import('../../src/app/screens/Puzzle');
+let m: typeof import('../../src/app/screens/puzzle/shared');
 
 beforeAll(async () => {
   vi.stubGlobal('location', { hash: '#/' });
   vi.stubGlobal('addEventListener', () => {});
   vi.stubGlobal('window', globalThis);
   vi.stubGlobal('document', { addEventListener: () => {}, visibilityState: 'visible' });
-  m = await import('../../src/app/screens/Puzzle');
+  m = await import('../../src/app/screens/puzzle/shared');
 });
 
 afterAll(() => {

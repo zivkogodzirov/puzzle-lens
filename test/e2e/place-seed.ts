@@ -179,7 +179,8 @@ export async function seedCard(page: Page, opts: { pieces?: string[]; tester?: b
     [boxJpeg(), ps, art.width, art.height, PROJECT, opts.tester ?? null, cache, extraRows] as const,
   );
   expect(seeded).toBe('ok');
-  await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}`), PROJECT);
+  // The pieces are on the puzzle's Pieces tab (M9 part 4).
+  await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}/pieces`), PROJECT);
   // The settings are read when the app starts.
   if (opts.tester !== undefined) await page.reload();
   // Until the spots are found: buttons appear above the pieces then and move them down.

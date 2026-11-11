@@ -128,23 +128,31 @@ test('NavBar back goes to the parent: Home, Settings, the puzzle by its name, th
   await page.getByRole('button', { name: 'Back to Settings' }).click();
   await expect(page).toHaveURL(/#\/settings$/);
 
-  // One puzzle's pages: back to the puzzle, under its name.
-  for (const [hash, title] of [
-    ['#/accuracy/e2e-pages-nav', 'How often is the app right?'],
-    ['#/progress/e2e-pages-nav', 'Progress'],
-    ['#/trays/e2e-pages-nav', 'Tray labels'],
-  ] as const) {
+  // One puzzle's pages: back to the puzzle, under its name, on the tab they open from (M9 part 4).
+  for (const [hash, title, tab] of [['#/accuracy/e2e-pages-nav', 'How often is the app right?', 'more']] as const) {
     await page.evaluate((h) => (location.hash = h), hash);
     await expect(page.locator('.navbar h1')).toHaveText(title);
     const back = page.getByRole('button', { name: 'Back to Lighthouse' });
     await expect(back, hash).toContainText('Lighthouse');
     await back.click();
-    await expect(page, hash).toHaveURL(/#\/puzzle\/e2e-pages-nav$/);
+    await expect(page, hash).toHaveURL(new RegExp(`#/puzzle/e2e-pages-nav/${tab}$`));
+    await expect(page.getByTestId(`tab-${tab}`), hash).toHaveAttribute('aria-current', 'page');
   }
-  // The tray labels keep their own test id on back.
+  // The old Progress page is the puzzle's Picture tab now.
+  await page.evaluate(() => (location.hash = '#/progress/e2e-pages-nav'));
+  await expect(page).toHaveURL(/#\/puzzle\/e2e-pages-nav\/picture$/);
+  await expect(page.getByTestId('tab-picture')).toHaveAttribute('aria-current', 'page');
+  // The tray labels keep their own test id on back, to the Sort into trays page they open from (M9 part 4), whose
+  // back is "‹ Pieces", the puzzle's Pieces tab.
   await page.evaluate(() => (location.hash = '#/trays/e2e-pages-nav'));
+  await expect(page.locator('.navbar h1')).toHaveText('Tray labels');
+  await expect(page.getByTestId('labels-back')).toHaveAccessibleName('Back to Sort into trays');
   await page.getByTestId('labels-back').click();
-  await expect(page).toHaveURL(/#\/puzzle\/e2e-pages-nav$/);
+  await expect(page).toHaveURL(/#\/sort\/e2e-pages-nav$/);
+  await expect(page.locator('.navbar h1')).toHaveText('Sort into trays');
+  await page.getByRole('button', { name: 'Back to Pieces' }).click();
+  await expect(page).toHaveURL(/#\/puzzle\/e2e-pages-nav\/pieces$/);
+  await expect(page.getByTestId('tab-pieces')).toHaveAttribute('aria-current', 'page');
 
   // The wizard: back goes one step back, and says where to.
   await page.evaluate(() => (location.hash = '#/new/e2e-pages-nav'));
@@ -238,7 +246,6 @@ for (const size of [
       '#/log',
       '#/accuracy',
       '#/accuracy/e2e-pages-size',
-      '#/progress/e2e-pages-size',
       '#/trays/e2e-pages-size',
       '#/markers/e2e-pages-size',
       '#/new',

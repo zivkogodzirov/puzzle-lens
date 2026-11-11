@@ -5,7 +5,7 @@
  */
 import { generatePuzzle, renderScene } from '../synth/index';
 import type { SceneOptions } from '../synth/types';
-import { test, expect, gotoScreen } from './fixtures';
+import { test, expect, gotoScreen, openTab } from './fixtures';
 
 const W = 4032;
 const H = 3024;
@@ -66,9 +66,12 @@ test.describe('scan pieces', () => {
     await page.screenshot({ path: test.info().outputPath('scan-after-overview.png') });
 
     await page.getByTestId('camera-close').click();
+    // M9 part 4: the pieces are on the Pieces tab, the measured size on More.
+    await openTab(page, 'pieces');
     await expect(page.getByTestId('catalog')).toBeVisible();
     await expect(page.getByTestId('catalog').locator('img')).toHaveCount(n, { timeout: 20_000 });
-    await expect(page.getByTestId('puzzle-size')).toContainText('Measured piece size');
     await page.screenshot({ path: test.info().outputPath('puzzle-catalog.png'), fullPage: true });
+    await openTab(page, 'more');
+    await expect(page.getByTestId('puzzle-size')).toContainText('Measured piece size');
   });
 });

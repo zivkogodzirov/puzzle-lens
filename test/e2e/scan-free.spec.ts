@@ -5,7 +5,7 @@
  */
 import { generatePuzzle, renderScene } from '../synth/index';
 import type { SceneOptions } from '../synth/types';
-import { test, expect, gotoScreen } from './fixtures';
+import { test, expect, gotoScreen, openTab } from './fixtures';
 
 const W = 4032;
 const H = 3024;
@@ -220,18 +220,20 @@ test.describe('batches (M7)', () => {
     await page.getByTestId('snap').click();
     await expect(page.getByTestId('scan-note')).toContainText('could not be matched', { timeout: 150_000 });
 
-    // A new batch.
-    await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}`), id);
+    // A new batch (M9 part 4: the counts on the Pieces tab, the new batch on More).
+    await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}/pieces`), id);
     await expect(page.getByTestId('puzzle-pieces')).toContainText(String(n1));
+    await openTab(page, 'more');
     await page.getByTestId('new-batch').click();
     await expect(page.getByTestId('new-batch-confirm')).toContainText(`${n1} pieces on the table are set aside`);
     await page.getByTestId('new-batch-confirm').screenshot({ path: test.info().outputPath('new-batch-confirm.png') });
     await page.getByTestId('new-batch-yes').click();
-    await expect(page.getByTestId('scan-bin-note')).toContainText(`Batch 2 started: ${n1} pieces set aside`);
-    await expect(page.getByTestId('puzzle-status-counts')).toContainText(`0 on the table, ${n1} set aside`);
-    await expect(page.getByTestId('puzzle-batch')).toContainText('Batch 2');
+    await expect(page.getByTestId('scan-bin-note')).toContainText(`New lot started (lot 2): ${n1} pieces set aside`);
     await expect(page.getByTestId('new-batch')).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath('new-batch-started.png'), fullPage: true });
+    await openTab(page, 'pieces');
+    await expect(page.getByTestId('puzzle-status-counts')).toContainText(`0 on the table, ${n1} set aside`);
+    await expect(page.getByTestId('puzzle-batch')).toContainText('Batch 2');
 
     // The next photo starts a fresh table: its pieces are read (as new ones).
     await page.getByTestId('scan-pieces').click();
@@ -242,7 +244,7 @@ test.describe('batches (M7)', () => {
     const text = await page.getByTestId('scan-note').innerText();
     const added = Number(text.match(/\((\d+) new\)/)![1]);
     expect(added).toBeGreaterThanOrEqual(Math.floor(0.85 * visible));
-    await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}`), id);
+    await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}/pieces`), id);
     await expect(page.getByTestId('puzzle-status-counts')).toContainText(`${added} on the table, ${n1} set aside`);
   });
 });

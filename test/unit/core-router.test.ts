@@ -76,3 +76,40 @@ describe('route signal and go()', () => {
     expect(router.route.value).toBe('log');
   });
 });
+
+describe('a part after the argument (M9 part 4: a puzzle’s tab)', () => {
+  it('parseHashSub reads it; parseHashArg is unchanged', () => {
+    expect(router.parseHashArg('#/puzzle/abc/pieces')).toBe('abc');
+    expect(router.parseHashSub('#/puzzle/abc/pieces')).toBe('pieces');
+    expect(router.parseHashSub('#/puzzle/abc')).toBe(null);
+    expect(router.parseHashSub('#/puzzle/abc/')).toBe(null);
+    expect(router.parseHashSub('#/puzzle')).toBe(null);
+    expect(router.parseHashSub('#/nope/abc/pieces')).toBe(null);
+    expect(router.parseHashSub('#/puzzle/a%20b/more?x=1')).toBe('more');
+    expect(router.parseHash('#/puzzle/abc/pieces')).toBe('puzzle');
+  });
+
+  it('hashFor writes it only with an argument', () => {
+    expect(router.hashFor('puzzle', 'a b', 'picture')).toBe('#/puzzle/a%20b/picture');
+    expect(router.hashFor('puzzle', 'abc', null)).toBe('#/puzzle/abc');
+    expect(router.hashFor('puzzle', null, 'picture')).toBe('#/puzzle');
+  });
+
+  it('the old Progress address opens the Picture tab', () => {
+    expect(router.redirectHash('#/progress/abc')).toBe('#/puzzle/abc/picture');
+    expect(router.redirectHash('#/progress')).toBe('#/');
+    expect(router.redirectHash('#/puzzle/abc')).toBe('#/puzzle/abc');
+    expect(router.redirectHash('#/accuracy/abc')).toBe('#/accuracy/abc');
+    expect(router.parseHash('#/progress/abc')).toBe('home');
+  });
+
+  it('go() with a part sets all three signals', () => {
+    fakeLocation.hash = '#/puzzle/abc/more';
+    router.go('puzzle', 'abc', 'more');
+    expect(router.route.value).toBe('puzzle');
+    expect(router.routeArg.value).toBe('abc');
+    expect(router.routeSub.value).toBe('more');
+    fireHashChange('#/puzzle/abc');
+    expect(router.routeSub.value).toBe(null);
+  });
+});

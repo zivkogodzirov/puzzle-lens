@@ -11,7 +11,7 @@
 import { createCanvas } from '@napi-rs/canvas';
 import { generatePuzzle, renderScene } from '../synth/index';
 import type { SceneOptions } from '../synth/types';
-import { test, expect, gotoScreen } from './fixtures';
+import { test, expect, gotoScreen, openTab } from './fixtures';
 import type { Page } from '@playwright/test';
 
 type Box = { x: number; y: number; width: number; height: number };
@@ -194,7 +194,15 @@ test.describe('Show my table', () => {
     await seedPlacements(page, 'e2e-ov', 6, 5);
     // Faint, touching, and a part outline (faint too).
     await flagPieces(page, 'e2e-ov', [{ weak: true }, { clump: true }, { weak: true, part: true }]);
+    // M9 part 4: the photo is on the Table tab (the default), in the page; the map button shows it full screen.
     await page.evaluate(() => (location.hash = '#/puzzle/e2e-ov'));
+    // The one-time tip: "17·9" means column 17, row 9 (the first labels are the Table tab's own photo now).
+    const tip = page.getByTestId('overlay-tip');
+    await expect(tip).toBeVisible();
+    await expect(tip).toContainText('means column 17, row 9');
+    await expectTarget(page, 'overlay-tip-ok');
+    await page.getByTestId('overlay-tip-ok').click();
+    await expect(tip).toHaveCount(0);
     await page.getByTestId('table-toggle').click();
     const svg = page.getByTestId('table-photo-svg');
     await expect(svg.locator('.lit-outline')).toHaveCount(30);
@@ -225,13 +233,6 @@ test.describe('Show my table', () => {
     expect(await text.evaluate((el) => Math.round((el as SVGTextElement).getBoundingClientRect().height))).toBeGreaterThanOrEqual(14);
     await expect(text).toHaveText(/^\d+·\d+$/);
 
-    // The one-time tip: "17·9" means column 17, row 9.
-    const tip = page.getByTestId('overlay-tip');
-    await expect(tip).toBeVisible();
-    await expect(tip).toContainText('means column 17, row 9');
-    await expectTarget(page, 'overlay-tip-ok');
-    await page.getByTestId('overlay-tip-ok').click();
-    await expect(tip).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath('table-photo-outlines.png') });
 
     // The legend behind "?" (44 px), in a sheet.
@@ -437,6 +438,7 @@ test.describe('the live view', () => {
     // A square of 4 ("What next" → Point them out): its four confirmed lines drawn as one translucent quad with
     // one label instead of four, its pieces without labels of their own.
     await page.getByTestId('live-table-close').click();
+    await openTab(page, 'pieces');
     await page.getByTestId('matches-toggle').click();
     // The square of 4 may be first ("What next") or further down the list, depending on how the synthetic table
     // was read: take the first card that is a square.

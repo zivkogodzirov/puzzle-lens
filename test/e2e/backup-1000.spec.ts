@@ -145,12 +145,14 @@ test('1000-piece puzzle: backup prepared, downloaded and imported back, in reaso
     return 'ok';
   }, id);
   expect(seeded).toBe('ok');
-  await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}`), id);
-  // Never backed up, 1000 pieces: reminded.
-  await expect(page.getByTestId('backup-reminder')).toContainText('No backup yet');
-  await expect(page.getByTestId('last-backup')).toContainText('No backup of this puzzle');
+  // The backup and its reminder are on the puzzle's More tab (M9 part 4), whose tab shows a dot meanwhile.
+  await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}/more`), id);
+  await expect(page.getByTestId('tab-more')).toHaveAttribute('aria-label', 'More, backup due');
+  // Never backed up, 1000 pieces: reminded (M9 part 4: in the "Back up now" row, which is the reminder's button too).
+  await expect(page.getByTestId('backup-reminder')).toContainText('only on this iPhone');
+  await expect(page.getByTestId('last-backup')).toContainText('Never backed up');
   const t0 = Date.now();
-  await page.getByTestId('backup-now').click();
+  await page.getByTestId('export-backup').click();
   await expect(page.getByTestId('export-ready')).toBeVisible({ timeout: 300_000 });
   const prepareMs = Date.now() - t0;
   const size = await page.getByTestId('export-ready').innerText();
@@ -160,6 +162,7 @@ test('1000-piece puzzle: backup prepared, downloaded and imported back, in reaso
   await (await dl).saveAs(path);
   // Downloaded: the reminder goes, and the last backup shows.
   await expect(page.getByTestId('backup-reminder')).toHaveCount(0);
+  await expect(page.getByTestId('tab-more')).not.toHaveAttribute('aria-label', /.+/);
   await expect(page.getByTestId('last-backup')).toContainText('Last backup:');
   await expect(page.getByTestId('last-backup')).toContainText('1000 pieces then');
   // Import it back (a copy, since the puzzle is still here).

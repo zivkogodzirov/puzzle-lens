@@ -1,7 +1,7 @@
 import { settings } from '../settings';
 import { Fragment } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { go, routeArg } from '../router';
+import { go, routeArg, routeSub } from '../router';
 import { readerWorker, restartReader, trackerWorker } from '../workers';
 import { TableCamera, type CaptureMeta } from '../components/TableCamera';
 import { TopBar } from '../components/TopBar';
@@ -25,7 +25,7 @@ import { REAL_PIECE_AREA_SHARE } from '../../cv/scanMarkerless';
 import { CoverageMap, PhotoResult, type OutlineFlag } from '../components/ScanMaps';
 import type { FinishedCheck, FreeScanReply } from '../../shared/apis';
 import { logError, logInfo } from '../../log/logger';
-import { errorWords } from './Puzzle';
+import { errorWords } from './puzzle/shared';
 import { Callout } from '../ui/Callout';
 import { Icon } from '../ui/icons';
 
@@ -779,7 +779,8 @@ export function ScanScreen() {
         pieces={free ? undefined : onTable}
         free={free ? { pitchMm } : null}
         onPhoto={(b, m) => void onPhoto(b, m)}
-        onClose={() => go('puzzle', project.id)}
+        // M9 part 4 picture: opened from the Picture tab's "Photograph the puzzle so far" (#/scan/<id>/picture), it returns there.
+        onClose={() => go('puzzle', project.id, routeSub.value === 'picture' ? 'picture' : null)}
       >
         {/* auto-off: no photo takes itself (after a finished puzzle or a photo that couldn't be used);
             needs-room: the note didn't all fit. With both, the gauge is smaller and the note gets the room

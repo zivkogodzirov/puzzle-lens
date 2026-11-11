@@ -60,3 +60,21 @@ The design work follows the app review's plan, in 6 stages, each checked on your
 2. In the live view: are the labels and badges clear on your table? Try the **?** and **Pieces in view**.
 3. Tap **Not a piece** on something and then **Undo**.
 
+## Part 4: structure (four tabs in each puzzle)
+
+**New:**
+- Each puzzle has four tabs at the bottom instead of one long page:
+  - **Table**: your last table photo right in the tab with its labels, a status line and a progress ring, **Start live view**, and a "Next step" bar for pieces that join.
+  - **Picture**: a progress ring, the box picture as a zoomable map (bright = in, dim = to find, blue circle = its piece is on your table), tap a spot to see its pieces and answer; "Photograph the puzzle so far".
+  - **Pieces**: All · Border · Inside · Check, pieces 4 across, "Which pieces join" and "Sort into trays" as pages of their own.
+  - **More**: backup (the reminder is now a red dot and a once-a-day message), new lot of pieces, scanned pieces, puzzle details with rename, Delete this puzzle.
+- **Scan** is the camera button at the top of a puzzle. ‹ Home goes straight to your puzzles.
+- **Home**: each puzzle as a card with its picture and "N of M in place".
+
+**Why:** the review found the main actions 2–3 screens down a very long page, and panels opening inside it.
+
+1. Open your puzzle: it opens on **Table**. Try each tab. Is anything you used before hard to find?
+2. On **Picture**, zoom the box picture and tap a spot with a blue circle.
+3. On **Pieces**, try the four filters and open Which pieces join, then ‹ Pieces.
+4. On **More**, check your backup and tap Cancel on Delete this puzzle.
+

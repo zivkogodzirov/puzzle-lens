@@ -2,7 +2,7 @@
  * Deleting the scanned pieces, restoring them, and "Delete and scan again" on the puzzle screen
  * (owner's request 2026-11-08), in WebKit with a stored puzzle of 3 scanned pieces.
  */
-import { test, expect, gotoScreen } from './fixtures';
+import { test, expect, gotoScreen, openTab } from './fixtures';
 import type { Page } from '@playwright/test';
 
 async function seed(page: Page, id: string, n: number): Promise<void> {
@@ -71,8 +71,10 @@ test.describe('scanned pieces: delete, restore, scan again', () => {
   test('delete moves the pieces to the bin; restore brings them and the coin size back', async ({ page }) => {
     await gotoScreen(page, '');
     await seed(page, 'e2e-bin', 3);
-    await page.evaluate(() => (location.hash = '#/puzzle/e2e-bin'));
+    // M9 part 4: the pieces read are on the Pieces tab; the size, the scanned pieces and the bin on More.
+    await page.evaluate(() => (location.hash = '#/puzzle/e2e-bin/pieces'));
     await expect(page.getByTestId('puzzle-pieces')).toContainText('3');
+    await openTab(page, 'more');
     await expect(page.getByTestId('puzzle-size')).toContainText('measured with your coin');
     await expect(page.getByTestId('scan-bin')).toHaveCount(0);
 
@@ -80,31 +82,37 @@ test.describe('scanned pieces: delete, restore, scan again', () => {
     await expect(page.getByTestId('delete-scan-confirm')).toContainText('3 pieces');
     await page.getByTestId('delete-scan-yes').click();
     await expect(page.getByTestId('scan-bin-note')).toContainText('3 pieces moved to the bin');
-    await expect(page.getByTestId('puzzle-pieces')).toContainText('0');
     await expect(page.getByTestId('puzzle-size')).toHaveCount(0);
     await expect(page.getByTestId('scan-bin')).toContainText('3 pieces and 1 photo ');
     await expect(page.getByTestId('delete-scan')).toHaveCount(0);
+    await openTab(page, 'pieces');
+    await expect(page.getByTestId('puzzle-pieces')).toContainText('0');
+    await openTab(page, 'more');
 
-    // Still there after closing the app.
+    // Still there after closing the app (the tab too).
     await page.reload();
     await expect(page.getByTestId('scan-bin')).toContainText('3 pieces');
 
     await page.getByTestId('restore-scan').click();
     await expect(page.getByTestId('scan-bin-note')).toContainText('3 pieces restored');
-    await expect(page.getByTestId('puzzle-pieces')).toContainText('3');
     await expect(page.getByTestId('puzzle-size')).toContainText('measured with your coin');
     await expect(page.getByTestId('scan-bin')).toHaveCount(0);
+    await openTab(page, 'pieces');
+    await expect(page.getByTestId('puzzle-pieces')).toContainText('3');
   });
 
   test('"Delete and scan again" opens a fresh overview', async ({ page }) => {
     await gotoScreen(page, '');
     await seed(page, 'e2e-rescan', 2);
-    await page.evaluate(() => (location.hash = '#/puzzle/e2e-rescan'));
+    await page.evaluate(() => (location.hash = '#/puzzle/e2e-rescan/more'));
     await page.getByTestId('delete-scan').click();
     await page.getByTestId('delete-scan-rescan').click();
     await expect(page.getByTestId('table-camera')).toHaveAttribute('data-mode', 'overview');
     await page.getByRole('button', { name: /Back/ }).first().click();
+    await expect(page.getByTestId('puzzle-screen')).toBeVisible();
+    await openTab(page, 'pieces');
     await expect(page.getByTestId('puzzle-pieces')).toContainText('0');
+    await openTab(page, 'more');
     await expect(page.getByTestId('scan-bin')).toContainText('2 pieces');
   });
 });

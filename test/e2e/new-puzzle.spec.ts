@@ -10,7 +10,7 @@ import { readFile } from 'node:fs/promises';
 import { createCanvas } from '@napi-rs/canvas';
 import { unzipSync } from 'fflate';
 import type { Page } from '@playwright/test';
-import { test, expect, gotoScreen } from './fixtures';
+import { test, expect, gotoScreen, openTab } from './fixtures';
 
 test.use({ persistentStorage: true });
 
@@ -202,8 +202,10 @@ test('new puzzle: steps 0–4, resume after reload, puzzle screen, backup export
   await expectStep(page, 5);
   await page.getByTestId('wizard-close').click();
 
-  // Puzzle screen.
+  // Puzzle screen: set-up not finished, so its Table tab says so; the details are on More (M9 part 4).
   await expect(page.getByTestId('puzzle-screen')).toBeVisible();
+  await expect(page.getByTestId('table-continue-setup')).toBeVisible();
+  await openTab(page, 'more');
   await expect(page.getByTestId('puzzle-name')).toHaveText('Lighthouse');
   await expect(page.getByTestId('puzzle-count')).toHaveText('1000');
   await expect(page.getByTestId('puzzle-grid')).toContainText('28 across × 36 down');
@@ -245,6 +247,7 @@ test('new puzzle: steps 0–4, resume after reload, puzzle screen, backup export
   await expect(card.locator('img')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('home-list.png'), fullPage: true });
   await card.click();
+  await openTab(page, 'more');
   await expect(page.getByTestId('puzzle-box')).toBeVisible();
   await expect(page.getByTestId('puzzle-grid')).toContainText('28 across × 36 down');
   expect(await readSetting(page, `printScale:${projectId}`)).toBeCloseTo(0.97, 6);

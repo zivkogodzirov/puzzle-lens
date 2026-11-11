@@ -1,6 +1,7 @@
 /**
  * Table-contrast check on the puzzle page (M4): which parts of the box picture are close to your
- * table's colour (src/cv/contrast.ts), so pieces from there are harder for a scan to find.
+ * table's colour (src/cv/contrast.ts), so pieces from there are harder for a scan to find. On the Picture tab,
+ * as a Callout (M9 part 4): good (green) or have a look (amber), with "Show where" on a small box picture.
  */
 import { useEffect, useState } from 'preact/hooks';
 import { closeToTable, CONTRAST, hardShare, labStatsOf, tableInBox, type Lab } from '../../cv/contrast';
@@ -78,27 +79,25 @@ export function TableContrast({ project, pieces, boxUrl }: { project: Project; p
       {show ? 'Hide' : 'Show where'}
     </button>
   );
+  // M9 part 4 (Picture tab): each level as a Callout (it was a grey line of words).
   if (res.share < 0.005)
     return (
-      <p class="small muted" data-testid="contrast-ok">
-        Table contrast <Icon name="check" size={18} class="inline-icon" label="good" /> Your table’s colour stands out from the whole picture.
-      </p>
+      <Callout kind="good" icon={<Icon name="eye" />} title="Table contrast: good" testId="contrast-ok">
+        <p>Your table’s colour stands out from the whole picture.</p>
+      </Callout>
     );
   if (res.share < CONTRAST.warnShare)
     return (
-      <div class="small muted" data-testid="contrast-ok">
-        <p>
-          Table contrast <Icon name="check" size={18} class="inline-icon" label="good" /> Only {pc < 1 ? 'under 1' : `about ${pc}`} % of the picture is close to
-          your table’s colour: pieces from there are a bit harder to find. {toggle}
-        </p>
+      <Callout kind="good" icon={<Icon name="eye" />} title="Table contrast: good" testId="contrast-ok">
+        <p>Only {pc < 1 ? 'under 1' : `about ${pc}`} % of the picture is close to your table’s colour: pieces from there are a bit harder to find.</p>
+        <div class="callout-buttons">{toggle}</div>
         {map}
-      </div>
+      </Callout>
     );
   return (
     <Callout kind="warn" icon={<Icon name="eye" />} title="Table contrast" testId="contrast-warn">
-      <p>
-        About {pc} % of the picture is close to your table’s colour. Pieces from there stand out little, so a scan may miss them: check they’re found. {toggle}
-      </p>
+      <p>About {pc} % of the picture is close to your table’s colour. Pieces from there stand out little, so a scan may miss them: check they’re found.</p>
+      <div class="callout-buttons">{toggle}</div>
       {map}
     </Callout>
   );
