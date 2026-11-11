@@ -22,9 +22,13 @@ export const OV = {
   /** A piece's state: found / shape read / spot known (the page's own dots use --state-*). */
   found: '#ede7dc',
   shape: '#cabdff',
-  placed: '#3ccf7a',
+  placed: '#57e08c',
   /** Not where it was, not a piece. */
   bad: '#ff9a8f',
+  /** Have a look (M9 part 3): a dashed outline's badge ("?" faint outline, split glyph touching pieces), and the scan's flagged outlines. */
+  warn: '#ffc94d',
+  /** The dark ink on a badge (on warn 11.3:1, on bad 8.5:1). */
+  ink: '#1c1a17',
   /** Fill this spot: the best piece (green) and the others (yellow); scan flags. */
   good: '#3ccf7a',
   weak: '#ffd84a',
@@ -33,10 +37,11 @@ export const OV = {
   scanLine: 'rgba(225, 230, 235, 0.9)',
   /** The live view's lines between pieces that join: unsure (white, dashed) and confirmed (green). */
   join: '#ffffff',
-  joinOk: '#3ccf7a',
+  joinOk: '#57e08c',
   joinHalo: 'rgba(0, 0, 0, 0.55)',
-  /** Behind the live view's labels. */
-  labelBg: 'rgba(0, 0, 0, 0.7)',
+  /** Behind the labels (the camera material, M9 part 3: white words on it 6.2:1 even over a white table), and the words. */
+  labelBg: 'rgba(18, 16, 14, 0.66)',
+  labelText: '#ffffff',
   /** Printed markers found by the camera. */
   marker: '#3ccf7a',
   /** "Show my table", lit mode: the dim over the photo (with fill-opacity 0.6) and its SVG mask (white shows, black hides). */

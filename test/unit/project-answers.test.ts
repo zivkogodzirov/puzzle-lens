@@ -15,6 +15,8 @@ import {
   clearNotHere,
   placedPieces,
   removeNotAPiece,
+  restoreNotAPiece,
+  removedPiecesKey,
   placementWithAnswers,
   spotSidesWithNeighbours,
   undoAnswer,
@@ -239,6 +241,25 @@ describe('answers', () => {
     expect(await db().pieces.get('label')).toBeUndefined();
     expect(next.answers!.every((x) => x.undone)).toBe(true);
     expect(answerView(next).notHere.size).toBe(0);
+  });
+
+  it('"not a puzzle piece" can be undone: the piece and its answers come back exactly (M9 part 3)', async () => {
+    const pz = await puzzle();
+    const a = piece(pz.id, 'label');
+    await db().pieces.put(a);
+    await answerSpot(pz.id, a, { col: 3, row: 4, rot: 0 }, false, { placement: placement('strong', spot(3, 4, 0.9)), fits: true }, 'piece');
+    const before = (await getProject(pz.id))!;
+    const removed = await removeNotAPiece(pz.id, 'label');
+    expect(await db().pieces.get('label')).toBeUndefined();
+    expect((await db().settings.get(removedPiecesKey(pz.id)))!.value).toHaveLength(1);
+    const back = await restoreNotAPiece(pz.id, 'label');
+    expect((await db().pieces.get('label'))!.id).toBe('label');
+    expect(back.answers).toEqual(before.answers);
+    expect(answerView(back).notHere.size).toBe(answerView(before).notHere.size);
+    expect((await db().settings.get(removedPiecesKey(pz.id)))!.value).toHaveLength(0);
+    // A second Undo does nothing.
+    expect((await restoreNotAPiece(pz.id, 'label')).answers).toEqual(back.answers);
+    void removed;
   });
 
   it('accuracy: first-choice answers by verdict with a 95 % range; tries per piece; undone answers left out', () => {

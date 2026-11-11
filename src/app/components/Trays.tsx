@@ -3,7 +3,7 @@
  * one to see its pieces (in the catalog, and lit up on your table photo), then "These went into
  * tray A". Labels to print are on #/trays/<id>.
  */
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { TestStrip } from './TestSteps';
 import { go } from '../router';
 import { db } from '../../db/db';
@@ -15,7 +15,24 @@ import { getBlob, getProject, updateProject } from '../../project/store';
 import { snapsOfBatch } from '../../project/batches';
 import type { PieceRow, Project, SnapRow } from '../../project/types';
 import { logError, logInfo } from '../../log/logger';
-import { HALO, HALO_SCALE } from '../overlay';
+import {
+  badgeBox,
+  DASH_SVG,
+  HALO,
+  HALO_SCALE,
+  LABEL_PX,
+  labelTextWidth,
+  markOf,
+  MAX_LABELS,
+  placeLabels,
+  PRIO,
+  type BadgeMark,
+  type LabelRequest,
+  type OutlineMark,
+  type PlacedLabel,
+} from '../overlay';
+import { LabelTip, OverlayLegendButton, OverlayLegendSheet, SvgBadge } from './OverlayLegend';
+import { useSvgScale } from './ScanMaps';
 import { OV } from '../tokens';
 import { Icon } from '../ui/icons';
 import { Callout } from '../ui/Callout';
@@ -225,8 +242,23 @@ export function TraysPanel({
 interface PhotoView {
   snap: SnapRow;
   url: string;
-  /** The pieces' outlines in this photo (px, flat x, y), each in its colour, with a label at its centre. */
-  outlines: Array<{ id: string; pts: number[]; colour: string; label: string | null; cx: number; cy: number; size: number }>;
+  /**
+   * The pieces' outlines in this photo (px, flat x, y), each in its colour, with a label at its centre: `sure`
+   * false gets a dot instead (M9 part 3); `mark` is the outline language's (dashed with a badge unless 'ok').
+   */
+  outlines: Array<{
+    id: string;
+    pts: number[];
+    colour: string;
+    label: string | null;
+    sure: boolean;
+    mark: OutlineMark;
+    cx: number;
+    cy: number;
+    size: number;
+    x1: number;
+    y0: number;
+  }>;
   view: [number, number, number, number];
 }
 
@@ -248,6 +280,7 @@ export function TablePhoto({
   onPick,
   maxPhotos = 3,
   legend,
+  confidenceOf,
 }: {
   projectId: string;
   pieces: PieceRow[];
@@ -263,6 +296,8 @@ export function TablePhoto({
   onPick?: (p: PieceRow) => void;
   maxPhotos?: number;
   legend?: preact.ComponentChildren;
+  /** How sure a labelled piece's spot is (M9 part 3, optional, as in LiveTable): only 'strong' gets a label, the others a dot. */
+  confidenceOf?: (p: PieceRow) => { verdict: 'strong' | 'likely' | 'several'; p?: number } | null;
 }) {
   const [views, setViews] = useState<PhotoView[] | null>(null);
   const [missing, setMissing] = useState(0);
@@ -310,6 +345,7 @@ export function TablePhoto({
           const pts: number[] = [];
           let px0 = Infinity;
           let px1 = -Infinity;
+          let py0 = Infinity;
           for (let i = 0; i + 1 < o.length; i += 2) {
             const [x, y] = applyH(best.H, [p.table.x + o[i]!, p.table.y + o[i + 1]!]);
             pts.push(x, y);
@@ -319,9 +355,23 @@ export function TablePhoto({
             y1 = Math.max(y1, y);
             px0 = Math.min(px0, x);
             px1 = Math.max(px1, x);
+            py0 = Math.min(py0, y);
           }
           const [cx, cy] = applyH(best.H, [p.table.x, p.table.y]);
-          outlines.push({ id: p.id, pts, colour: colourOf?.(p) ?? colour, label: labelOf?.(p) ?? null, cx, cy, size: px1 - px0 });
+          const cf = confidenceOf?.(p);
+          outlines.push({
+            id: p.id,
+            pts,
+            colour: colourOf?.(p) ?? colour,
+            label: labelOf?.(p) ?? null,
+            sure: cf ? cf.verdict === 'strong' : true,
+            mark: markOf(p.flags),
+            cx,
+            cy,
+            size: px1 - px0,
+            x1: px1,
+            y0: py0,
+          });
           left.delete(p.id);
         }
         // Show the part of the photo with these pieces (with room around them), at least a third of it.
@@ -366,6 +416,53 @@ export function TablePhoto({
   };
   const pts = (o: number[]) => o.reduce((s, val, i) => s + (i % 2 ? `,${val.toFixed(0)} ` : `${val.toFixed(0)}`), '');
   const tappedPiece = tapped ? (pieces.find((p) => p.id === tapped) ?? null) : null;
+  // M9 part 3, the outline language: badges and column·row pills keep their screen size (px photo px per screen
+  // px); labels are placed so none overlap (the tapped piece first, then sure spots); unsure spots get a dot.
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [legendOpen, setLegendOpen] = useState(false);
+  const vb = viewBox();
+  const px = useSvgScale(svgRef, vb[2], vb[3]);
+  const marks = useMemo(() => {
+    if (!v)
+      return {
+        placed: [] as PlacedLabel[],
+        dots: [] as Array<{ id: string; cx: number; cy: number; colour: string }>,
+        badges: [] as Array<{ id: string; mark: BadgeMark; cx: number; cy: number }>,
+      };
+    const inView = (x: number, y: number) => x >= vb[0] && y >= vb[1] && x <= vb[0] + vb[2] && y <= vb[1] + vb[3];
+    const m = 14 * px;
+    const badges = v.outlines
+      .filter((o) => o.mark !== 'ok' && inView(o.cx, o.cy))
+      .map((o) => ({
+        id: o.id,
+        mark: o.mark as BadgeMark,
+        cx: Math.max(vb[0] + m, Math.min(vb[0] + vb[2] - m, o.x1)),
+        cy: Math.max(vb[1] + m, Math.min(vb[1] + vb[3] - m, o.y0)),
+      }));
+    const reqs: LabelRequest[] = [];
+    const dots: Array<{ id: string; cx: number; cy: number; colour: string }> = [];
+    for (const o of v.outlines) {
+      if (!o.label || !inView(o.cx, o.cy)) continue;
+      const x = o.cx - vb[0];
+      const y = o.cy - vb[1];
+      if (o.id === tapped) reqs.push({ key: o.id, text: o.label, x, y, r: o.size / 2, prio: PRIO.tapped });
+      else if (o.sure) reqs.push({ key: o.id, text: o.label, x, y, r: o.size / 2, prio: PRIO.sure });
+      else dots.push({ id: o.id, cx: o.cx, cy: o.cy, colour: o.colour });
+    }
+    // One badge per dashed outline, not on top of another badge; labels keep clear of the badges and of each other
+    // (a sure spot whose label has no room keeps its green outline).
+    const shown: typeof badges = [];
+    const blocked: Array<{ x: number; y: number; w: number; h: number }> = [];
+    for (const b of badges) {
+      const r = badgeBox(b.mark, 0, 0);
+      const box = { x: b.cx - vb[0] + r.x * px, y: b.cy - vb[1] + r.y * px, w: r.w * px, h: r.h * px };
+      if (blocked.some((o) => box.x < o.x + o.w && o.x < box.x + box.w && box.y < o.y + o.h && o.y < box.y + box.h)) continue;
+      blocked.push(box);
+      shown.push(b);
+    }
+    const { placed } = placeLabels(reqs, (t) => labelTextWidth(t) * px, { w: vb[2], h: vb[3] }, blocked, MAX_LABELS, px);
+    return { placed: placed.map((l) => ({ ...l, x: l.x + vb[0], y: l.y + vb[1] })), dots, badges: shown };
+  }, [v, vb.join(','), px, tapped]);
   return (
     <div class="photo-result table-photo" data-testid="table-photo">
       <TestStrip />
@@ -385,11 +482,14 @@ export function TablePhoto({
             Whole photo
           </button>
         )}
+        <OverlayLegendButton onOpen={() => setLegendOpen(true)} />
         <button class="btn btn-small" data-testid="table-photo-close" onClick={onClose}>
           Close
         </button>
       </div>
       {legend && <div class="table-photo-legend small">{legend}</div>}
+      <LabelTip active={marks.placed.length > 0} />
+      <OverlayLegendSheet open={legendOpen} onClose={() => setLegendOpen(false)} />
       {!views ? (
         <p class="muted">Loading your photo…</p>
       ) : !v ? (
@@ -397,7 +497,7 @@ export function TablePhoto({
           None of your saved scan photos shows these pieces (only the last 10 photos are kept). Scan the table again.
         </p>
       ) : (
-        <svg viewBox={viewBox().join(' ')} preserveAspectRatio="xMidYMid meet" data-testid="table-photo-svg" data-zoomed={focus ? 'yes' : 'no'}>
+        <svg ref={svgRef} viewBox={vb.join(' ')} preserveAspectRatio="xMidYMid meet" data-testid="table-photo-svg" data-zoomed={focus ? 'yes' : 'no'}>
           {mode === 'lit' && (
             <defs>
               <mask id="lit">
@@ -431,19 +531,31 @@ export function TablePhoto({
               fill={mode === 'all' ? OV.hit : 'none'}
               stroke={o.colour}
               stroke-width={tapped === o.id ? 7 : 4}
+              stroke-dasharray={o.mark === 'ok' ? undefined : DASH_SVG}
               vector-effect="non-scaling-stroke"
               class="lit-outline"
               data-id={o.id}
+              data-mark={o.mark}
               onClick={mode === 'all' ? (e) => (e.stopPropagation(), setTapped(o.id), focus || setFocus([o.cx, o.cy])) : undefined}
             />
           ))}
-          {v.outlines
-            .filter((o) => o.label)
-            .map((o) => (
-              <text key={`t${o.id}`} x={o.cx} y={o.cy} font-size={Math.max(o.size * 0.28, viewBox()[2] / 40)} class="photo-label" data-testid="photo-label">
-                {o.label}
+          {marks.dots.map((d) => (
+            <g key={`d${d.id}`} pointer-events="none" class="ov-dot" data-testid="photo-dot">
+              <circle cx={d.cx} cy={d.cy} r={6 * px} fill={HALO} />
+              <circle cx={d.cx} cy={d.cy} r={4 * px} fill={d.colour} />
+            </g>
+          ))}
+          {marks.badges.map((b) => (
+            <SvgBadge key={`b${b.id}`} mark={b.mark} cx={b.cx} cy={b.cy} k={px} />
+          ))}
+          {marks.placed.map((l) => (
+            <g key={`t${l.key}`} pointer-events="none" class="ov-label" data-key={l.key}>
+              <rect x={l.x} y={l.y} width={l.w} height={l.h} rx={l.h / 2} fill={OV.labelBg} />
+              <text x={l.x + l.w / 2} y={l.y + l.h / 2} font-size={LABEL_PX * px} fill={OV.labelText} class="ov-label-text" data-testid="photo-label">
+                {l.text}
               </text>
-            ))}
+            </g>
+          ))}
         </svg>
       )}
       {tappedPiece && infoOf && (

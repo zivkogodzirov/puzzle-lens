@@ -3,15 +3,16 @@ import { latestFrame, latestFrameAt } from '../../camera/framePump';
 import { frameToElement } from '../../camera/coords';
 import { applyH } from '../../geo/homography';
 import type { PieceRow } from '../../project/types';
-import { strokeHalo } from '../overlay';
+import { badgeAt, DASH, drawBadge, markOf, OVERLAY_WARN, strokeHalo, type BadgeMark } from '../overlay';
 import { OV } from '../tokens';
 
 /**
- * Outlines of catalogued pieces drawn over the live video (PLAN §5 "Overlay state colours"):
- * grey = detected; orange dashed = probably touching pieces ("spread these apart"); yellow = pale
- * piece with a weak outline (check it). Outlines are stored in table mm, so they stay on their
- * pieces while the phone moves (each frame's own table position maps them into the picture).
- * Each outline sits on a dark halo, so it shows on a cream table too (M9 part 1).
+ * Outlines of catalogued pieces drawn over the live video (PLAN §5 "Overlay state colours"), in the outline
+ * language (M9 part 3, src/app/overlay.ts): a pale solid line = found, fine; amber dashed with a badge = have
+ * a look: "?" a pale piece with a faint or part outline (check it), arrows apart = probably touching pieces
+ * (spread them apart). Outlines are stored in table mm, so they stay on their pieces while the phone moves
+ * (each frame's own table position maps them into the picture). Each outline sits on a dark halo, so it
+ * shows on a cream table too (M9 part 1).
  */
 export function PieceOverlay({ video, pieces }: { video: HTMLVideoElement | null; pieces: PieceRow[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -50,6 +51,7 @@ export function PieceOverlay({ video, pieces }: { video: HTMLVideoElement | null
       const frame = { width: f.width, height: f.height };
       const vid = { width: video.videoWidth, height: video.videoHeight };
       const el = { width: w, height: h };
+      const badges: Array<{ mark: BadgeMark; at: [number, number] }> = [];
       for (const p of list.current) {
         if (p.status !== 'table') continue;
         const o = p.outlineMm;
@@ -57,21 +59,35 @@ export function PieceOverlay({ video, pieces }: { video: HTMLVideoElement | null
         ctx.beginPath();
         // Every 3rd point is plenty at screen size.
         const step = o.length > 120 ? 6 : 2;
+        let x0 = Infinity;
+        let y0 = Infinity;
+        let x1 = -Infinity;
         for (let i = 0; i < o.length; i += step) {
           const q = applyH(H, [p.table.x + o[i]!, p.table.y + o[i + 1]!]);
           const [x, y] = frameToElement(q[0], q[1], frame, vid, el, f.rotation);
           if (i === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
         }
         ctx.closePath();
-        const [colour, dash, width] = p.flags.clump ? [OV.clump, [6, 4], 2.5] : p.flags.weak ? [OV.weak, [], 2] : [OV.scanLine, [], 1.5];
+        const mark = markOf(p.flags);
+        const [colour, width] = mark === 'ok' ? [OV.scanLine, 1.5] : [OVERLAY_WARN, 2.5];
         strokeHalo(ctx, width);
         ctx.strokeStyle = colour;
-        ctx.setLineDash(dash);
+        ctx.setLineDash(mark === 'ok' ? [] : DASH);
         ctx.lineWidth = width;
         ctx.stroke();
+        if (mark !== 'ok' && x1 >= 0 && x0 <= w && y0 <= h) {
+          // One badge per dashed outline, but not on top of another badge.
+          const at = badgeAt(mark, { x0, y0, x1 }, w, h);
+          if (!badges.some((b) => Math.abs(b.at[0] - at[0]) < 24 && Math.abs(b.at[1] - at[1]) < 24)) badges.push({ mark, at });
+        }
       }
       ctx.setLineDash([]);
+      for (const b of badges) drawBadge(ctx, b.mark, b.at[0], b.at[1]);
+      canvas.dataset.badges = String(badges.length);
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);

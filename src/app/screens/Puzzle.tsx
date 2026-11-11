@@ -41,9 +41,10 @@ import { pieceSide, pieceState, progressCounts, SIDE_ARROW, SIDE_WORDS, spotLabe
 import { FillSpot } from '../components/FillSpot';
 import { LiveTable, type MatchLine } from '../components/LiveTable';
 import { matchList, MatchesPanel } from '../components/Matches';
-import { pairKey, pairModel, type SidePartners } from '../../project/pairs';
+import { pairKey, pairModel } from '../../project/pairs';
 import { answerPair, pairAnswerView, undoPairAnswer } from '../../project/pairAnswers';
-import { answerSpot, answerView, clearNotHere, placedPieces, removeNotAPiece, undoAnswer, undoFits } from '../../project/answers';
+import { answerSpot, answerView, clearNotHere, placedPieces, removeNotAPiece, restoreNotAPiece, undoAnswer, undoFits } from '../../project/answers';
+import { PieceCard } from '../components/PieceCard';
 import { OVERLAY_STATE } from '../overlay';
 import { resolvePending } from '../../project/pending';
 import { startNewBatch } from '../../project/batches';
@@ -56,7 +57,7 @@ import { canShareFile, downloadUrl, revokeDownloadUrls, shareOrDownload } from '
 import { formatBytes } from '../../report/collect';
 import { logError, logInfo, logWarn } from '../../log/logger';
 import { settings } from '../settings';
-import { errorWords, plural, UNREADABLE_PHOTO } from '../words';
+import { CONFIDENCE_WORDS, errorWords, plural, UNREADABLE_PHOTO } from '../words';
 
 /** The wizard steps the owner sees with printed markers (index = Project.setupStep value that shows it). */
 export const SETUP_STEPS: readonly string[] = [
@@ -858,17 +859,26 @@ function Catalog({
   const [show, setShow] = useState<'all' | 'border' | 'interior' | 'unsure'>('all');
   const [places, setPlaces] = useState<PlacementCache | null>(null);
   const [placing, setPlacing] = useState<{ done: number; total: number } | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
   /**
-   * "In the puzzle at column …, row …" with Undo, after ✓ Fits (M9 part 2: a toast, was a note in the page).
+   * The piece card (M9 part 3): which piece, where it was opened from (the live view: no "Point it out"), the
+   * spot to show first (from Fill a spot), and a count so each opening starts afresh. Kept while it slides away.
+   */
+  const [card, setCard] = useState<{ id: string; from: 'grid' | 'live' | 'photo' | 'fill'; at: { col: number; row: number } | null; n: number } | null>(null);
+  const [cardOpen, setCardOpen] = useState(false);
+  const selected = cardOpen ? (card?.id ?? null) : null;
+  /**
+   * "Placed at 18·7" with Undo, after It fits (M9 part 2: a toast, was a note in the page; M9 part 3: these words).
    * An answer given in a live view waits here until the live view closes (it has its own Undo meanwhile).
    */
   const placedLater = useRef<{ id: string; col: number; row: number } | null>(null);
   const placedToast = useRef<{ id: string; close: () => void } | null>(null);
   const [inPuzzleOpen, setInPuzzleOpen] = useState(false);
   const [matchesOpen, setMatchesOpen] = useState(false);
-  /** Pieces to point out in the live view, with lines between those that join (M6). */
-  const [findLive, setFindLive] = useState<{ ids: string[]; lines: MatchLine[] } | null>(null);
+  /**
+   * Pieces to point out in the live view, with lines between those that join (M6); `back`: a piece card's
+   * "Point it out" (M9 part 3), whose card opens again when the live view closes.
+   */
+  const [findLive, setFindLive] = useState<{ ids: string[]; lines: MatchLine[]; back?: string } | null>(null);
   /** What a new puzzle photo changed (M7 part 4): spots filled since the last one, and the pieces marked as in the puzzle. */
   const [photoPlaced, setPhotoPlaced] = useState<{ filled: number; ids: string[] } | null>(null);
   const boxUrl = useBlobUrl(project.box?.rectifiedBlobId, boxVersion(project.box));
@@ -976,8 +986,19 @@ function Catalog({
           const placed = { id: piece.id, col: spot.col, row: spot.row };
           if (document.querySelector('[data-testid="live-table"]')) placedLater.current = placed;
           else showPlaced(placed);
-          if (selected === piece.id) setSelected(null);
           onPiecesChanged();
+        } else if (from !== 'live') {
+          // "Not there" (M9 part 3, decision 22): Undo offers that spot again (the live view has its own Undo).
+          toast({
+            text: `Not at ${spot.col + 1}·${spot.row + 1}`,
+            action: {
+              label: 'Undo',
+              run: () =>
+                void undoAnswer(projectId, piece.id, false)
+                  .then(onProject)
+                  .catch((err) => logError('answer', 'Could not undo the answer', err)),
+            },
+          });
         }
       })
       .catch((err) => logError('answer', 'The answer could not be saved', err));
@@ -992,7 +1013,7 @@ function Catalog({
     });
   function showPlaced({ id, col, row }: { id: string; col: number; row: number }) {
     const close = toast({
-      text: `In the puzzle at column ${col + 1}, row ${row + 1}.`,
+      text: `Placed at ${col + 1}·${row + 1}`,
       action: { label: 'Undo', run: () => void takeOut(id).catch((err) => logError('answer', 'Could not take the piece out again', err)) },
     });
     placedToast.current = { id, close };
@@ -1008,33 +1029,14 @@ function Catalog({
     (fits ? takeOut(p.id) : undoAnswer(projectId, p.id, false).then(onProject)).then(() =>
       logInfo('answer', `Undone in the live view: ${fits ? 'Fits' : "Doesn't fit"}`),
     );
-  /** Counts the picks, so each one looks once whether its panel needs bringing into view (also when the same piece is picked again). */
-  const [panelAsk, setPanelAsk] = useState(0);
   /**
-   * Opens a piece's panel (below the list of pieces, up to SHOW_MAX thumbnails) and brings it into
-   * view (review 2026-11-10: a tapped thumbnail opened it out of sight).
+   * Opens a piece's card (M9 part 3: a sheet over the page; it was a panel below the pieces that had to be
+   * scrolled into view, and a quick tap after that scroll could land on the wrong button: see PieceCard).
    */
-  const pick = (id: string) => {
-    setSelected(id);
-    setPanelAsk((n) => n + 1);
+  const pick = (id: string, from: 'grid' | 'live' | 'photo' | 'fill' = 'grid', at: { col: number; row: number } | null = null) => {
+    setCard((c) => ({ id, from, at, n: (c?.n ?? 0) + 1 }));
+    setCardOpen(true);
   };
-  // The panel is brought into view in the same frame it is drawn, before the screen shows it, and only
-  // when its top (the piece, its spot, ✓ Fits) isn't in view (2026-11-10). Scrolled from a timer 50 ms
-  // later, it moved by about 250 px after it was on screen: a tap on ✓ Fits in that moment was lost or
-  // landed on "Not a puzzle piece? Remove it". The panel is taller than the screen with its box picture,
-  // so its top comes first; centred, as before for picks on the table photo and the live view, it was cut off.
-  useLayoutEffect(() => {
-    if (!panelAsk) return;
-    const el = document.querySelector<HTMLElement>('[data-testid="piece-spots"]');
-    if (!el) return;
-    // Its top lines end with ✓ Fits / ✗ Doesn't fit, or with what it says when there is no spot.
-    const head = el.querySelector('[data-testid="spot-answer"]') ?? el.querySelector('[data-testid="spot-verdict"]') ?? el;
-    // Clear of the iPhone's status bar and Home bar (the panel's scroll margins).
-    const css = getComputedStyle(el);
-    const top = el.getBoundingClientRect().top;
-    if (top < (parseFloat(css.scrollMarginTop) || 0) || head.getBoundingClientRect().bottom > innerHeight - (parseFloat(css.scrollMarginBottom) || 0))
-      el.scrollIntoView({ block: 'start' });
-  }, [panelAsk]);
   /** A panel opened from the action bar, brought into view once drawn (counted, so each tap asks once). */
   const [panelView, setPanelView] = useState<{ id: string; n: number } | null>(null);
   useLayoutEffect(() => {
@@ -1063,12 +1065,12 @@ function Catalog({
     if (st === 'placed') {
       const t = c!.placement.top[0]!;
       const side = sideOf(p.id);
-      return `Column ${t.col + 1}, row ${t.row + 1} (${VERDICT_WORDS[c!.placement.verdict]}${settings.testerMode.value ? `, ${pct(t.p)} %` : ''})${side ? `, ${SIDE_WORDS[side]}` : ''}.`;
+      return `Column ${t.col + 1}, row ${t.row + 1} (${CONFIDENCE_WORDS[c!.placement.verdict]}${settings.testerMode.value ? `, ${pct(t.p)} %` : ''})${side ? `, ${SIDE_WORDS[side]}` : ''}.`;
     }
     const g = groups.get(p.id);
     const shape = g === 'corner' ? 'a corner piece' : g === 'edge' ? 'an edge piece' : g === 'interior' ? 'an inside piece' : null;
     if (c && !c.fits) return `${shape ? `Shape read (${shape}). ` : ''}Fits none of the empty spots.`;
-    if (shape) return `Shape read (${shape}). Its spot isn't sure yet${c ? ': several spots look alike' : ''}.`;
+    if (shape) return `Shape read (${shape}). Its spot isn't sure yet${c ? ': several places look alike' : ''}.`;
     return 'Found, but its shape couldn’t be read yet (a close-up helps).';
   };
   // The live view and "Show my table" (opened from the action bar and the list of tools).
@@ -1080,6 +1082,10 @@ function Catalog({
           pieces={rows}
           colourOf={(p) => OVERLAY_STATE[states.get(p.id) ?? 'found']}
           labelOf={(p) => spotLabel(shownPlaces.get(p.id))}
+          confidenceOf={(p) => {
+            const c = shownPlaces.get(p.id);
+            return c && c.fits && c.placement.top[0] ? { verdict: c.placement.verdict, p: c.placement.top[0].p } : null;
+          }}
           infoOf={infoOf}
           answer={{
             labelOf: (p) => {
@@ -1094,7 +1100,7 @@ function Catalog({
           }}
           onPick={(p) => {
             setLiveOpen(false);
-            pick(p.id);
+            pick(p.id, 'live');
           }}
           title="Live view"
           lines={matchLines}
@@ -1103,8 +1109,8 @@ function Catalog({
               <span class="state-dot" style={{ background: OVERLAY_STATE.placed }} />
               spot known <span class="state-dot" style={{ background: OVERLAY_STATE.shape }} />
               shape read <span class="state-dot" style={{ background: OVERLAY_STATE.found }} />
-              found.{matchLines.length > 0 ? ' Lines join pieces that fit together (✓ = square of 4).' : ''} Hold the phone about as high as for your scan. Tap
-              a piece.
+              found.{matchLines.length > 0 ? ' Lines join pieces that fit together; a green shape marks a square of 4.' : ''} Hold the phone about as high as
+              for your scan. Tap a piece.
             </>
           }
           onClose={() => {
@@ -1121,11 +1127,27 @@ function Catalog({
           pieces={rows}
           colourOf={(p) => (findLive.ids.includes(p.id) ? OVERLAY_STATE.placed : OVERLAY_STATE[states.get(p.id) ?? 'found'])}
           infoOf={infoOf}
+          labelOf={(p) => spotLabel(shownPlaces.get(p.id))}
+          confidenceOf={(p) => {
+            const c = shownPlaces.get(p.id);
+            return c && c.fits && c.placement.top[0] ? { verdict: c.placement.verdict, p: c.placement.top[0].p } : null;
+          }}
           find={findLive.ids}
           lines={findLive.lines}
-          title={findLive.ids.length > 2 ? 'Find the 4 pieces' : 'Find the 2 pieces'}
-          legend={<>The pulsing pieces join: the line shows which goes with which. An arrow at the edge shows the way when one is out of view.</>}
-          onClose={() => setFindLive(null)}
+          title={findLive.ids.length === 1 ? 'Find this piece' : findLive.ids.length > 2 ? 'Find the 4 pieces' : 'Find the 2 pieces'}
+          legend={
+            findLive.ids.length === 1 ? (
+              <>The pulsing piece is the one from its card. An arrow at the edge shows the way when it is out of view.</>
+            ) : (
+              <>The pulsing pieces join: the line shows which goes with which. An arrow at the edge shows the way when one is out of view.</>
+            )
+          }
+          onClose={() => {
+            const back = findLive.back;
+            setFindLive(null);
+            // From a piece card's "Point it out": back to its card, to say whether it fits.
+            if (back && rows.some((r) => r.id === back)) pick(back, 'live');
+          }}
         />
       )}
       {tableOpen && (
@@ -1136,10 +1158,14 @@ function Catalog({
           colour={OVERLAY_STATE.found}
           colourOf={(p) => OVERLAY_STATE[states.get(p.id) ?? 'found']}
           labelOf={(p) => spotLabel(shownPlaces.get(p.id))}
+          confidenceOf={(p) => {
+            const c = shownPlaces.get(p.id);
+            return c && c.fits && c.placement.top[0] ? { verdict: c.placement.verdict, p: c.placement.top[0].p } : null;
+          }}
           infoOf={infoOf}
           onPick={(p) => {
             setTableOpen(false);
-            pick(p.id);
+            pick(p.id, 'photo');
           }}
           maxPhotos={6}
           title="Your table"
@@ -1172,6 +1198,7 @@ function Catalog({
             onUndo={undoLiveAnswer}
             onLiveClosed={showPlacedLater}
             filled={new Set(answersCtx.view.taken.keys())}
+            onPickPiece={(p, spot) => pick(p.id, 'fill', spot)}
           />
         )}
       </>
@@ -1302,11 +1329,85 @@ function Catalog({
       )}
     </ActionBar>
   );
+  // The piece card (M9 part 3): a sheet over the page, for a piece on the table or in a tray.
+  const cardRow = card ? (unplaced.find((r) => r.id === card.id) ?? null) : null;
+  const cardBlock =
+    card && project.grid ? (
+      <PieceCard
+        key={card.n}
+        open={cardOpen && cardRow !== null}
+        onClose={() => setCardOpen(false)}
+        piece={cardRow}
+        choice={shownPlaces.get(card.id) ?? null}
+        project={project}
+        boxUrl={boxUrl}
+        spots={openCells}
+        startAt={card.at}
+        onAnswer={(spot, fits) => {
+          if (!cardRow) return;
+          // "It fits" closes the card (the page shows "Placed at …" with Undo); "Not there" keeps it open on the next spot.
+          if (fits) setCardOpen(false);
+          answer(cardRow, spot, fits, card.from === 'fill' ? 'fill' : 'piece');
+        }}
+        partners={pairs?.model.sides.get(card.id) ?? null}
+        pieceById={(pid) => allRows.find((r) => r.id === pid)}
+        ruledOut={answersCtx.view.notHere.get(card.id)?.size ?? 0}
+        onClearRuledOut={() =>
+          void clearNotHere(projectId, card.id)
+            .then(onProject)
+            .catch((err) => logError('answer', 'Could not clear the answers', err))
+        }
+        onInPuzzle={() =>
+          void markPlaced(projectId, [{ id: card.id }], 'tap')
+            .then(() => {
+              logInfo('answer', 'Put in the puzzle (spot not known)');
+              setCardOpen(false);
+              onPiecesChanged();
+            })
+            .catch((err) => logError('answer', 'Could not mark it as in the puzzle', err))
+        }
+        onRemove={() => {
+          // One tap, then Undo (decision 22; it asked "Remove it from the list?" first).
+          const id = card.id;
+          setCardOpen(false);
+          void removeNotAPiece(projectId, id)
+            .then((next) => {
+              logInfo('answer', 'Removed something that is not a puzzle piece');
+              onProject(next);
+              onPiecesChanged();
+              toast({
+                text: 'Removed. Take it off the table too.',
+                action: {
+                  label: 'Undo',
+                  run: () =>
+                    void restoreNotAPiece(projectId, id)
+                      .then((back) => {
+                        logInfo('answer', 'Not a piece: undone, the piece is back');
+                        onProject(back);
+                        onPiecesChanged();
+                      })
+                      .catch((err) => logError('answer', 'Could not bring the piece back', err)),
+                },
+              });
+            })
+            .catch((err) => logError('answer', 'Could not remove it', err));
+        }}
+        onFind={
+          card.from !== 'live' && cardRow && (cardRow.status === 'table' || cardRow.status === 'pending')
+            ? () => {
+                setCardOpen(false);
+                setFindLive({ ids: [card.id], lines: [], back: card.id });
+              }
+            : undefined
+        }
+      />
+    ) : null;
   if (!rows.length)
     return allRows.some((q) => q.status === 'tray') ? (
       <div>
         <p class="muted small">All your scanned pieces are in trays.</p>
         {fillBlock}
+        {cardBlock}
         <ListSection>{traysRow}</ListSection>
         {traysPanel}
         {bar}
@@ -1369,7 +1470,7 @@ function Catalog({
       </p>
       {inPuzzleOpen && inPuzzle > 0 && (
         <div class="card in-puzzle-list" data-testid="in-puzzle-list">
-          <p class="small muted">Pieces you said fit. Tapped ✓ Fits by mistake? Take it out: it goes back on the table (or into its tray).</p>
+          <p class="small muted">Pieces you said fit. Tapped “It fits” by mistake? Take it out: it goes back on the table (or into its tray).</p>
           {allRows
             .filter((r) => r.status === 'placed')
             .sort((a, b) => (b.placedAt?.at ?? 0) - (a.placedAt?.at ?? 0))
@@ -1501,56 +1602,13 @@ function Catalog({
             group={groups.get(r.id)!}
             place={shownPlaces.get(r.id)?.placement ?? null}
             selected={selected === r.id}
-            onSelect={() => (selected === r.id ? setSelected(null) : pick(r.id))}
+            onSelect={() => pick(r.id)}
             tray={trayTag(colourGroups, trayOf(r.id))}
             side={sideOf(r.id)}
           />
         ))}
       </div>
-      {selected && project.grid && rows.some((r) => r.id === selected) && (
-        <PieceSpots
-          piece={rows.find((r) => r.id === selected)!}
-          choice={shownPlaces.get(selected) ?? null}
-          spots={openCells}
-          boxUrl={boxUrl}
-          grid={project.grid}
-          aspect={project.box ? project.box.width / project.box.height : project.grid.cols / project.grid.rows}
-          side={sideOf(selected)}
-          onAnswer={(fits) => {
-            const p = rows.find((r) => r.id === selected)!;
-            const b = bestSpot(p);
-            if (b) answer(p, b, fits, 'piece');
-          }}
-          partners={pairs?.model.sides.get(selected) ?? null}
-          pieceById={(pid) => allRows.find((r) => r.id === pid)}
-          ruledOut={answersCtx.view.notHere.get(selected)?.size ?? 0}
-          onClearRuledOut={() =>
-            void clearNotHere(projectId, selected)
-              .then(onProject)
-              .catch((err) => logError('answer', 'Could not clear the answers', err))
-          }
-          onInPuzzle={() =>
-            void markPlaced(projectId, [{ id: selected }], 'tap')
-              .then(() => {
-                logInfo('answer', 'Put in the puzzle (spot not known)');
-                setSelected(null);
-                onPiecesChanged();
-              })
-              .catch((err) => logError('answer', 'Could not mark it as in the puzzle', err))
-          }
-          onRemove={() =>
-            void removeNotAPiece(projectId, selected)
-              .then((next) => {
-                logInfo('answer', 'Removed something that is not a puzzle piece');
-                onProject(next);
-                setSelected(null);
-                onPiecesChanged();
-              })
-              .catch((err) => logError('answer', 'Could not remove it', err))
-          }
-          onClose={() => setSelected(null)}
-        />
-      )}
+      {cardBlock}
       {shown.length > SHOW_MAX && <p class="muted small">…and {shown.length - SHOW_MAX} more.</p>}
     </div>
   );
@@ -1695,14 +1753,6 @@ function PieceThumb({
   );
 }
 
-/** Room kept around the piece panel when it is scrolled into view (clear of the iPhone's status bar and Home bar). */
-const SPOTS_SCROLL_MARGIN = {
-  // Below the sticky NavBar too (M9 part 2: the bar from round 1 covered the panel's first lines and Close).
-  scrollMarginTop: 'calc(var(--safe-top, 0px) + var(--navbar-h, 0px) + 12px)',
-  // Above the action bar too (M9 part 1), and above an Undo toast while one shows (M9 part 2: --toast-room).
-  scrollMarginBottom: 'calc(env(safe-area-inset-bottom, 0px) + var(--action-bar-h, 0px) + var(--toast-room, 0px) + 12px)',
-};
-
 /**
  * The bar of main actions fixed at the bottom of the puzzle page, above the Home bar (M9 part 1;
  * it becomes the puzzle's tab bar later). The page leaves room for it below its last line.
@@ -1739,7 +1789,6 @@ function PanelHead({ id, title, icon, testId, onClose }: { id: string; title: st
     </div>
   );
 }
-const VERDICT_WORDS: Record<Placement['verdict'], string> = { strong: 'Strong', likely: 'Likely', several: 'Several spots look alike' };
 /** A chance in whole percent, never shown as a certain 100 %. */
 const pct = (p: number): number => Math.min(99, Math.round(p * 100));
 
@@ -1822,8 +1871,8 @@ function PlaceSummary({
           </span>
         ) : (
           <>
-            On the box picture: <span class="legend-strong">{n.strong} strong</span> · <span class="legend-likely">{n.likely} likely</span> · {n.several}{' '}
-            several spots look alike
+            On the box picture: <span class="legend-strong">{n.strong} very likely</span> · <span class="legend-likely">{n.likely} maybe</span> · {n.several}{' '}
+            where several places look alike
             {n.nofit > 0 ? <span> · {n.nofit} fit none of the empty spots</span> : null}
             {none > 0 ? <span class="muted"> · {none} not placed yet (scanned before this version: scan again)</span> : null}. Tap a piece to see where it goes.
             {learned > 0 && (
@@ -1837,224 +1886,6 @@ function PlaceSummary({
       </p>
     </>
   );
-}
-
-/** One piece's best spots on the box picture (column, row from the top-left, 1-based). */
-function PieceSpots({
-  piece,
-  choice,
-  spots,
-  boxUrl,
-  grid,
-  aspect,
-  side,
-  onAnswer,
-  ruledOut = 0,
-  onClearRuledOut,
-  onRemove,
-  onInPuzzle,
-  onClose,
-  partners = null,
-  pieceById,
-}: {
-  piece: PieceRow;
-  choice: SpotChoice | null;
-  /** Which pieces may join its four sides (M6), as it lies on the box picture. */
-  partners?: SidePartners[] | null;
-  pieceById?: (id: string) => PieceRow | undefined;
-  /** Fits / Doesn't fit at the first spot shown (M5 part 2). */
-  onAnswer?: (fits: boolean) => void;
-  /** Spots the owner said it doesn't fit, and a way to take those answers back. */
-  ruledOut?: number;
-  onClearRuledOut?: () => void;
-  /** "Not a puzzle piece": removes it from the list. */
-  onRemove?: () => void;
-  /** "It's in the puzzle" without a known spot (M7 part 4). */
-  onInPuzzle?: () => void;
-  /** The empty spots pieces are matched to (drawn faintly), or null for the whole picture. */
-  spots: Array<[number, number]> | null;
-  boxUrl: string | null;
-  grid: { cols: number; rows: number };
-  aspect: number;
-  /** The side of the frame its known spot is on. */
-  side: FrameSide | null;
-  onClose: () => void;
-}) {
-  const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
-  const [sureRemove, setSureRemove] = useState(false);
-  const place = choice?.placement ?? null;
-  const best = place?.top[0];
-  const fits = choice?.fits ?? true;
-  return (
-    <div class="card piece-spots" data-testid="piece-spots" style={SPOTS_SCROLL_MARGIN}>
-      <div class="row">
-        {url && <img src={url} class="spot-thumb" alt="This piece" />}
-        <div class="grow">
-          {best ? (
-            <>
-              {fits ? (
-                <p data-testid="spot-verdict">
-                  <strong>
-                    Column {best.col + 1}, row {best.row + 1}
-                  </strong>{' '}
-                  <span class={`legend-${place!.verdict}`}>
-                    ({VERDICT_WORDS[place!.verdict]}
-                    {settings.testerMode.value ? `, ${pct(best.p)} %` : ''})
-                  </span>
-                  {side ? <span data-testid="spot-side"> · {SIDE_WORDS[side]}</span> : null}
-                </p>
-              ) : (
-                <p data-testid="spot-verdict">
-                  <strong>Fits none of the empty spots well.</strong> It may not be a piece (a label, a shadow), or it may come from somewhere else. Closest:
-                  column {best.col + 1}, row {best.row + 1}.
-                </p>
-              )}
-              {onAnswer && (
-                <div class="row spot-answer" data-testid="spot-answer">
-                  <span class="small">
-                    Tried it in column {best.col + 1}, row {best.row + 1}?
-                  </span>
-                  <button class="btn btn-small btn-fits btn-good" data-testid="spot-fits" onClick={() => onAnswer(true)}>
-                    <Icon name="check" size={22} /> Fits
-                  </button>
-                  <button class="btn btn-small" data-testid="spot-not" onClick={() => onAnswer(false)}>
-                    <Icon name="x" size={22} /> Doesn't fit
-                  </button>
-                </div>
-              )}
-              <p class="muted small">Counted from the top-left corner of the box picture.{spots ? ` White outlines: the ${spots.length} empty spots.` : ''}</p>
-              {place!.top.slice(1).some((t) => t.p >= 0.01) && (
-                <p class="small" data-testid="spot-others">
-                  Also possible:{' '}
-                  {place!.top
-                    .slice(1)
-                    .filter((t) => t.p >= 0.01)
-                    .map((t) => `column ${t.col + 1}, row ${t.row + 1} (${pct(t.p)} %)`)
-                    .join('; ')}
-                </p>
-              )}
-            </>
-          ) : (
-            <p data-testid="spot-verdict">
-              {ruledOut > 0
-                ? 'You said it doesn’t fit any of its suggested spots.'
-                : choice && spots
-                  ? 'Fits none of the empty spots (by its shape or its picture). It may not be a piece, or it may come from somewhere else.'
-                  : 'No spot yet: scan this piece again (overview or close-up).'}
-            </p>
-          )}
-          {ruledOut > 0 && onClearRuledOut && (
-            <p class="small" data-testid="spot-ruled-out">
-              {ruledOut === 1 ? '1 spot' : `${ruledOut} spots`} ruled out by your answers.{' '}
-              <button class="btn btn-small" data-testid="spot-clear" onClick={onClearRuledOut}>
-                Ask again
-              </button>
-            </p>
-          )}
-        </div>
-        <button class="btn btn-small" data-testid="spot-close" onClick={onClose}>
-          Close
-        </button>
-      </div>
-      {boxUrl && place && (
-        <svg
-          class="spot-box"
-          style={{ aspectRatio: String(aspect) }}
-          viewBox={`0 0 ${grid.cols} ${grid.rows}`}
-          preserveAspectRatio="none"
-          data-testid="spot-box"
-        >
-          <image href={boxUrl} x={0} y={0} width={grid.cols} height={grid.rows} preserveAspectRatio="none" />
-          {spots?.map(([c, r]) => (
-            <rect key={`open-${c},${r}`} x={c} y={r} width={1} height={1} class="spot-open" vector-effect="non-scaling-stroke" />
-          ))}
-          {place.top
-            .filter((t, i) => i === 0 || t.p >= 0.01)
-            .reverse()
-            .map((t, i, arr) => (
-              <rect
-                key={`${t.col},${t.row}`}
-                x={t.col}
-                y={t.row}
-                width={1}
-                height={1}
-                class={i === arr.length - 1 ? 'spot-best' : 'spot-other'}
-                vector-effect="non-scaling-stroke"
-              />
-            ))}
-        </svg>
-      )}
-      {partners && pieceById && fits && <PiecePartners partners={partners} pieceById={pieceById} />}
-      {onInPuzzle && (!best || !fits || place?.verdict === 'several') && (
-        <p class="small" data-testid="spot-in-puzzle-row">
-          Put it in already, somewhere the app didn't know?{' '}
-          <button class="btn btn-small btn-fits btn-good" data-testid="spot-in-puzzle" onClick={onInPuzzle}>
-            <Icon name="check" size={20} /> It's in the puzzle
-          </button>
-        </p>
-      )}
-      {onRemove && (
-        <p class="small muted" data-testid="spot-remove-row">
-          {sureRemove ? (
-            <>
-              Remove it from the list? Move it off the table too, or the next scan finds it again.{' '}
-              <button class="btn btn-small btn-destructive btn-filled" data-testid="spot-remove-yes" onClick={onRemove}>
-                Remove
-              </button>{' '}
-              <button class="btn btn-small" onClick={() => setSureRemove(false)}>
-                Keep
-              </button>
-            </>
-          ) : (
-            <button class="btn btn-small btn-destructive" data-testid="spot-remove" onClick={() => setSureRemove(true)}>
-              <Icon name="trash" size={20} /> Not a puzzle piece? Remove it
-            </button>
-          )}
-        </p>
-      )}
-    </div>
-  );
-}
-
-const SIDE_NAMES = ['above it', 'on its right', 'below it', 'on its left'] as const;
-
-/** The pieces that may join a piece's sides (M6), most likely first, and what's left. */
-function PiecePartners({ partners, pieceById }: { partners: SidePartners[]; pieceById: (id: string) => PieceRow | undefined }) {
-  const found = partners
-    .map((s, e) => ({ e, best: s.partners[0], s }))
-    .filter((x) => x.best && x.best.p >= 0.2)
-    .sort((x, y) => y.best!.p - x.best!.p);
-  const notYet = partners.filter((s) => s.notScanned >= 0.5).length;
-  const edge = partners.filter((s) => s.edge >= 0.5).length;
-  const done = partners.filter((s) => s.inPuzzle >= 0.5).length;
-  const sides = (n: number) => (n === 1 ? '1 side' : `${n} sides`);
-  const rest = [
-    notYet ? `partner not scanned yet on ${sides(notYet)}` : '',
-    done ? `next to the done part on ${sides(done)}` : '',
-    edge ? `${sides(edge)} on the puzzle's edge` : '',
-  ].filter(Boolean);
-  if (!found.length && !rest.length) return null;
-  return (
-    <div class="piece-partners" data-testid="piece-partners">
-      <p class="small">
-        <strong>Joins</strong> (as on the box picture):
-      </p>
-      {found.map(({ e, best, s }) => (
-        <div class="row small" key={e} data-testid="piece-partner">
-          <PartnerThumb piece={pieceById(best!.id)} />
-          <span class="grow">
-            {SIDE_NAMES[e]} · {pct(best!.p)} %{s.partners[1] && s.partners[1].p >= 0.2 ? ` (or another piece, ${pct(s.partners[1].p)} %)` : ''}
-          </span>
-        </div>
-      ))}
-      {rest.length > 0 && <p class="muted small">{rest.join(' · ').replace(/^./, (ch) => ch.toUpperCase())}.</p>}
-    </div>
-  );
-}
-
-function PartnerThumb({ piece }: { piece: PieceRow | undefined }) {
-  const url = useBlobUrl(piece?.thumbBlobId, piece?.updatedAt);
-  return url ? <img src={url} class="match-thumb" alt="Its partner" /> : <span class="match-thumb catalog-empty" />;
 }
 
 /** Lines between pieces that join, at most, in the live view. */

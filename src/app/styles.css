@@ -61,13 +61,16 @@
   --ov-halo: rgba(0, 0, 0, 0.6);
   --ov-found: #ede7dc;
   --ov-shape: #cabdff;
-  --ov-placed: #3ccf7a;
+  --ov-placed: #57e08c;
   --ov-bad: #ff9a8f;
+  --ov-warn: #ffc94d;
+  --ov-ink: #1c1a17;
   --ov-scan-line: rgba(225, 230, 235, 0.9);
   --ov-join: #ffffff;
-  --ov-join-ok: #3ccf7a;
+  --ov-join-ok: #57e08c;
   --ov-join-halo: rgba(0, 0, 0, 0.55);
-  --ov-label-bg: rgba(0, 0, 0, 0.7);
+  --ov-label-bg: rgba(18, 16, 14, 0.66);
+  --ov-label-text: #ffffff;
   --ov-marker: #3ccf7a;
   --ov-dim: #000000;
   --ov-mask-show: #ffffff;
@@ -1140,9 +1143,6 @@ pre.logbox {
 .legend-strong { color: var(--good-ink); font-weight: 600; }
 .legend-likely { color: var(--warn-ink); font-weight: 600; }
 .legend-several { color: var(--muted); }
-.piece-spots { margin-top: 10px; }
-.piece-spots .row { align-items: flex-start; gap: 10px; }
-.piece-spots .grow { flex: 1; }
 .spot-thumb { width: 72px; height: 72px; object-fit: contain; border-radius: 8px; background: var(--panel-2); }
 .spot-box { display: block; width: 100%; height: auto; margin-top: 8px; border-radius: 8px; }
 .spot-best { fill: rgba(60, 207, 122, 0.35); stroke: var(--ov-good); stroke-width: 3; }
@@ -1235,7 +1235,6 @@ pre.logbox {
 
 /* ---------- Fits / Doesn't fit and Accuracy (M5 part 2) ---------- */
 .btn-fits { border-color: var(--good-ink); }
-.spot-answer { gap: 12px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
 .fill-answer { display: flex; gap: 12px; margin-top: 6px; }
 /* Answer buttons (M9 part 1): ✓ Fits / ✗ Doesn't fit are 56 px tall and side by side, 12 px apart, with the
    question on its own line above them; the same on the piece, in Fill this spot, in Which pieces join and in
@@ -1338,12 +1337,6 @@ h1[tabindex='-1']:focus { outline: none; }
 /* The Joins count as a badge on its button (check 2026-11-10: "Joins (3…" was cut off at 375 px). */
 .action-bar-btn { position: relative; }
 .action-bar-badge { position: absolute; top: 3px; right: 6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; line-height: 20px; font-variant-numeric: tabular-nums; }
-/* The piece panel: Close sits in the corner, so ✓ Fits / ✗ Doesn't fit get the panel's full width (check 2026-11-10:
-   beside the picture and Close they were about 108 px wide and "Doesn't fit" wrapped on a 375 px phone). */
-.piece-spots { position: relative; }
-.piece-spots > .row > [data-testid='spot-close'] { position: absolute; top: 12px; right: 12px; }
-.piece-spots > .row > .grow > [data-testid='spot-verdict'] { padding-right: 76px; }
-.piece-spots > .row:has(> .spot-thumb) .spot-answer { margin-left: -82px; }
 /* Words on the dark photo views: the camera's light text (check 2026-11-10: 2.9–3.6:1 in light mode). */
 .photo-result .muted { color: var(--cam-text); }
 
@@ -1537,8 +1530,6 @@ h1[tabindex='-1']:focus { outline: none; }
 .list-row[aria-expanded='true'] { color: var(--accent); }
 /* The new-batch sheet's buttons, one under the other. */
 .sheet-buttons { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-4); }
-/* While a toast shows, a piece panel brought into view keeps its ✓ Fits row above it too (Puzzle.tsx SPOTS_SCROLL_MARGIN). */
-.app:has(.ui-toast) { --toast-room: 72px; }
 /* A panel opened from the action bar: its heading below the sticky NavBar when brought into view. */
 .panel-head { scroll-margin-top: calc(var(--safe-top) + var(--navbar-h) + 12px); }
 [data-testid='contrast-ok'] .icon { color: var(--good-ink); }
@@ -1547,6 +1538,87 @@ h1[tabindex='-1']:focus { outline: none; }
 /* M9 part 2: fixes from the independent check (2026-11-11) */
 /* With a top bar, the update banner scrolls away with the page instead of sticking over the bar (it hid the back button). */
 .app:has(.navbar) .banner { position: relative; }
+
+/* M9 part 3: piece card */
+/* The sheet's header (PieceCard.tsx): the piece's cut-out (64 px), its spot (Title 3), how sure and the side of the frame. */
+.card-head { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
+.card-thumb { flex: none; width: 64px; height: 64px; border-radius: var(--r-thumb); background: var(--panel-2); overflow: hidden; }
+.card-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.card-head-text { display: flex; flex-direction: column; min-width: 0; }
+.card-name { font: var(--t-title-3); }
+.card-sub { font: var(--t-subhead); color: var(--muted); }
+.ui-sheet-head:has(.card-head) { padding-bottom: var(--s-2); }
+.piece-card { display: flex; flex-direction: column; gap: var(--s-3); }
+.piece-card p { margin: 0; }
+/* The zoomed spot: about 200 px tall (decision 19), the spot ringed on a dark halo, the rest dimmed; or the whole picture. */
+.card-picture { position: relative; }
+.card-crop, .piece-card .card-box { display: block; width: 100%; height: auto; margin: 0; border-radius: var(--r-thumb); background: var(--panel-2); }
+.crop-dim { fill: var(--ov-dim); fill-opacity: 0.55; }
+.crop-ring-halo { fill: none; stroke: var(--ov-halo); stroke-width: 7; }
+.crop-ring { fill: none; stroke: var(--ov-placed); stroke-width: 3.5; }
+/* "Whole picture" / "Close-up" on the picture's corner, on the camera material (readable on any picture), so the answers stay in the medium sheet. */
+.card-whole { position: absolute; right: var(--s-2); bottom: var(--s-2); background: var(--cam-material); color: var(--cam-text); border-radius: var(--r-pill); }
+/* A spot in the puzzle's last row is drawn in the close-up's bottom third: the button goes to the top so it doesn't cover the ring (review 2026-11-11). */
+.card-whole.card-whole-top { top: var(--s-2); bottom: auto; }
+/* "Did it fit?": "Not there" left, "It fits" right, 56 px with 12 px between (decision 6); when they don't fit side by side
+   (a narrow screen, larger text) one above the other, "It fits" on top (wrap-reverse). */
+.card-question { font: var(--t-headline); margin-bottom: var(--s-2) !important; }
+.card-answer { display: flex; flex-wrap: wrap-reverse; gap: var(--s-3); }
+.card-answer-btn { flex: 1 0 8.5em; min-width: min(100%, max-content); min-height: var(--tap-answer); }
+.card-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2) var(--s-3); }
+.card-row > p { flex: 1 1 12em; }
+.card-secondary { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.card-secondary > .btn { flex: 1 1 auto; }
+.piece-card .piece-partners { margin-top: 0; }
+/* "Also possible": the other spots as small crops with their words; a tap shows that spot. */
+.card-section { margin: 0 0 var(--s-2); font: var(--t-headline); }
+.card-alts { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: var(--s-2); }
+.card-alt { display: flex; flex-direction: column; gap: 2px; min-height: var(--tap-min); padding: var(--s-1) var(--s-1) var(--s-2); border: 1px solid var(--border); border-radius: var(--r-control); background: var(--panel-2); color: var(--text); font: var(--t-subhead); text-align: center; cursor: pointer; }
+.card-alt-crop { display: block; width: 100%; height: auto; border-radius: 8px; }
+.card-alt-name { font-weight: 600; }
+.card-alt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* "Not a piece": a red plain button at the bottom (one tap, then Undo). */
+.card-remove { align-self: center; color: var(--bad-ink); }
+/* While the sheet slides up, its buttons take no taps: one meant for "It fits" never lands on a button sliding past. */
+.ui-sheet[data-opening] .ui-sheet-head, .ui-sheet[data-opening] .piece-card button { pointer-events: none; }
+/* The Undo toast over the card: just above the medium sheet (on the dimmed page, clear of the answers); over the large
+   sheet at the bottom of the screen, the card leaving room for it below its last button. */
+.app:has(.ui-sheet-root:not(.is-closing) .ui-sheet-medium .piece-card) { --toast-bottom: calc(60dvh + var(--s-2)); }
+.app:has(.ui-sheet-root:not(.is-closing) .ui-sheet-large .piece-card) { --toast-bottom: calc(var(--safe-bottom) + var(--s-3)); }
+.app:has(.ui-toast) .ui-sheet-large .piece-card { padding-bottom: 64px; }
+/* Fill a spot: a candidate's picture opens its card; its answers one above the other ("It fits" on top) when they don't fit side by side. */
+.fill-cand-pick { display: block; width: 100%; padding: 0; border: 0; border-radius: 6px; background: none; cursor: pointer; }
+.fill-cand-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fill-answer { flex-wrap: wrap-reverse; }
+.fill-answer > .btn { flex: 1 0 auto; min-width: min(100%, max-content); }
+/* M9 part 3: outline language */
+/* Design plan §3.2: solid = fine, dashed with a badge = have a look, a cross = not a piece (src/app/overlay.ts). The scan result photo's flagged outlines: amber, dashed, badge beside them (ScanMaps.tsx). */
+.res-clump, .res-weak { stroke: var(--ov-warn); stroke-dasharray: 7 5; }
+.res-object { stroke-dasharray: none; }
+.photo-result-help { position: absolute; top: calc(var(--safe-top) + 8px); right: 12px; z-index: 2; }
+/* Column·row pills on photos (Trays.tsx TablePhoto): 15 px semibold white on the camera material. */
+.ov-label-text { font-weight: 600; font-family: var(--font-family); text-anchor: middle; dominant-baseline: central; }
+.ov-badge-text { font-family: var(--font-family); }
+/* The one-time tip ("17·9" means column 17, row 9): a capsule on the camera material, under the status line. */
+.ov-tip { position: absolute; left: 10px; right: 10px; top: calc(var(--safe-top) + 108px); z-index: 3; display: flex; align-items: center; gap: var(--s-2); width: fit-content; max-width: calc(100% - 20px); margin: 0 auto; min-height: 48px; padding: 2px 4px 2px 18px; border-radius: 24px; background: var(--cam-material); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); color: var(--white); font: var(--t-subhead); }
+.table-photo .ov-tip { position: static; margin: 0 auto 8px; flex: none; }
+.ov-tip-text { flex: 1 1 auto; min-width: 0; padding: 6px 0; }
+.ov-tip-ok { flex: none; min-width: var(--tap-min); min-height: var(--tap-min); padding: 0 var(--s-3); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--white); font: var(--t-headline); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.ov-tip-ok:focus-visible { outline: 2px solid var(--white); outline-offset: 2px; }
+/* "Pieces in view" (accessibility rule 10): a pill on the camera material above the legend, and its list in a sheet. */
+.live-pieces-open { display: block; min-height: var(--tap-min); margin: 0 0 var(--s-2); padding: 0 var(--s-4); border: 0; border-radius: var(--r-pill); background: var(--cam-material); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); color: var(--white); font: var(--t-headline); cursor: pointer; }
+.live-pieces-open:focus-visible { outline: 2px solid var(--white); outline-offset: 2px; }
+.ov-piece-list { list-style: none; margin: 0; padding: 0 0 calc(var(--safe-bottom) + var(--s-4)); }
+.ov-piece-list li + li { border-top: 1px solid var(--border); }
+.ov-piece-item { display: block; width: 100%; min-height: var(--tap-min); padding: var(--s-3) 0; border: 0; background: none; color: var(--text); font: var(--t-body); text-align: left; cursor: pointer; }
+.ov-piece-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.live-confidence { font-weight: 600; }
+/* The legend sheet: a sample of each line, badge and label beside its words. */
+.ov-legend { padding-bottom: calc(var(--safe-bottom) + var(--s-4)); }
+.ov-legend-head { margin: var(--s-4) 0 var(--s-2); font: var(--t-footnote); color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; }
+.ov-legend-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-3); }
+.ov-legend-row { display: flex; align-items: center; gap: var(--s-3); font: var(--t-subhead); }
+.ov-sample { flex: none; }
 
 /* ---------- Reduce Motion (M9 part 1) ---------- */
 /* iPhone Settings > Accessibility > Motion > Reduce Motion: nothing moves or slides. The spinner only fades in

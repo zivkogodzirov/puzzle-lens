@@ -9,6 +9,18 @@ export function plural(n: number, one: string, many: string = `${one}s`): string
   return `${n} ${n === 1 ? one : many}`;
 }
 
+/**
+ * The answer words (M9 part 3, design plan decision 7): the same everywhere a piece is tried in a spot
+ * (the piece card, Fill a spot, the live view) — "They fit" for a pair or a square of 4.
+ */
+export const ANSWER = { fits: 'It fits', not: 'Not there', groupFits: 'They fit' } as const;
+
+/**
+ * How sure the app is, in words (decision 7): "strong" / "likely" / "several" from the placement.
+ * Percentages show only in Tester mode, after these words.
+ */
+export const CONFIDENCE_WORDS = { strong: 'Very likely', likely: 'Maybe', several: 'Several places look alike' } as const;
+
 export const UNREADABLE_PHOTO = 'This photo couldn’t be read. Take it again, or choose a different photo.';
 
 /** Shown for an error whose own text is technical (the text itself is in the Activity log). */

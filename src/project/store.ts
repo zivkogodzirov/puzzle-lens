@@ -170,6 +170,7 @@ export async function deleteProject(id: string): Promise<void> {
     await d.settings.delete(scanBinSummaryKey(id));
     await d.settings.delete(scanBinCheckKey(id));
     await d.settings.delete(placementKey(id));
+    await d.settings.delete(`removedPieces:${id}`);
     const current = await d.settings.get(CURRENT_PROJECT_KEY);
     if (current?.value === id) await d.settings.delete(CURRENT_PROJECT_KEY);
     await d.projects.delete(id);

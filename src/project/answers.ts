@@ -219,20 +219,85 @@ export async function undoAnswer(projectId: string, pieceId: string, fits: boole
   });
 }
 
+/** Settings key of the things removed as "not a puzzle piece", kept so the removal can be undone (M9 part 3). */
+export const removedPiecesKey = (projectId: string): string => `removedPieces:${projectId}`;
+
+/** One removal: the piece row as it was, and which answers the removal marked undone (by index; answers are only appended). */
+interface Removed {
+  at: number;
+  row: PieceRow;
+  answers: number[];
+  pairAnswers: number[];
+}
+
+/** How many removals are kept for Undo (the oldest go first). */
+const KEEP_REMOVED = 20;
+
 /**
  * Removes something that isn't a puzzle piece (a label, a patch of table) from the catalog; its
- * answers (spots and pairs) are marked undone so they don't count on the Accuracy page.
+ * answers (spots and pairs) are marked undone so they don't count on the Accuracy page. The piece is
+ * kept aside (its row, and which answers this marked undone) so restoreNotAPiece() can undo it
+ * (M9 part 3, design plan decision 22: Undo instead of "tap twice to confirm").
  */
 export async function removeNotAPiece(projectId: string, pieceId: string): Promise<Project> {
   const d = db();
-  return d.transaction('rw', d.projects, d.pieces, async () => {
+  return d.transaction('rw', [d.projects, d.pieces, d.settings], async () => {
     const project = await d.projects.get(projectId);
     if (!project) throw new Error('This puzzle is not on this iPhone.');
-    const answers = (project.answers ?? []).map((a) => (a.pieceId === pieceId && !a.undone ? { ...a, undone: true } : a));
-    const pairAnswers = (project.pairAnswers ?? []).map((a) => ((a.a === pieceId || a.b === pieceId) && !a.undone ? { ...a, undone: true } : a));
+    const row = await d.pieces.get(pieceId);
+    const undoneAnswers: number[] = [];
+    const undonePairs: number[] = [];
+    const answers = (project.answers ?? []).map((a, i) => {
+      if (a.pieceId !== pieceId || a.undone) return a;
+      undoneAnswers.push(i);
+      return { ...a, undone: true };
+    });
+    const pairAnswers = (project.pairAnswers ?? []).map((a, i) => {
+      if ((a.a !== pieceId && a.b !== pieceId) || a.undone) return a;
+      undonePairs.push(i);
+      return { ...a, undone: true };
+    });
     const next: Project = { ...project, answers, pairAnswers, updatedAt: Math.max(Date.now(), project.updatedAt + 1) };
     await d.projects.put(next);
+    if (row) {
+      const kept = ((await d.settings.get(removedPiecesKey(projectId)))?.value as Removed[] | undefined) ?? [];
+      const entry: Removed = { at: Date.now(), row, answers: undoneAnswers, pairAnswers: undonePairs };
+      await d.settings.put({ key: removedPiecesKey(projectId), value: [...kept.filter((r) => r.row.id !== pieceId), entry].slice(-KEEP_REMOVED) });
+    }
     await d.pieces.delete(pieceId);
+    return next;
+  });
+}
+
+/** An answer as it was before it was marked undone (no `undone` key at all). */
+function withoutUndone<T extends { undone?: boolean }>(a: T): T {
+  const { undone: _undone, ...rest } = a;
+  return rest as T;
+}
+
+/**
+ * Undoes removeNotAPiece(): the piece comes back as it was, and the answers its removal marked undone
+ * count again. Returns the project unchanged when there is nothing to restore (already restored, or
+ * the piece is back some other way).
+ */
+export async function restoreNotAPiece(projectId: string, pieceId: string): Promise<Project> {
+  const d = db();
+  return d.transaction('rw', [d.projects, d.pieces, d.settings], async () => {
+    const project = await d.projects.get(projectId);
+    if (!project) throw new Error('This puzzle is not on this iPhone.');
+    const kept = ((await d.settings.get(removedPiecesKey(projectId)))?.value as Removed[] | undefined) ?? [];
+    const entry = kept.find((r) => r.row.id === pieceId);
+    if (!entry || (await d.pieces.get(pieceId))) return project;
+    const redo = new Set(entry.answers);
+    const redoPairs = new Set(entry.pairAnswers);
+    const answers = (project.answers ?? []).map((a, i) => (redo.has(i) && a.pieceId === pieceId && a.undone ? withoutUndone(a) : a));
+    const pairAnswers = (project.pairAnswers ?? []).map((a, i) =>
+      redoPairs.has(i) && (a.a === pieceId || a.b === pieceId) && a.undone ? withoutUndone(a) : a,
+    );
+    const next: Project = { ...project, answers, pairAnswers, updatedAt: Math.max(Date.now(), project.updatedAt + 1) };
+    await d.projects.put(next);
+    await d.pieces.put({ ...entry.row, updatedAt: Date.now() });
+    await d.settings.put({ key: removedPiecesKey(projectId), value: kept.filter((r) => r !== entry) });
     return next;
   });
 }
@@ -305,15 +370,15 @@ export function accuracyOf(answers: SpotAnswer[]): Accuracy {
     answers: real.length,
     first: {
       strong: row(
-        'Strong',
+        'Very likely',
         first.filter((a) => a.verdict === 'strong'),
       ),
       likely: row(
-        'Likely',
+        'Maybe',
         first.filter((a) => a.verdict === 'likely'),
       ),
       several: row(
-        'Several spots look alike',
+        'Several places look alike',
         first.filter((a) => a.verdict === 'several'),
       ),
       all: row('All', first),

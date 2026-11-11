@@ -129,6 +129,9 @@ test('pieces are grouped by colour, light up on the photo, go into a tray and ba
   await page.getByTestId('table-photo-pick').click();
   await expect(page.getByTestId('table-photo')).toHaveCount(0);
   await expect(page.getByTestId('piece-spots')).toBeVisible();
+  // Its card is a sheet over the page (M9 part 3): closed before the page goes on.
+  await page.getByTestId('spot-close').click();
+  await expect(page.getByTestId('spot')).toHaveCount(0);
 
   // Three colours, three groups (6 trays asked for, but only 3 colours): the darkest is A.
   await page.getByTestId('trays-toggle').click();

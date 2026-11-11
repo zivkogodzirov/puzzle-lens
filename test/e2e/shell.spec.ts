@@ -284,14 +284,16 @@ test('the action bar: main actions at once, never over the last lines or the ✓
     });
     expect(lastBottom).toBeLessThanOrEqual(await barTop());
 
-    // A piece's panel: its ✓ Fits row is above the bar.
+    // A piece's card (M9 part 3: a sheet over the bar): its answers on screen, above the Home bar.
     await page.evaluate(() => scrollTo(0, 0));
     await page.locator('[data-testid="catalog"] .thumb-btn').nth(1).click();
     await expect(page.getByTestId('spot-fits')).toBeVisible();
+    // Done sliding up.
+    await expect.poll(() => page.getByTestId('spot').evaluate((e) => e.hasAttribute('data-opening'))).toBe(false);
     const answer = (await page.getByTestId('spot-answer').boundingBox())!;
     expect(answer.y).toBeGreaterThanOrEqual(0);
-    expect(answer.y + answer.height).toBeLessThanOrEqual(await barTop());
-    // Each answer on one line, across the panel's width (check 2026-11-10: "Doesn't fit" wrapped at 375 px).
+    expect(answer.y + answer.height).toBeLessThanOrEqual(size.height - 34);
+    // Each answer on one line (check 2026-11-10: "Doesn't fit" wrapped at 375 px).
     for (const id of ['spot-fits', 'spot-not']) expect((await page.getByTestId(id).boundingBox())!.height, id).toBeLessThanOrEqual(60);
     // No label in the bar cut off (the Joins count is a badge).
     expect(await bar.evaluate((b) => [...b.querySelectorAll('.action-bar-label')].filter((l) => l.scrollWidth > l.clientWidth + 1).length)).toBe(0);
@@ -322,7 +324,7 @@ test('the action bar: main actions at once, never over the last lines or the ✓
   await page.locator('[data-testid="catalog"] .thumb-btn').first().click();
   await page.getByTestId('spot-fits').click();
   const note = page.getByTestId('toast');
-  await expect(note).toContainText('In the puzzle at column');
+  await expect(note).toContainText('Placed at');
   await expect(note).toBeInViewport({ ratio: 1 });
   const nb = (await note.boundingBox())!;
   expect(nb.y + nb.height).toBeLessThanOrEqual((await page.getByTestId('action-bar').boundingBox())!.y);

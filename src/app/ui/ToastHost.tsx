@@ -10,7 +10,9 @@ import { route, routeArg } from '../router';
 import { currentToast, dismissToast, runToastAction } from './toast';
 
 /** Layers that open over a screen: the live view and camera views, full-screen photos, sheets and dialogs, the test steps. */
-const OVER_PAGE = '.live, .photo-result, [role="dialog"], [role="alertdialog"], .test-sheet';
+// The piece card (its sheet, testid "spot") is left out: opening the next piece's card keeps the last answer's Undo
+// (review 2026-11-11: otherwise a mistaken "Not a piece" was gone once the next piece was tapped).
+const OVER_PAGE = '.live, .photo-result, [role="dialog"]:not([data-testid="spot"]), [role="alertdialog"], .test-sheet';
 
 export function ToastHost() {
   const t = currentToast.value;

@@ -1,4 +1,6 @@
-# M9, part 2: one look across the app (and M9 part 1, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+# M9, part 3: tap a piece, answer, undo (and M9 parts 1–2, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+
+**New in M9 part 3** (design stage 3 of 6): tapping a piece opens a **card from the bottom** with a close-up of the box picture and two big answers, **Not there** and **It fits**; every answer has an **Undo**; **"Not a piece"** is one tap with Undo. The words are new everywhere: "It fits / Not there", and "Very likely / Maybe" instead of Strong / Likely (percentages only in Tester mode). Outlines on photos and in the live view speak one language: **solid = fine, dashed = have a look** (with a small badge saying why), one label per piece that never overlap, a **?** button that explains it, and a **Pieces in view** list.
 
 **New in M9 part 2** (design stage 2 of 6): the whole app now uses one set of building blocks: iPhone-style top bars whose **‹ back** goes to the screen you came from, lists, coloured message boxes, a sheet that slides up from the bottom to confirm big deletions, and a dark **Undo** message above the bottom bar. One set of line icons replaces the emoji. Nothing about how the app finds or places pieces changed.
 
@@ -21,6 +23,28 @@ These steps are for version **{version}** (Settings shows the version).
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## M9 part 3: tap a piece, answer, undo
+### The piece card
+1. Open *The Kiss* and tap a piece. A card slides up from the bottom: the piece's picture, **"Column … · Row …"**, a word like **Very likely** or **Maybe**, and a **close-up of the box picture** with the spot in a green square and the rest darker. Does the close-up help you find the spot on your puzzle?
+2. Tap **Whole picture**: the whole box picture shows. Tap **Close-up** to go back. Swipe the card up: it grows; down: it shrinks or closes.
+3. Tap **Not there**: the card moves straight to the next place to try, and "Not at …" with **Undo** appears above the card. Tap Undo: the first place comes back.
+4. Tap **It fits**: the card closes and "Placed at …" with **Undo** shows. Tap Undo: the piece is back among your pieces.
+5. Under "Also possible", tap one of the small pictures: the card shows that place instead.
+6. Tap **Point it out**: the live view shows that one piece pulsing. Tap back: the card is there again.
+7. Tap **Not a piece** once (on something that really isn't a piece, or tap **Undo** right away): it disappears with "Removed" and **Undo**. Undo brings it back.
+8. **Fill a spot**: tap a spot, then a suggested piece's picture: its card opens on that spot. The buttons say **It fits** / **Not there**. **Joins**: "They fit" / "Not there".
+9. On the puzzle page the summary now reads "N very likely · N maybe · N where several places look alike".
+
+### Outlines on photos and in the live view
+1. Open **Live view** and point the phone at your pieces. Pieces with a known spot have a small dark label like **17·9**; no two labels sit on top of each other.
+2. The first time, a note says what "17·9" means. Tap **Got it**; it doesn't come back.
+3. **Dashed** outlines always have a small yellow badge: **?** = check the piece is whole (a faint or part outline); **arrows apart** = these pieces touch, spread them apart; **moved?** = it isn't where it was.
+4. Tap the **?** button at the top: a card explains the colours and badges.
+5. Tap **Pieces in view**: a list of the outlined pieces; tap one and its box opens with **It fits** / **Not there**.
+6. **Joins** → "What next" → **Point them out** on a square of 4: the four pieces are one green shape with one label.
+7. **Show my table** and the last scan photo (**Scan** → **See the last photo**) use the same outlines, badges and **?**; anything that isn't a piece has a **cross**.
+8. Does the live view still feel smooth?
 
 ## M9 part 2: one look across the app
 Look at each screen in light mode, then once in dark mode.
@@ -216,6 +240,7 @@ In the M8 part 3 follow-up I said a darker cloth might help pale pieces. I never
 - Your answers are kept with the puzzle, and in backups.
 
 ## Please tell me
+- M9 part 3: does the piece card make it easier to find the spot (the close-up)? Are "It fits / Not there" and "Very likely / Maybe" clear? Are the dashed outlines and badges easy to understand on your cream table?
 - M9 part 2: do the new top bars, lists and message boxes feel more like an iPhone app? Anything harder to find than before? Is the Undo message in a good place, or does it get in the way?
 - M9 part 1: is the app easier to read in light mode? Anything still faint, too small, or covered by the bottom bar? Did the app reopen your puzzle, and does the screen stay on?
 - M9 part 1: are the outlines in the live view easier to see on your table now? Does the live view still feel smooth?

@@ -150,7 +150,7 @@ const sideways = (page: Page) => page.evaluate(() => document.documentElement.sc
 test('icons instead of emoji, with their words: the action bar, the answers, the tools list', async ({ page }) => {
   await seed(page, null, true);
   await openPuzzle(page);
-  await expect(page.getByTestId('place-summary')).toContainText(/[1-9]\d* strong/, { timeout: 60_000 });
+  await expect(page.getByTestId('place-summary')).toContainText(/[1-9]\d* very likely/, { timeout: 60_000 });
   const bar = page.getByTestId('action-bar');
   for (const [id, icon, name] of [
     ['scan-pieces', 'camera', 'Scan'],
@@ -178,20 +178,22 @@ test('icons instead of emoji, with their words: the action bar, the answers, the
   await expect(page.getByTestId('trays-toggle')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByTestId('trays')).toBeVisible();
   await page.getByTestId('trays-toggle').click();
-  // A piece's answers: a check and an x beside the same words; Fits is the filled green button.
+  // A piece's answers (M9 part 3: "It fits" / "Not there"): a check and an x beside the words; It fits is the filled green button.
   await page.locator('[data-testid="catalog"] .thumb-btn').first().click();
   const fits = page.getByTestId('spot-fits');
-  await expect(fits).toHaveAccessibleName('Fits');
+  await expect(fits).toHaveAccessibleName('It fits');
   await expect(fits.locator('svg[data-icon="check"]')).toHaveCount(1);
   await expect(fits).toHaveClass(/btn-good/);
-  await expect(page.getByTestId('spot-not')).toHaveAccessibleName("Doesn't fit");
+  await expect(page.getByTestId('spot-not')).toHaveAccessibleName('Not there');
   await expect(page.getByTestId('spot-not').locator('svg[data-icon="x"]')).toHaveCount(1);
-  await expect(page.getByTestId('spot-remove')).toHaveClass(/btn-destructive/);
-  // ✓ Fits: a toast with Undo; Undo puts the piece back on the table.
+  // "Not a piece": a red plain button with a trash icon.
+  await expect(page.getByTestId('spot-remove')).toHaveAccessibleName('Not a piece');
+  await expect(page.getByTestId('spot-remove').locator('svg[data-icon="trash"]')).toHaveCount(1);
+  // It fits: a toast with Undo; Undo puts the piece back on the table.
   const thumbs = page.locator('[data-testid="catalog"] .thumb-btn');
   await expect(thumbs).toHaveCount(6);
   await fits.click();
-  await expect(page.getByTestId('toast-text')).toContainText(/In the puzzle at column \d+, row \d+\./);
+  await expect(page.getByTestId('toast-text')).toContainText(/Placed at \d+·\d+/);
   await expect(thumbs).toHaveCount(5);
   await page.getByTestId('toast-action').click();
   await expect(thumbs).toHaveCount(6);
@@ -295,10 +297,10 @@ for (const size of [
     await seed(page, null, true);
     await page.setViewportSize(size);
     await openPuzzle(page);
-    await expect(page.getByTestId('place-summary')).toContainText(/[1-9]\d* strong/, { timeout: 60_000 });
+    await expect(page.getByTestId('place-summary')).toContainText(/[1-9]\d* very likely/, { timeout: 60_000 });
     expect(await smallTargets(page)).toEqual([]);
     expect(await sideways(page)).toBeLessThanOrEqual(0);
-    // A piece's panel.
+    // A piece's card (M9 part 3: a sheet).
     await page.locator('[data-testid="catalog"] .thumb-btn').first().click();
     await expect(page.getByTestId('spot-fits')).toBeVisible();
     expect(await smallTargets(page)).toEqual([]);

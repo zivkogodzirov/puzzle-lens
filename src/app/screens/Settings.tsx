@@ -109,7 +109,7 @@ export function SettingsScreen() {
         </ListSection>
       )}
 
-      <ListSection header="Accuracy" footer="From your ✓ Fits / ✗ Doesn't fit answers.">
+      <ListSection header="Accuracy" footer="From your It fits / Not there answers.">
         <ListRow icon={<Icon name="bar-chart" />} tone="accent" title="How often is the app right?" href="#/accuracy" testId="settings-accuracy" />
       </ListSection>
 

@@ -13,10 +13,37 @@ import type { PieceRow, Project } from '../../project/types';
 import { useBlobUrl } from '../screens/Puzzle';
 import { Icon } from '../ui/icons';
 import { toast } from '../ui/toast';
+import { settings } from '../settings';
+import { ANSWER, CONFIDENCE_WORDS } from '../words';
 
 /** Pairs listed at most (the rest are counted). */
 const SHOW_MAX = 12;
 const pct = (p: number): number => Math.min(99, Math.round(p * 100));
+
+/**
+ * How sure a pair is, in words (decision 7): pairs at 70 % or more join 97–100 % of the time (the evidence
+ * under PAIRS.blockMinP, src/project/pairs.ts); below that, "Maybe". The % follows only in Tester mode.
+ */
+export function pairWords(p: number): string {
+  const w = p >= 0.7 ? CONFIDENCE_WORDS.strong : CONFIDENCE_WORDS.likely;
+  return settings.testerMode.value ? `${w}, ${pct(p)} %` : w;
+}
+
+/** The part of the picture a BoxCrop shows: [x, y, width, height] in cells. */
+export function cropView(grid: { cols: number; rows: number }, cells: Array<[number, number]>, around?: [number, number]): [number, number, number, number] {
+  if (around) {
+    const w = Math.min(around[0], grid.cols);
+    const h = Math.min(around[1], grid.rows);
+    const cx = cells.reduce((s, c) => s + c[0] + 0.5, 0) / cells.length;
+    const cy = cells.reduce((s, c) => s + c[1] + 0.5, 0) / cells.length;
+    return [Math.max(0, Math.min(grid.cols - w, cx - w / 2)), Math.max(0, Math.min(grid.rows - h, cy - h / 2)), w, h];
+  }
+  const c0 = Math.max(0, Math.min(...cells.map((c) => c[0])) - 1);
+  const r0 = Math.max(0, Math.min(...cells.map((c) => c[1])) - 1);
+  const c1 = Math.min(grid.cols, Math.max(...cells.map((c) => c[0])) + 2);
+  const r1 = Math.min(grid.rows, Math.max(...cells.map((c) => c[1])) + 2);
+  return [c0, r0, c1 - c0, r1 - r0];
+}
 
 export interface MatchList {
   /** Pairs to suggest, not yet answered, most likely first. */
@@ -51,22 +78,66 @@ function Thumb({ piece, label }: { piece: PieceRow | undefined; label: string })
   return url ? <img src={url} class="match-thumb" alt={label} title={label} /> : <span class="match-thumb catalog-empty" title={label} />;
 }
 
-/** The pieces' spots on the box picture, close up (cells c0…c1 × r0…r1, one cell of margin). */
-function BoxCrop({ boxUrl, project, cells, testId }: { boxUrl: string; project: Project; cells: Array<[number, number]>; testId: string }) {
+/**
+ * Spots on the box picture, close up: by default the cells with one cell of margin (the pairs and squares
+ * here). `around` [across, down]: that many cells instead, centred on the spots and kept inside the picture
+ * (the piece card's zoomed spot, M9 part 3); `dim`: everything but the spots darkened, the spots ringed.
+ */
+export function BoxCrop({
+  boxUrl,
+  project,
+  cells,
+  testId,
+  around,
+  dim = false,
+  class: cls = 'match-box',
+  label,
+}: {
+  boxUrl: string;
+  project: Project;
+  cells: Array<[number, number]>;
+  testId: string;
+  around?: [number, number];
+  dim?: boolean;
+  class?: string;
+  /** What it shows, for VoiceOver (without it, it is left out for VoiceOver: a picture beside its own words). */
+  label?: string;
+}) {
   const grid = project.grid!;
   const aspect = project.box ? project.box.width / project.box.height : grid.cols / grid.rows;
   const cellAspect = (aspect * grid.rows) / grid.cols;
-  const c0 = Math.max(0, Math.min(...cells.map((c) => c[0])) - 1);
-  const r0 = Math.max(0, Math.min(...cells.map((c) => c[1])) - 1);
-  const c1 = Math.min(grid.cols, Math.max(...cells.map((c) => c[0])) + 2);
-  const r1 = Math.min(grid.rows, Math.max(...cells.map((c) => c[1])) + 2);
-  const v = [c0, r0, c1 - c0, r1 - r0];
+  const v = cropView(grid, cells, around);
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
   return (
-    <svg class="match-box" style={{ aspectRatio: String((v[2]! * cellAspect) / v[3]!) }} viewBox={v.join(' ')} preserveAspectRatio="none" data-testid={testId}>
+    <svg
+      class={cls}
+      style={{ aspectRatio: String((v[2] * cellAspect) / v[3]) }}
+      viewBox={v.map(r3).join(' ')}
+      preserveAspectRatio="none"
+      data-testid={testId}
+      data-cells={cells.map(([c, r]) => `${c},${r}`).join(' ')}
+      role={label ? 'img' : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : 'true'}
+    >
       <image href={boxUrl} x={0} y={0} width={grid.cols} height={grid.rows} preserveAspectRatio="none" />
-      {cells.map(([c, r]) => (
-        <rect key={`${c},${r}`} x={c} y={r} width={1} height={1} class="spot-best" vector-effect="non-scaling-stroke" />
-      ))}
+      {dim && (
+        <path
+          class="crop-dim"
+          fill-rule="evenodd"
+          d={`M${r3(v[0])} ${r3(v[1])}h${r3(v[2])}v${r3(v[3])}h${r3(-v[2])}z${cells.map(([c, r]) => `M${c} ${r}h1v1h-1z`).join('')}`}
+        />
+      )}
+      {cells.map(([c, r]) =>
+        dim ? (
+          <g key={`${c},${r}`}>
+            <rect x={c} y={r} width={1} height={1} class="crop-ring-halo" vector-effect="non-scaling-stroke" />
+            <rect x={c} y={r} width={1} height={1} class="crop-ring" vector-effect="non-scaling-stroke" data-testid={`${testId}-cell`} />
+          </g>
+        ) : (
+          <rect key={`${c},${r}`} x={c} y={r} width={1} height={1} class="spot-best" vector-effect="non-scaling-stroke" />
+        ),
+      )}
     </svg>
   );
 }
@@ -104,7 +175,7 @@ function PairCard({
         {boxUrl && project.grid && <BoxCrop boxUrl={boxUrl} project={project} cells={[[s.col, s.row], bCell]} testId="match-box" />}
         <div class="grow small">
           <p>
-            <strong>These two join</strong> ({DIR_WORDS[s.dir]}, as on the box) · <span class="nw">{pct(s.p)} %</span>
+            <strong>These two join</strong> ({DIR_WORDS[s.dir]}, as on the box) · <span class="nw">{pairWords(s.p)}</span>
             {confirmed && (
               <span class="match-ok nw" title="Part of a square of 4 pieces that all join" data-testid="match-confirmed">
                 {' '}
@@ -124,11 +195,12 @@ function PairCard({
         <button class="btn btn-small" data-testid="match-find" onClick={() => onFind([s.a, s.b])}>
           <Icon name="scan-eye" size={20} /> Point them out
         </button>
-        <button class="btn btn-small btn-fits btn-good" data-testid="match-fits" onClick={() => onAnswer(s, true)}>
-          <Icon name="check" size={20} /> They fit
-        </button>
+        {/* "Not there" left, "They fit" right, as in iPhone alerts (decision 6). */}
         <button class="btn btn-small" data-testid="match-not" onClick={() => onAnswer(s, false)}>
-          <Icon name="x" size={20} /> Don't fit
+          <Icon name="x" size={20} /> {ANSWER.not}
+        </button>
+        <button class="btn btn-small btn-fits btn-good" data-testid="match-fits" onClick={() => onAnswer(s, true)}>
+          <Icon name="check" size={20} /> {ANSWER.groupFits}
         </button>
       </div>
     </div>
@@ -179,7 +251,7 @@ function BlockCard({
             <strong>
               A square of 4 <Icon name="check" size={16} class="inline-icon" label="all four pairs agree" />
             </strong>{' '}
-            · <span class="nw">{pct(b.p)} %</span>
+            · <span class="nw">{pairWords(b.p)}</span>
           </p>
           <p class="muted">
             All four pairs agree: columns {b.col + 1}–{b.col + 2}, rows {b.row + 1}–{b.row + 2}.
@@ -191,10 +263,10 @@ function BlockCard({
           <Icon name="scan-eye" size={20} /> Point them out
         </button>
         <button class="btn btn-small btn-fits btn-good" data-testid="match-block-fits" onClick={() => onAnswerAll(b)}>
-          <Icon name="check" size={20} /> All 4 fit
+          <Icon name="check" size={20} /> {ANSWER.groupFits}
         </button>
       </div>
-      <p class="muted small">If one of them doesn't fit, answer its pair below.</p>
+      <p class="muted small">If one of them isn’t right, answer its pair below.</p>
     </div>
   );
 }

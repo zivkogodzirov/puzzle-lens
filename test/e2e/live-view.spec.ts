@@ -189,12 +189,12 @@ test.describe('live view of the table', () => {
     const inView = Number(await overlay.getAttribute('data-drawn'));
     let at = (await overlay.getAttribute('data-first'))!.split(',').map(Number);
     await page.getByTestId('live-tap').click({ position: { x: at[0]!, y: at[1]! } });
-    // M9 part 2: the answers carry check / x icons beside the same words, Fits filled green; Close is an icon
+    // M9 part 2: the answers carry check / x icons beside the words (M9 part 3: "It fits" / "Not there"), It fits filled green; Close is an icon
     // button with a name; Back in the top row too.
     await expect(page.getByTestId('live-fits')).toHaveClass(/btn-good/);
-    await expect(page.getByTestId('live-fits')).toHaveText('Fits');
+    await expect(page.getByTestId('live-fits')).toHaveText('It fits');
     await expect(page.getByTestId('live-fits').locator('svg[data-icon="check"]')).toHaveCount(1);
-    await expect(page.getByTestId('live-not')).toHaveText("Doesn't fit");
+    await expect(page.getByTestId('live-not')).toHaveText('Not there');
     await expect(page.getByTestId('live-not').locator('svg[data-icon="x"]')).toHaveCount(1);
     await expect(page.getByTestId('live-info-close')).toHaveAccessibleName('Close');
     await expect(page.getByTestId('live-info-close').locator('svg[data-icon="x"]')).toHaveCount(1);
@@ -214,7 +214,7 @@ test.describe('live view of the table', () => {
     await page.getByTestId('live-undo').click();
     await expect(note).toContainText('Undone');
     await expect.poll(async () => Number(await overlay.getAttribute('data-drawn'))).toBe(inView);
-    // ✗ Doesn't fit has an Undo too.
+    // Not there has an Undo too.
     at = (await overlay.getAttribute('data-first'))!.split(',').map(Number);
     await page.getByTestId('live-tap').click({ position: { x: at[0]!, y: at[1]! } });
     await page.getByTestId('live-not').click();

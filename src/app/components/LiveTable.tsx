@@ -6,14 +6,22 @@
  *
  * Tap a piece to see what the app knows about it. `find` pieces pulse, and an arrow at the
  * screen's edge points to them when they are out of view.
+ *
+ * M9 part 3: the outline language (src/app/overlay.ts): solid = fine, dashed with a badge = have a look
+ * ("?" faint outline, arrows apart = touching, "moved?"); one column·row pill per sure spot, placed so
+ * labels never overlap (tapped piece first, then the pieces to find, then sure spots), a dot for an unsure
+ * spot; a square of 4 as one quad with one label. "?" opens the legend; "Pieces in view" lists the outlined
+ * pieces as buttons (the same as tapping one on the picture).
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { TestButton } from './TestSteps';
 import { IconButton } from '../ui/Button';
 import { Icon } from '../ui/icons';
+import { Sheet } from '../ui/Sheet';
 import { settings } from '../settings';
-import { errorWords } from '../words';
+import { ANSWER, CONFIDENCE_WORDS, errorWords } from '../words';
+import { LabelTip, OverlayLegendButton, OverlayLegendSheet } from './OverlayLegend';
 import { cameraError, cameraState, cameraStream, startCamera, stopCamera } from '../../camera/camera';
 import { latestFrame, latestFrameAt, pumpError, startPump, stopPump } from '../../camera/framePump';
 import { frameToElement } from '../../camera/coords';
@@ -26,7 +34,26 @@ import type { AnchorPhoto } from '../../shared/apis';
 import { trackerWorker } from '../workers';
 import { OverlayPredictor } from '../livePredict';
 import { logInfo, logWarn } from '../../log/logger';
-import { OVERLAY_BAD, strokeHalo } from '../overlay';
+import {
+  badgeAt,
+  badgeBox,
+  DASH,
+  drawBadge,
+  drawDots,
+  drawLabels,
+  labelTextWidth,
+  markOf,
+  OVERLAY_BAD,
+  pieceName,
+  placeLabels,
+  PRIO,
+  squareLabel,
+  squaresOf,
+  strokeHalo,
+  type BadgeMark,
+  type LabelRequest,
+  type Rect,
+} from '../overlay';
 import { OV } from '../tokens';
 
 /** A piece is shown as gone from its spot after this many of the last GONE_CHECKS presence checks. */
@@ -83,6 +110,7 @@ export function LiveTable({
   find = [],
   answer,
   lines = [],
+  confidenceOf,
   title,
   legend,
   onClose,
@@ -108,6 +136,12 @@ export function LiveTable({
   };
   /** Lines between pieces that join (M6): ✓ for a pair confirmed by a square of 4. */
   lines?: MatchLine[];
+  /**
+   * How sure a labelled piece's spot is (M9 part 3, optional): 'strong' gets its column·row label, 'likely' and
+   * 'several' a small dot (tap for the guess); the piece box says it in words (CONFIDENCE_WORDS, the % in Tester
+   * mode). Without it every label shows, as before.
+   */
+  confidenceOf?: (p: PieceRow) => { verdict: keyof typeof CONFIDENCE_WORDS; p?: number } | null;
   title: string;
   legend?: ComponentChildren;
   onClose: () => void;
@@ -149,8 +183,16 @@ export function LiveTable({
   const drawn = useRef<Drawn[]>([]);
   const tappedRef = useRef<string | null>(null);
   tappedRef.current = tapped;
-  const cur = useRef({ pieces, colourOf, labelOf, targets, lines });
-  cur.current = { pieces, colourOf, labelOf, targets, lines };
+  const cur = useRef({ pieces, colourOf, labelOf, targets, lines, confidenceOf });
+  cur.current = { pieces, colourOf, labelOf, targets, lines, confidenceOf };
+  /** A column·row label is on the picture (for the one-time tip). */
+  const labelsShown = useRef(false);
+  /** The buttons and notes over the picture (canvas px), measured 4 times a second: labels keep clear of them. */
+  const chrome = useRef<Rect[]>([]);
+  const [labelsSeen, setLabelsSeen] = useState(false);
+  /** "Pieces in view" (design plan §3.8 rule 10): the pieces outlined when it was opened. */
+  const [inViewList, setInViewList] = useState<string[] | null>(null);
+  const [legendOpen, setLegendOpen] = useState(false);
   const stream = cameraStream.value;
   const state = cameraState.value;
   const live = state === 'live';
@@ -265,6 +307,15 @@ export function LiveTable({
       const t = performance.now();
       const fresh = lastFix && t - lastFixAt < STALE_MS;
       const inView = drawn.current.length;
+      if (labelsShown.current) setLabelsSeen(true);
+      const c = canvasRef.current;
+      if (c) {
+        const o = c.getBoundingClientRect();
+        chrome.current = [...(c.parentElement?.querySelectorAll('.live-top > *, .live-status, .ov-tip, .live-table-bottom > *') ?? [])]
+          .map((el) => el.getBoundingClientRect())
+          .filter((r) => r.width > 0 && r.height > 0)
+          .map((r) => ({ x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height }));
+      }
       setStatus({
         kind: fresh ? (lastFix!.quality === 'good' ? 'good' : 'weak') : seen ? 'lost' : 'looking',
         inView,
@@ -279,11 +330,16 @@ export function LiveTable({
     };
   }, []);
 
-  // Outlines on the live picture, every screen refresh, where the table is predicted to be now (M5 part 4).
+  // Outlines on the live picture, every screen refresh, where the table is predicted to be now (M5 part 4),
+  // in the outline language (M9 part 3, src/app/overlay.ts): solid = fine, dashed + badge = have a look,
+  // one column·row pill per sure spot (placed so none overlap), a dot for an unsure one, a square of 4 as one quad.
   useEffect(() => {
     let raf = 0;
     const predictor = new OverlayPredictor();
     const dbg = window as unknown as { __liveDebug?: boolean; __livePredict?: boolean; __liveOverlay?: unknown };
+    // The squares of 4 among the lines, worked out again only when the lines change.
+    let sqFor: MatchLine[] | null = null;
+    let squares: ReturnType<typeof squaresOf> = [];
     const draw = () => {
       raf = requestAnimationFrame(draw);
       const canvas = canvasRef.current;
@@ -304,6 +360,7 @@ export function LiveTable({
       const now = performance.now();
       if (!f?.anchor || now - latestFrameAt > STALE_MS) {
         drawn.current = [];
+        labelsShown.current = false;
         canvas.dataset.drawn = '0';
         predictor.reset();
         return;
@@ -326,22 +383,49 @@ export function LiveTable({
         const q = applyH(H, [x, y]);
         return frameToElement(q[0], q[1], frame, vid, el, f.rotation);
       };
-      const { pieces: list, colourOf: col, labelOf: lab, targets: tg, lines: joins } = cur.current;
+      const { pieces: list, colourOf: col, labelOf: lab, targets: tg, lines: joins, confidenceOf: conf } = cur.current;
+      if (joins !== sqFor) {
+        sqFor = joins;
+        squares = squaresOf(joins);
+      }
+      const inSquare = new Set<string>();
+      const squareLines = new Set<number>();
+      for (const s of squares) {
+        for (const id of s.ids) inSquare.add(id);
+        for (const i of s.lines) squareLines.add(i);
+      }
+      const tappedId = tappedRef.current;
+      // Tracking unsure: every outline fainter (the status line says "hold steady"); dashes are for the pieces.
+      const weakFix = f.anchor.quality === 'weak';
       const centres = new Map<string, Vec2>();
+      const labelOfId = new Map<string, string | null>();
       const want = new Set(tg);
       const out: Drawn[] = [];
-      const labels: Array<{ at: Vec2; text: string; colour: string }> = [];
+      const reqs: LabelRequest[] = [];
+      const dots: Array<{ at: Vec2; colour: string }> = [];
+      const badges: Array<{ id: string; mark: BadgeMark; at: [number, number] }> = [];
       const pulses: Array<{ at: Vec2; r: number; colour: string; id: string }> = [];
       for (const p of list) {
         const o = p.outlineMm;
         if (o.length < 6) continue;
         const step = o.length > 160 ? 8 : o.length > 80 ? 4 : 2;
         const poly: Vec2[] = [];
-        for (let i = 0; i < o.length; i += step) poly.push(toEl(p.table.x + o[i]!, p.table.y + o[i + 1]!));
+        let x0 = Infinity;
+        let y0 = Infinity;
+        let x1 = -Infinity;
+        let y1 = -Infinity;
+        for (let i = 0; i < o.length; i += step) {
+          const q = toEl(p.table.x + o[i]!, p.table.y + o[i + 1]!);
+          poly.push(q);
+          if (q[0] < x0) x0 = q[0];
+          if (q[0] > x1) x1 = q[0];
+          if (q[1] < y0) y0 = q[1];
+          if (q[1] > y1) y1 = q[1];
+        }
         const centre = toEl(p.table.x, p.table.y);
         centres.set(p.id, centre);
-        const size = Math.max(...poly.map((q) => Math.hypot(q[0] - centre[0], q[1] - centre[1])));
-        const onScreen = poly.some((q) => q[0] >= 0 && q[1] >= 0 && q[0] <= w && q[1] <= h);
+        const size = Math.max(x1 - x0, y1 - y0) / 2;
+        const onScreen = x1 >= 0 && y1 >= 0 && x0 <= w && y0 <= h;
         if (want.has(p.id)) pulses.push({ at: centre, r: size, colour: col(p), id: p.id });
         if (!onScreen) continue;
         out.push({ id: p.id, poly, centre });
@@ -349,35 +433,52 @@ export function LiveTable({
         poly.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])));
         ctx.closePath();
         const isGone = gone.current.has(p.id);
+        const mark = markOf(p.flags, isGone);
         const c = isGone ? GONE_COLOUR : col(p);
         const dim = want.size > 0 && !want.has(p.id);
-        const width = p.id === tappedRef.current ? 4 : 2.5;
+        const alpha = dim ? 0.5 : weakFix ? 0.7 : 1;
+        const width = p.id === tappedId ? 4 : 2.5;
         // On a dark halo (M9 part 1: pale lines vanish on a cream table).
-        ctx.globalAlpha = dim ? 0.5 : 1;
+        ctx.globalAlpha = alpha;
         strokeHalo(ctx, width);
-        // Gone from its spot, or tracking unsure: dashed and hollow (PLAN §5 "red/hollow uncertain").
-        const dashed = isGone || f.anchor.quality === 'weak';
-        ctx.setLineDash(dashed ? [7, 5] : []);
-        if (!dashed) {
+        // Have a look (gone from its spot, a faint outline, touching pieces): dashed and hollow, with a badge.
+        const dashed = mark !== 'ok';
+        if (!dashed && !weakFix) {
           ctx.fillStyle = c;
           ctx.globalAlpha = dim ? 0.08 : 0.18;
           ctx.fill();
         }
-        ctx.globalAlpha = dim ? 0.5 : 1;
+        ctx.globalAlpha = alpha;
+        ctx.setLineDash(dashed ? DASH : []);
         ctx.strokeStyle = c;
         ctx.lineWidth = width;
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.globalAlpha = 1;
-        const text = isGone ? 'moved?' : lab?.(p);
-        if (text && size > 14) labels.push({ at: centre, text, colour: c });
+        if (mark !== 'ok') badges.push({ id: p.id, mark, at: badgeAt(mark, { x0, y0, x1 }, w, h) });
+        if (mark === 'moved') continue;
+        const text = lab?.(p) ?? null;
+        labelOfId.set(p.id, text);
+        if (!text) continue;
+        const isTapped = p.id === tappedId;
+        const isTarget = want.has(p.id);
+        const cf = conf?.(p);
+        const sure = cf ? cf.verdict === 'strong' : true;
+        if (isTapped || isTarget) reqs.push({ key: p.id, text, x: centre[0], y: centre[1], r: size, prio: isTapped ? PRIO.tapped : PRIO.target });
+        else if (inSquare.has(p.id)) continue;
+        // An unsure spot: a dot, no label. A sure one: a label where it fits (not on pieces too small to read it on,
+        // as before; the green outline still says its spot is known).
+        else if (!sure) dots.push({ at: centre, colour: c });
+        else if (size > 10) reqs.push({ key: p.id, text, x: centre[0], y: centre[1], r: size, prio: PRIO.sure });
       }
-      // Pieces that join (M6): a line between their centres, its label at the middle.
+      // Pieces that join (M6): a line between their centres, its mark at the middle (a % only in Tester mode).
+      const tester = settings.testerMode.value;
       let nLines = 0;
-      for (const j of joins) {
+      joins.forEach((j, i) => {
+        if (squareLines.has(i)) return;
         const p = centres.get(j.a);
         const q = centres.get(j.b);
-        if (!p || !q) continue;
+        if (!p || !q) return;
         nLines++;
         const c = j.confirmed ? LINE_OK_COLOUR : LINE_COLOUR;
         ctx.beginPath();
@@ -391,20 +492,58 @@ export function LiveTable({
         ctx.setLineDash(j.confirmed ? [] : [9, 6]);
         ctx.stroke();
         ctx.setLineDash([]);
-        if (j.label) labels.push({ at: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], text: j.label, colour: c });
-      }
-      ctx.font = '700 13px -apple-system, system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      for (const l of labels) {
-        const tw = ctx.measureText(l.text).width + 10;
-        ctx.fillStyle = OV.labelBg;
+        if (j.label && (tester || !/%\s*$/.test(j.label)))
+          reqs.push({ key: `line:${i}`, text: j.label, x: (p[0] + q[0]) / 2, y: (p[1] + q[1]) / 2, r: 0, prio: PRIO.line });
+      });
+      // A square of 4: one translucent quad through the 4 pieces, with one label ("17–18 · 7–8").
+      const quads: Array<{ ids: string[]; label: string }> = [];
+      for (const s of squares) {
+        const pts = s.ids.map((id) => centres.get(id));
+        if (pts.some((q) => !q)) continue;
+        nLines += 4;
         ctx.beginPath();
-        ctx.roundRect(l.at[0] - tw / 2, l.at[1] - 10, tw, 20, 6);
+        pts.forEach((q, i) => (i ? ctx.lineTo(q![0], q![1]) : ctx.moveTo(q![0], q![1])));
+        ctx.closePath();
+        ctx.globalAlpha = 0.2;
+        ctx.fillStyle = LINE_OK_COLOUR;
         ctx.fill();
-        ctx.fillStyle = l.colour;
-        ctx.fillText(l.text, l.at[0], l.at[1]);
+        ctx.globalAlpha = 1;
+        strokeHalo(ctx, 3);
+        ctx.strokeStyle = LINE_OK_COLOUR;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        const label =
+          squareLabel(
+            s.ids.map((id) => {
+              if (labelOfId.has(id)) return labelOfId.get(id);
+              const p = list.find((q) => q.id === id);
+              return p ? (lab?.(p) ?? null) : null;
+            }),
+          ) ?? '✓';
+        const cx = pts.reduce((a, q) => a + q![0], 0) / 4;
+        const cy = pts.reduce((a, q) => a + q![1], 0) / 4;
+        reqs.push({ key: `square:${s.ids.join('+')}`, text: label, x: cx, y: cy, r: 0, prio: PRIO.square });
+        quads.push({ ids: s.ids, label });
       }
+      // The square's one label speaks for its 4 pieces: none of their own (one label per thing on the table).
+      if (quads.length) {
+        const inQuad = new Set(quads.flatMap((q) => q.ids));
+        for (let i = reqs.length - 1; i >= 0; i--) if (inQuad.has(reqs[i]!.key)) reqs.splice(i, 1);
+      }
+      // Badges: one per dashed outline, but not on top of another badge (in a crowd the dashes still say "have a look").
+      const shown: typeof badges = [];
+      const badgeBoxes: Rect[] = [];
+      for (const b of badges) {
+        const r = badgeBox(b.mark, b.at[0], b.at[1]);
+        if (badgeBoxes.some((o) => r.x < o.x + o.w && o.x < r.x + r.w && r.y < o.y + o.h && o.y < r.y + r.h)) continue;
+        badgeBoxes.push(r);
+        shown.push(b);
+      }
+      // Labels: greedily, never over each other nor over a badge or the buttons (overlay.ts placeLabels).
+      const { placed } = placeLabels(reqs, (t) => labelTextWidth(t, ctx), { w, h }, [...chrome.current, ...badgeBoxes]);
+      drawDots(ctx, dots);
+      for (const b of shown) drawBadge(ctx, b.mark, b.at[0], b.at[1]);
+      drawLabels(ctx, placed);
       // Pieces to find: a pulsing ring (still and thick with Reduce Motion on), or an arrow at the edge pointing to them.
       const beat = pulses.length && matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0.5 + 0.5 * Math.sin(now / 180);
       for (const t of pulses) {
@@ -445,10 +584,26 @@ export function LiveTable({
         }
       }
       drawn.current = out;
-      if (dbg.__liveDebug) dbg.__liveOverlay = { t: now, predicted: predictor.enabled, centres: Object.fromEntries(out.map((d) => [d.id, d.centre])) };
-      // For the automated tests: how many pieces are drawn, and where the first one is.
+      labelsShown.current = placed.some((l) => !l.key.startsWith('line:'));
+      if (dbg.__liveDebug)
+        dbg.__liveOverlay = {
+          t: now,
+          predicted: predictor.enabled,
+          centres: Object.fromEntries(out.map((d) => [d.id, d.centre])),
+          labels: placed,
+          badges: shown.map((b) => ({ id: b.id, mark: b.mark, x: b.at[0], y: b.at[1] })),
+          dashed: badges.length,
+          quads,
+          joins: joins.map((j) => [j.a, j.b, j.confirmed]),
+          dots: dots.length,
+          size: [w, h],
+        };
+      // For the automated tests: how many pieces are drawn (and labels, badges, squares), and where the first piece is.
       canvas.dataset.drawn = String(out.length);
       canvas.dataset.lines = String(nLines);
+      canvas.dataset.labels = String(placed.length);
+      canvas.dataset.badges = String(shown.length);
+      canvas.dataset.quads = String(quads.length);
       canvas.dataset.first = out.length ? `${Math.round(out[0]!.centre[0])},${Math.round(out[0]!.centre[1])}` : '';
     };
     raf = requestAnimationFrame(draw);
@@ -474,6 +629,14 @@ export function LiveTable({
   };
 
   const tp = tapped ? byId.get(tapped) : undefined;
+  const sureOf = (p: PieceRow) => {
+    const c = confidenceOf?.(p);
+    return c ? c.verdict === 'strong' : true;
+  };
+  /** VoiceOver's and the list's name for a piece ("Edge piece, maybe column 17 row 8, check outline"). */
+  const nameOf = (p: PieceRow) => pieceName(p, labelOf?.(p) ?? null, sureOf(p), gone.current.has(p.id));
+  const tpConf = tp ? confidenceOf?.(tp) : null;
+  const listed = (inViewList ?? []).map((id) => byId.get(id)).filter((p): p is PieceRow => Boolean(p));
   const words =
     refs.kind === 'loading'
       ? 'Getting your scan photos ready…'
@@ -491,7 +654,7 @@ export function LiveTable({
   return (
     <div class="live live-table" data-testid="live-table">
       <video ref={videoRef} playsInline muted autoPlay data-testid="live-video" />
-      <canvas ref={canvasRef} class="overlay" data-testid="live-table-overlay" data-status={status.kind} />
+      <canvas ref={canvasRef} class="overlay" data-testid="live-table-overlay" data-status={status.kind} aria-hidden="true" />
       <div class="live-tap" data-testid="live-tap" onClick={onTap} />
 
       <div class="live-top">
@@ -499,6 +662,7 @@ export function LiveTable({
           <Icon name="chevron-left" />
         </IconButton>
         <span class="title">{title}</span>
+        <OverlayLegendButton onOpen={() => setLegendOpen(true)} />
         <TestButton variant="camera" />
       </div>
       {words && (
@@ -507,6 +671,7 @@ export function LiveTable({
           {refs.kind === 'ready' && status.perSec > 0 && settings.testerMode.value && <span class="live-rate"> · {Math.round(status.perSec)}/s</span>}
         </p>
       )}
+      <LabelTip active={labelsSeen} />
 
       {refs.kind === 'none' && (
         <div class="notice notice-warn live-notice" data-testid="live-no-photo">
@@ -556,6 +721,13 @@ export function LiveTable({
             <div class="grow">
               {labelOf?.(tp) && <strong>{labelOf(tp)} · </strong>}
               {infoOf ? infoOf(tp) : 'A scanned piece.'}
+              {tpConf && !infoOf && (
+                <span class="live-confidence" data-testid="live-confidence">
+                  {' '}
+                  {CONFIDENCE_WORDS[tpConf.verdict]}
+                  {settings.testerMode.value && tpConf.p !== undefined ? ` · ${Math.round(tpConf.p * 100)} %` : ''}
+                </span>
+              )}
             </div>
             {answer?.labelOf(tp) && (
               <div class="row" style={{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -571,7 +743,7 @@ export function LiveTable({
                   }}
                 >
                   <Icon name="check" size={20} />
-                  Fits
+                  {ANSWER.fits}
                 </button>
                 <button
                   class="btn btn-small"
@@ -582,7 +754,7 @@ export function LiveTable({
                   }}
                 >
                   <Icon name="x" size={20} />
-                  Doesn't fit
+                  {ANSWER.not}
                 </button>
               </div>
             )}
@@ -603,7 +775,14 @@ export function LiveTable({
             </div>
           </div>
         ) : (
-          legend && <div class="live-table-legend small">{legend}</div>
+          <>
+            {refs.kind === 'ready' && (
+              <button type="button" class="live-pieces-open" data-testid="live-pieces-open" onClick={() => setInViewList(drawn.current.map((d) => d.id))}>
+                Pieces in view ({status.inView})
+              </button>
+            )}
+            {legend && <div class="live-table-legend small">{legend}</div>}
+          </>
         )}
         {!tp && targets.length > 0 && (
           <p class="small live-table-legend" data-testid="live-finding">
@@ -616,6 +795,33 @@ export function LiveTable({
           </p>
         )}
       </div>
+      <OverlayLegendSheet open={legendOpen} onClose={() => setLegendOpen(false)} />
+      <Sheet open={inViewList !== null} onClose={() => setInViewList(null)} title="Pieces in view" testId="live-pieces">
+        {listed.length ? (
+          <ul class="ov-piece-list" data-testid="live-pieces-list">
+            {listed.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  class="ov-piece-item"
+                  data-testid="live-piece-item"
+                  data-id={p.id}
+                  onClick={() => {
+                    setTapped(p.id);
+                    setInViewList(null);
+                  }}
+                >
+                  {nameOf(p)}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="muted" data-testid="live-pieces-none">
+            No pieces are outlined right now. Point the camera at your pieces.
+          </p>
+        )}
+      </Sheet>
     </div>
   );
 }

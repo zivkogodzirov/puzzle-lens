@@ -35,6 +35,8 @@ export interface Settings {
    * provisional), no switch to close-ups.
    */
   scanMode: 'full' | 'quick';
+  /** The one-time tip on the outlines' labels ("17·9" means column 17, row 9) was shown (M9 part 3). */
+  labelTipShown: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -46,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cameraDeviceId: '',
   snapMethod: '',
   scanMode: 'full',
+  labelTipShown: false,
 };
 
 type SettingSignals = { [K in keyof Settings]: Signal<Settings[K]> };

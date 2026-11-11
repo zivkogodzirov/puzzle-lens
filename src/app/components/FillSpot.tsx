@@ -14,13 +14,22 @@ import { LiveTable } from './LiveTable';
 import { OV } from '../tokens';
 import { Icon } from '../ui/icons';
 import { Callout } from '../ui/Callout';
+import { ANSWER, CONFIDENCE_WORDS } from '../words';
 
 /** Cells across the close-up. */
 const ZOOM = 9;
 const BEST: string = OV.good;
 const OTHER: string = OV.weak;
 const pct = (p: number): number => Math.min(99, Math.round(p * 100));
-const WORDS = { strong: 'Strong', likely: 'Likely', several: 'Several spots look alike' } as const;
+
+/**
+ * How sure the app is that a piece goes in this spot, in words (decision 7): its own verdict when this is
+ * its spot, else "Maybe"; the % after the word only in Tester mode.
+ */
+function sureWords(c: SpotCandidate): string {
+  const w = c.chosen ? CONFIDENCE_WORDS[c.verdict] : CONFIDENCE_WORDS.likely;
+  return settings.testerMode.value ? `${w}, ${pct(c.p)} %` : w;
+}
 
 /** Where a tap landed, in cells of the picture (fractional). */
 function cellAt(e: MouseEvent, view: [number, number, number, number]): [number, number] {
@@ -38,7 +47,10 @@ export function FillSpot({
   onUndo,
   onLiveClosed,
   filled,
+  onPickPiece,
 }: {
+  /** A candidate's picture tapped (M9 part 3): its piece card, showing this spot. */
+  onPickPiece?: (piece: PieceRow, spot: { col: number; row: number }) => void;
   project: Project;
   boxUrl: string;
   /** What each piece not yet in the puzzle shows (its spots and chances). */
@@ -121,6 +133,7 @@ export function FillSpot({
   const answer =
     onAnswer && sel ? (c: SpotCandidate, fits: boolean) => onAnswer(byId.get(c.id)!, { col: sel[0], row: sel[1], rot: rotAt(c.id) }, fits) : undefined;
   const isFilled = Boolean(sel && filled?.has(`${sel[0]},${sel[1]}`));
+  const pickOf = (c: SpotCandidate) => (onPickPiece && sel ? () => onPickPiece(byId.get(c.id)!, { col: sel[0], row: sel[1] }) : undefined);
   return (
     <div class="card fill-spot" data-testid="fill-spot">
       <p class="small">
@@ -180,7 +193,7 @@ export function FillSpot({
                     {cands
                       .filter((c) => c.chosen)
                       .map((c) => (
-                        <Candidate key={c.id} c={c} piece={byId.get(c.id)!} colour={BEST} onAnswer={answer} />
+                        <Candidate key={c.id} c={c} piece={byId.get(c.id)!} colour={BEST} onAnswer={answer} onPick={pickOf(c)} />
                       ))}
                   </div>
                 </div>
@@ -194,7 +207,7 @@ export function FillSpot({
                     {others
                       .filter((c) => !c.chosen)
                       .map((c) => (
-                        <Candidate key={c.id} c={c} piece={byId.get(c.id)!} colour={OTHER} onAnswer={answer} />
+                        <Candidate key={c.id} c={c} piece={byId.get(c.id)!} colour={OTHER} onAnswer={answer} onPick={pickOf(c)} />
                       ))}
                   </div>
                 </div>
@@ -217,9 +230,7 @@ export function FillSpot({
           infoOf={(p) => {
             const c = cands.find((q) => q.id === p.id);
             if (!c) return 'A possible piece.';
-            // The % beside a word: for testing only (M9 part 1); without a word it stays.
-            const words = c.chosen ? (settings.testerMode.value ? `${WORDS[c.verdict]}, ${pct(c.p)} %` : WORDS[c.verdict]) : `${pct(c.p)} %`;
-            return `${words} for column ${sel[0] + 1}, row ${sel[1] + 1}.`;
+            return `${sureWords(c)} for column ${sel[0] + 1}, row ${sel[1] + 1}.`;
           }}
           find={onTable.map((p) => p.id)}
           answer={
@@ -258,19 +269,29 @@ function Candidate({
   piece,
   colour,
   onAnswer,
+  onPick,
 }: {
   c: SpotCandidate;
   piece: PieceRow;
   colour: string;
   onAnswer?: (c: SpotCandidate, fits: boolean) => void;
+  /** Its picture tapped: the piece card (M9 part 3). */
+  onPick?: () => void;
 }) {
   const url = useBlobUrl(piece.thumbBlobId, piece.updatedAt);
+  const picture = url ? <img src={url} alt={onPick ? '' : 'A piece'} /> : <div class="catalog-empty" />;
   return (
     <div class={`fill-cand ${colour === BEST ? 'fill-cand-best' : 'fill-cand-other'}`} data-testid="fill-cand">
-      {url ? <img src={url} alt="A piece" /> : <div class="catalog-empty" />}
+      {onPick ? (
+        <button class="fill-cand-pick" data-testid="fill-cand-pick" aria-label="This piece: where it goes" onClick={onPick}>
+          {picture}
+        </button>
+      ) : (
+        picture
+      )}
       <div class="small">
-        {c.chosen ? `${WORDS[c.verdict]}, ` : ''}
-        {pct(c.p)} %{piece.status === 'tray' && piece.tray ? <strong> · in tray {piece.tray}</strong> : null}
+        {sureWords(c)}
+        {piece.status === 'tray' && piece.tray ? <strong> · in tray {piece.tray}</strong> : null}
       </div>
       {c.best && (
         <div class="muted small">
@@ -279,11 +300,12 @@ function Candidate({
       )}
       {onAnswer && (
         <div class="fill-answer">
-          <button class="btn btn-small btn-fits btn-good" data-testid="fill-fits" aria-label="It fits here" onClick={() => onAnswer(c, true)}>
-            <Icon name="check" size={20} /> Fits
+          {/* "Not there" left, "It fits" right (decision 6); stacked, "It fits" on top, when they don't fit side by side. */}
+          <button class="btn btn-small" data-testid="fill-not" onClick={() => onAnswer(c, false)}>
+            <Icon name="x" size={20} /> {ANSWER.not}
           </button>
-          <button class="btn btn-small" data-testid="fill-not" aria-label="It doesn't fit here" onClick={() => onAnswer(c, false)}>
-            <Icon name="x" size={20} /> No
+          <button class="btn btn-small btn-fits btn-good" data-testid="fill-fits" onClick={() => onAnswer(c, true)}>
+            <Icon name="check" size={20} /> {ANSWER.fits}
           </button>
         </div>
       )}

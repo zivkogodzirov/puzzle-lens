@@ -35,7 +35,7 @@ function Row({ r, testId }: { r: AccuracyRow; testId: string }) {
         <span class="nw">({pc(r.right / r.total)} %)</span>
       </td>
       <td class="muted small">
-        likely{' '}
+        range{' '}
         <span class="nw">
           {pc(r.range[0])}–{pc(r.range[1])} %
         </span>
@@ -96,8 +96,8 @@ export function AccuracyScreen() {
           </p>
           {a.answers === 0 && !pa?.answers ? (
             <p class="muted" data-testid="accuracy-empty">
-              No answers yet. When you try a piece in a suggested spot, tap <strong>✓ Fits</strong> or <strong>✗ Doesn't fit</strong> (on the piece, in Fill
-              this spot, or in the live view), or <strong>✓ They fit</strong> for two pieces in Which pieces join. Your answers show here.
+              No answers yet. When you try a piece in a suggested spot, tap <strong>It fits</strong> or <strong>Not there</strong> (on the piece, in Fill this
+              spot, or in the live view), or <strong>They fit</strong> for two pieces in Which pieces join. Your answers show here.
             </p>
           ) : a.answers === 0 ? null : (
             <>
@@ -111,7 +111,7 @@ export function AccuracyScreen() {
                 </tbody>
               </table>
               <p class="muted small">
-                Right = it fitted where the app suggested first. "Likely" is the 95 % range: with few answers it is wide, and it narrows as you answer more
+                Right = it fitted where the app suggested first. "Range" is the 95 % range: with few answers it is wide, and it narrows as you answer more
                 (about 20 answers per row give a useful idea).
               </p>
               {a.calibration.length > 0 && (

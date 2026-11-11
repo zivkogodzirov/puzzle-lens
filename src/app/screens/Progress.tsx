@@ -122,8 +122,8 @@ export function ProgressScreen() {
               ? 'Your last photo of the puzzle shows it complete.'
               : `From your photo of the puzzle${project.openSpots ? ` (${project.openSpots.gaps.length} empty spots)` : ''}${s.placed ? `, and ${s.placed} ${s.placed === 1 ? 'piece' : 'pieces'} fitted since` : ''}.`
             : s.placed
-              ? `The pieces you said fit (✓ Fits). Photograph the nearly finished puzzle (Scan) to count the rest.`
-              : 'No pieces in the puzzle yet: tap ✓ Fits when a piece goes in, or photograph the puzzle when it is nearly finished.'}
+              ? `The pieces you said fit (It fits). Photograph the nearly finished puzzle (Scan) to count the rest.`
+              : 'No pieces in the puzzle yet: tap It fits when a piece goes in, or photograph the puzzle when it is nearly finished.'}
         </p>
       </div>
 
@@ -229,7 +229,7 @@ export function ProgressScreen() {
       <h2>How often the app is right</h2>
       {acc.answers + pairs.answers === 0 ? (
         <p class="muted small" data-testid="progress-accuracy">
-          No answers yet: tap ✓ Fits or ✗ Doesn't fit when you try a piece.
+          No answers yet: tap It fits or Not there when you try a piece.
         </p>
       ) : (
         <>

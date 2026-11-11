@@ -45,3 +45,18 @@ The design work follows the app review's plan, in 6 stages, each checked on your
 3. Try the delete confirmations (Delete scanned pieces…, Delete this puzzle…, Erase all data) and tap **Cancel** each time.
 4. With Tester mode on: Settings → Components (for testing) shows every building block.
 
+## Part 3: the core loop (tap a piece, answer, undo)
+
+**New:**
+- Tapping a piece opens a **card from the bottom**: its picture, "Column · Row", how sure the app is in words, and a **close-up of the box picture** with the spot ringed (the whole picture one tap away).
+- Two big answers, **Not there** and **It fits**, each with an **Undo**. "Not there" moves straight to the next place to try. "Also possible" shows the other places as small close-ups.
+- **"Not a piece"** is one tap with Undo (the removed thing is kept aside, so Undo puts it back exactly).
+- New words everywhere: "It fits / Not there" ("They fit" for pairs), "Very likely / Maybe / Several places look alike"; percentages only in Tester mode.
+- Outlines: **solid = fine, dashed = have a look**, always with a badge saying why (? faint, arrows apart touching, moved?), a cross on things that aren't pieces; one label per piece, never overlapping; a square of 4 as one shape with one label; a **?** legend; a **Pieces in view** list.
+
+**Why:** the review found the panel opened off screen with a spot 12 points wide, two-tap confirmations, and outline colours and dashes that meant different things on different screens.
+
+1. Tap a piece: does the close-up help you find the spot? Answer with It fits / Not there and try Undo.
+2. In the live view: are the labels and badges clear on your table? Try the **?** and **Pieces in view**.
+3. Tap **Not a piece** on something and then **Undo**.
+
