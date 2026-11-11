@@ -78,3 +78,15 @@ The design work follows the app review's plan, in 6 stages, each checked on your
 3. On **Pieces**, try the four filters and open Which pieces join, then ‹ Pieces.
 4. On **More**, check your backup and tap Cancel on Delete this puzzle.
 
+## Part 5: the scan camera
+
+**New:**
+- Laid out like the iPhone Camera app: the middle of the picture stays clear (a round level only), one instruction at the top, and a dock at the bottom: the last photo, a big shutter whose ring fills before a photo takes itself, and Photos. Whole table / Close-ups above the shutter; a small map bottom-left; coin and help behind a gear; one centred card for the tilt sensor, a refused camera or a paused camera.
+- After a photo: a flash, a click and a tap you feel ("Sounds and taps" in Settings), the photo frozen with "Reading photo · Finding pieces · Saving" (Cancel after 10 s: nothing is saved from it), and a results card with what to do next, **See where they go**, **Take another** and **See photo** (zoomable; tap a dashed outline for Retake / It's fine).
+
+**Why:** the review found the scan screen cluttered: panels over the picture, a note that covered the level, no sign of progress while a photo was read.
+
+1. Take a few photos, by tapping and by holding still. Do the ring, the flash, the click and the tap feel right?
+2. Read the results card; try See photo and Take another.
+3. Photograph your nearly finished puzzle: are the saved spots and the loose pieces easy to read?
+

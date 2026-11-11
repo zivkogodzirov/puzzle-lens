@@ -46,13 +46,18 @@ test.describe('coin for true size', () => {
     }, id);
     await page.evaluate((pid) => (location.hash = `#/scan/${pid}`), id);
     await expect(page.getByTestId('table-camera')).toHaveAttribute('data-mode', 'overview');
+    // M9 part 5: the coin chooser is behind the gear (Coin and help).
+    await page.getByTestId('camera-settings').click();
     await page.getByTestId('coin-select').selectOption('mk-5');
+    await page.getByTestId('camera-settings-sheet-close').click();
     await page.getByTestId('allow-tilt').click();
     await page.evaluate(() => {
       setInterval(() => dispatchEvent(Object.assign(new Event('deviceorientation'), { alpha: 0, beta: 1, gamma: -1 })), 50);
     });
     await expect(page.getByTestId('scan-note')).toContainText('Coin found', { timeout: 150_000 });
     await page.screenshot({ path: test.info().outputPath('coin-found.png') });
+    // M9 part 5: the result is a sheet; "Take another" closes it.
+    await page.getByTestId('result-another').click();
     await page.getByTestId('camera-close').click();
     await openTab(page, 'more');
     const size = await page.getByTestId('puzzle-size').innerText();

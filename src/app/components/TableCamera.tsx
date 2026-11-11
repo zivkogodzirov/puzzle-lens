@@ -11,7 +11,7 @@ import { frameRotation } from '../../camera/coords';
 import { trackerWorker } from '../workers';
 import { MarkerOverlay } from './MarkerOverlay';
 import { PieceOverlay } from './PieceOverlay';
-import { LevelGauge } from './LevelGauge';
+import { CameraStatus, LevelGauge } from './LevelGauge';
 import { AutoCapture, FREE_RULES, FreeCapture, RULES, type CaptureKind, type GaugeState } from '../../scan/autoCapture';
 import { level, levelPermission, requestLevelSensor } from '../../scan/levelSensor';
 import { MARKER_COUNT } from '../../markers/layout';
@@ -88,6 +88,13 @@ class SetupCapture {
  * The camera for puzzle photos (set-up and scanning): live video with marker outlines, the
  * level-and-height gauge, and photos that take themselves when the phone is ready. The big
  * button takes one at any time.
+ *
+ * M9 part 5 (design plan §3.5 camera chrome, §4 item 5): laid out like the iPhone Camera app. The top bar
+ * has Back, the screen's own buttons, zoom and 🧪, with the status capsule (the one instruction and a level
+ * dot) under it; the level is a reticle in the middle with no panel; the dock at the bottom has the mode
+ * words, the last photo, the shutter (its ring fills while the phone is held still, before a photo takes
+ * itself) and Photos. The tilt sensor question and a camera that is off are one card each in the middle.
+ * Sideways (a Safari tab) the dock is a column on the right.
  */
 export function TableCamera(props: {
   mode: TableCameraMode;
@@ -103,12 +110,39 @@ export function TableCamera(props: {
   children?: ComponentChildren;
   /** Marker-free puzzle: the gauge uses the tilt sensor and the pieces' apparent size (nominal piece pitch in mm). */
   free?: { pitchMm: number } | null;
+  /** M9 part 5: more icon buttons in the top bar, after Back (the scan's gear). */
+  topExtra?: ComponentChildren;
+  /** The mode words over the shutter (the scan's Whole table / Close-ups). */
+  modes?: ComponentChildren;
+  /** The dock left and right of the shutter (the last photo; Photos), 50 px each. */
+  dockLeft?: ComponentChildren;
+  dockRight?: ComponentChildren;
+  /** The row just above the dock (the scan's mini map and counts). */
+  above?: ComponentChildren;
 }) {
-  const { mode, map, target = null, busy, autoCapture = true, pieces, onPhoto, onClose, children, free = null } = props;
+  const {
+    mode,
+    map,
+    target = null,
+    busy,
+    autoCapture = true,
+    pieces,
+    onPhoto,
+    onClose,
+    children,
+    free = null,
+    topExtra,
+    modes,
+    dockLeft,
+    dockRight,
+    above,
+  } = props;
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const [gauge, setGauge] = useState<GaugeState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // "Not now" on the tilt sensor card: a small button under the status capsule instead (M9 part 5).
+  const [tiltLater, setTiltLater] = useState(false);
   const ac = useRef(new AutoCapture());
   const sc = useRef(new SetupCapture());
   const fc = useRef(new FreeCapture());
@@ -167,6 +201,16 @@ export function TableCamera(props: {
   useEffect(() => {
     fc.current.resetFired();
   }, [mode]);
+
+  // Photos may take themselves again (the result card, the viewer or a sheet closed): the steadiness starts afresh,
+  // so the ring fills visibly before a photo, never at once under the finger that closed it (review 2026-11-11).
+  useEffect(() => {
+    if (autoCapture) {
+      ac.current.reset();
+      fc.current.reset();
+      sc.current.reset();
+    }
+  }, [autoCapture]);
 
   // A steady streak that built up while the last photo was processed must not fire straight away.
   useEffect(() => {
@@ -259,75 +303,156 @@ export function TableCamera(props: {
   const tilt = gauge?.tiltDeg ?? (mode === 'detail' && level.value ? level.value.tiltDeg : null);
   const lean: Vec2 = gauge && gauge.tiltDeg !== null ? gauge.leanImg : (level.value?.lean ?? [0, 0]);
   const problem = (live && pumpError.value) || error || cameraError.value;
+  const problemText = error ?? pumpError.value ?? cameraError.value;
+  // The tilt sensor: asked once, on a card in the middle (M9 part 5). "Not now" leaves a small button under
+  // the status capsule instead.
+  const tiltWanted = live && (Boolean(free) || mode === 'detail') && levelPermission.value === 'unknown';
+  const tiltCard = tiltWanted && !tiltLater;
+  // The steadiness ring around the shutter fills while the phone is held still; only while photos take themselves.
+  const fill = live && gauge && autoCapture && !busy ? Math.max(0, Math.min(1, gauge.steady)) : 0;
+  const ring = 2 * Math.PI * 37;
+  const refused = !live && Boolean(problemText && /refused|not allowed|denied/i.test(problemText));
 
   return (
-    <div class="live table-camera" data-testid="table-camera" data-mode={mode}>
+    <div class="live table-camera" data-testid="table-camera" data-mode={mode} data-state={state}>
       <video ref={videoRef} playsInline muted autoPlay data-testid="live-video" />
       {live && <MarkerOverlay video={videoEl} />}
       {live && pieces && pieces.length > 0 && <PieceOverlay video={videoEl} pieces={pieces} />}
-      <div class="live-top">
-        <IconButton label="Back" class="btn-cam" testId="camera-close" onClick={onClose}>
-          <Icon name="chevron-left" />
-        </IconButton>
-        <span class="title">{mode === 'setup' ? 'Marker photo' : mode === 'overview' ? 'Overview photo' : 'Close-ups'}</span>
-        <span class="cam-zoom" role="img" aria-label={zoom >= 1.5 ? 'Zoom 2×' : 'Zoom 1×'} data-testid="camera-zoom">
-          <span aria-hidden="true">{zoom >= 1.5 ? '2×' : '1×'}</span>
-        </span>
-        <TestButton variant="camera" />
-      </div>
 
-      {live && gauge && !(free && levelPermission.value === 'unknown') && (
+      {/* The level: a reticle in the middle with no panel behind it, so the view stays clear. */}
+      {live && gauge && !tiltCard && (
         <div class="gauge-wrap">
           <LevelGauge state={gauge} lean={lean} tiltDeg={tilt} maxTiltDeg={maxTilt} arrow={gauge.targetDirImg} />
         </div>
       )}
-      {live && (free || mode === 'detail') && levelPermission.value === 'unknown' && (
-        <button
-          class={free ? 'btn btn-primary level-ask level-ask-big' : 'btn btn-small level-ask'}
-          data-testid="allow-tilt"
-          onClick={() => void requestLevelSensor()}
-        >
-          {free ? 'Allow the tilt sensor (needed to hold the phone flat)' : 'Use the tilt sensor too'}
-        </button>
-      )}
-      {live && free && levelPermission.value === 'denied' && <p class="chip level-ask">Tilt sensor off: hold the phone as flat as you can</p>}
-      {children && <div class="table-camera-extra">{children}</div>}
 
-      {problem ? (
-        <div class={state === 'live' ? 'notice notice-bad live-notice' : 'notice notice-bad live-notice live-notice-off'} data-testid="camera-problem">
-          <p>{error ?? pumpError.value ?? cameraError.value}</p>
-          {state !== 'live' && (
-            <button class="btn btn-small" data-testid="start-camera" onClick={() => void startCamera()}>
-              Start camera
+      {/* Top: Back, the screen's own buttons (the scan's gear), zoom and 🧪; under them the status capsule
+          with the one instruction (design plan §3.5 camera chrome). */}
+      <div class="live-top cam-top">
+        <div class="cam-top-row">
+          <IconButton label="Back" class="btn-cam" testId="camera-close" onClick={onClose}>
+            <Icon name="chevron-left" />
+          </IconButton>
+          {topExtra}
+          <span class="cam-top-gap" />
+          <span class="cam-zoom" role="img" aria-label={zoom >= 1.5 ? 'Zoom 2×' : 'Zoom 1×'} data-testid="camera-zoom">
+            <span aria-hidden="true">{zoom >= 1.5 ? '2×' : '1×'}</span>
+          </span>
+          <TestButton variant="camera" />
+        </div>
+        <div class="cam-top-status">
+          {live && !tiltCard && <CameraStatus state={gauge} tiltDeg={tilt} maxTiltDeg={maxTilt} />}
+          {tiltWanted && tiltLater && (
+            <button type="button" class="cam-hint cam-hint-button" data-testid="allow-tilt" onClick={() => void requestLevelSensor()}>
+              <Icon name="compass" size={18} />
+              Allow the tilt sensor
             </button>
           )}
+          {live && free && levelPermission.value === 'denied' && <p class="cam-hint">Tilt sensor off: hold the phone as flat as you can</p>}
         </div>
-      ) : null}
+      </div>
 
-      {/* With the camera off, a problem box already offers "Start camera" (under the top bar): no second
-          one in the middle, where it landed on the buttons below (2026-11-10). */}
-      {!live && (state === 'starting' || !problem) && (
-        <div class="live-center">
+      {tiltCard && (
+        <div class="cam-center">
+          <div class="cam-card" role="group" aria-labelledby="tilt-card-title" data-testid="tilt-card">
+            <span class="cam-card-icon" aria-hidden="true">
+              <Icon name="compass" size={28} />
+            </span>
+            <h2 id="tilt-card-title">Allow the tilt sensor</h2>
+            <p>
+              {free
+                ? 'It tells when the phone is flat, so photos take themselves at the right moment. Your iPhone asks once.'
+                : 'It helps hold the phone flat when no marker is in view. Your iPhone asks once.'}
+            </p>
+            <button type="button" class="btn btn-filled btn-block" data-testid="allow-tilt" onClick={() => void requestLevelSensor()}>
+              Allow
+            </button>
+            <button type="button" class="btn btn-plain btn-small cam-card-later" data-testid="tilt-later" onClick={() => setTiltLater(true)}>
+              Not now
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* With the camera off: one card in the middle and nothing over it; the top bar stays tappable. */}
+      {!live && (
+        <div class="cam-center">
           {state === 'starting' ? (
-            <p>Starting the camera…</p>
+            <p class="cam-hint" role="status">
+              Starting the camera…
+            </p>
           ) : (
-            <button class="btn btn-filled" data-testid="start-camera" onClick={() => void startCamera()}>
-              {state === 'paused' ? 'Resume camera' : 'Start camera'}
-            </button>
+            <div
+              class="cam-card"
+              role="group"
+              aria-labelledby="camera-off-title"
+              data-testid={problem ? 'camera-problem' : state === 'paused' ? 'camera-paused' : 'camera-off'}
+            >
+              <span class="cam-card-icon" aria-hidden="true">
+                <Icon name="camera" size={28} />
+              </span>
+              <h2 id="camera-off-title">
+                {state === 'paused' ? 'Camera paused' : refused ? 'Allow the camera' : problem ? 'The camera is off' : 'Camera off'}
+              </h2>
+              {refused ? (
+                <ol class="cam-card-steps">
+                  <li>Tap Start camera below and choose Allow.</li>
+                  <li>No question? On the iPhone: Settings › Apps › Safari › Camera › Allow.</li>
+                  <li>Come back here and tap Start camera.</li>
+                </ol>
+              ) : problem ? (
+                <p>{problemText}</p>
+              ) : state === 'paused' ? (
+                <p>The iPhone paused it (another app or the photo library used the camera).</p>
+              ) : null}
+              <button type="button" class="btn btn-filled btn-block" data-testid="start-camera" onClick={() => void startCamera()}>
+                {state === 'paused' ? 'Resume camera' : 'Start camera'}
+              </button>
+            </div>
           )}
         </div>
       )}
 
-      <div class="live-bottom">
-        <div class="row" />
-        <button
-          class="snap-btn"
-          aria-label="Take the photo now"
-          data-testid="snap"
-          disabled={!live || snapBusy.value || Boolean(busy) || pumpMode.value === 'off'}
-          onClick={() => void take(false)}
-        />
-        <div class="row" />
+      {/* Bottom, from the top down: the screen's own panel (the scan's result), a photo that failed, the row
+          above the dock (the scan's map and counts), and the dock: mode words, last photo, shutter, Photos. */}
+      <div class="cam-bottom">
+        {children && <div class="table-camera-panel">{children}</div>}
+        {live && problem && (
+          <p class="cam-problem" data-testid="camera-problem" role="alert">
+            {problemText}
+          </p>
+        )}
+        {above && <div class="cam-above">{above}</div>}
+        <div class="cam-dock" data-testid="camera-dock">
+          {modes && <div class="cam-modes">{modes}</div>}
+          <div class="cam-dock-row">
+            <div class="cam-slot">{dockLeft}</div>
+            <button
+              type="button"
+              class="snap-btn"
+              aria-label="Take the photo now"
+              data-testid="snap"
+              disabled={!live || snapBusy.value || Boolean(busy) || pumpMode.value === 'off'}
+              onClick={() => void take(false)}
+            >
+              <svg class="snap-ring" viewBox="0 0 78 78" aria-hidden="true">
+                <circle cx="39" cy="39" r="37" class="snap-ring-track" />
+                <circle
+                  cx="39"
+                  cy="39"
+                  r="37"
+                  class="snap-ring-fill"
+                  data-testid="snap-ring"
+                  data-fill={fill.toFixed(2)}
+                  style={{ strokeDasharray: `${ring}`, strokeDashoffset: `${ring * (1 - fill)}` }}
+                  transform="rotate(-90 39 39)"
+                />
+              </svg>
+              <span class="snap-disc" />
+            </button>
+            <div class="cam-slot">{dockRight}</div>
+          </div>
+        </div>
       </div>
 
       {(snapBusy.value || busy) && (

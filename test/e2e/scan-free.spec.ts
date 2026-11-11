@@ -81,24 +81,9 @@ test.describe('scan pieces without markers', () => {
     const n = Number((await page.getByTestId('scan-count').innerText()).match(/\d+/)![0]);
     expect(n).toBeGreaterThanOrEqual(Math.floor(0.85 * visible));
     expect(n).toBeLessThanOrEqual(visible + 3);
-    // The note leaves the gauge and the mode buttons free (it covered them, M8 part 4): it sits at
-    // the top of the panel, and the map with the next close-up's dashed box stays in view beside it.
-    await expect(page.getByTestId('coverage-map')).toBeVisible();
-    await expect(page.getByTestId('coverage-map').locator('.cov-target')).toHaveCount(1);
-    const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
-    const apart = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
-      a.y + a.height <= b.y + 1 || b.y + b.height <= a.y + 1 || a.x + a.width <= b.x + 1 || b.x + b.width <= a.x + 1;
-    const note = await box('[data-testid="scan-note"]');
-    for (const sel of ['.gauge', '[data-testid="mode-overview"]', '[data-testid="mode-detail"]', '[data-testid="scan-count"]', '[data-testid="coverage-map"]'])
-      expect(apart(note, await box(sel)), sel).toBe(true);
-    // None of it is cut off without a sign: it all fits, or "More ▾" says there is more (review 2026-11-10).
-    expect(
-      await page
-        .getByTestId('scan-note')
-        .evaluate((n) => n.scrollHeight <= n.clientHeight + 2 || document.querySelector('[data-testid="scan-note-more"]') !== null),
-    ).toBe(true);
-    await page.getByTestId('mode-detail').click({ trial: true });
-    await page.getByTestId('show-photo').click();
+    // M9 part 5: the result is a sheet ("See photo" opens the photo viewer; tests/e2e/scan-result.spec.ts). The
+    // map with the next close-up's dashed box is there once it is closed.
+    await page.getByTestId('result-see-photo').click();
     await expect(page.getByTestId('photo-result').locator('polygon.res-outline')).toHaveCount(n, { timeout: 5_000 });
     // Every outline on a dark halo (M9 part 1), drawn under the lines.
     const halo = page.getByTestId('photo-result').locator('polygon.res-halo');
@@ -106,14 +91,19 @@ test.describe('scan pieces without markers', () => {
     expect(await halo.first().evaluate((el) => [getComputedStyle(el).stroke, getComputedStyle(el).strokeWidth])).toEqual(['rgba(0, 0, 0, 0.6)', '6px']);
     expect(await page.getByTestId('photo-result').locator('polygon').first().getAttribute('class')).toContain('res-halo');
     await page.screenshot({ path: test.info().outputPath('free-photo-result.png') });
-    await page.getByTestId('photo-result').click();
+    await page.getByTestId('photo-done').click();
+    // "Take another": no photo takes itself while the result is open.
+    await page.getByTestId('result-another').click();
+    await expect(page.getByTestId('coverage-map')).toBeVisible();
+    await expect(page.getByTestId('coverage-map').locator('.cov-target')).toHaveCount(1);
+    await page.getByTestId('mode-detail').click({ trial: true });
 
     // A 2× close-up of part of the same pieces: placed by matching, (almost) nothing new.
     await expect(page.getByTestId('table-camera')).toHaveAttribute('data-mode', 'detail');
     await page.evaluate((url) => ((window as unknown as { __fakeScene?: string }).__fakeScene = url), closeUp);
     await expect(page.getByTestId('scan-note')).toContainText('Close-up read', { timeout: 150_000 });
     const text = await page.getByTestId('scan-note').innerText();
-    const added = Number(text.match(/\((\d+) new\)/)![1]);
+    const added = Number(text.match(/(\d+) new/)![1]);
     expect(added).toBeLessThanOrEqual(2);
     const n2 = Number((await page.getByTestId('scan-count').innerText()).match(/\d+/)![0]);
     expect(n2).toBeLessThanOrEqual(n + 2);
@@ -212,6 +202,7 @@ test.describe('batches (M7)', () => {
     await page.getByTestId('scan-pieces').click();
     await tilt();
     await expect(page.getByTestId('scan-note')).toContainText('Found', { timeout: 150_000 });
+    await page.getByTestId('result-another').click();
     const n1 = Number((await page.getByTestId('scan-count').innerText()).match(/\d+/)![0]);
     // The pieces swept together and spread anew: that photo can't be placed on the old table.
     await page.evaluate((url) => ((window as unknown as { __fakeScene?: string }).__fakeScene = url), respread);
@@ -242,7 +233,7 @@ test.describe('batches (M7)', () => {
     await expect(page.getByTestId('scan-note')).toContainText('Found', { timeout: 150_000 });
     await expect(page.getByTestId('scan-note')).not.toContainText('could not be matched');
     const text = await page.getByTestId('scan-note').innerText();
-    const added = Number(text.match(/\((\d+) new\)/)![1]);
+    const added = Number(text.match(/(\d+) new/)![1]);
     expect(added).toBeGreaterThanOrEqual(Math.floor(0.85 * visible));
     await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}/pieces`), id);
     await expect(page.getByTestId('puzzle-status-counts')).toContainText(`${added} on the table, ${n1} set aside`);

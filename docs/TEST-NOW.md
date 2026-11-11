@@ -1,4 +1,6 @@
-# M9, part 4: four tabs in each puzzle (and M9 parts 1–3, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+# M9, part 5: the scan camera (and M9 parts 1–4, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+
+**New in M9 part 5** (design stage 5 of 6): the scan camera is laid out like the iPhone Camera app: one instruction at the top, a round level in the middle, and at the bottom the last photo, a big shutter whose ring fills before a photo takes itself, and **Photos**. After a photo: a flash, a click and a tap you feel ("Sounds and taps" in Settings turns them off), named steps while it reads (with **Cancel** after 10 s), and a **results card** ("Found 22 pieces …") with **See where they go**, **Take another** and **See photo** (a zoomable photo).
 
 **New in M9 part 4** (design stage 4 of 6): each puzzle now has **four tabs** at the bottom instead of one long page: **Table** (your table photo with its labels, the live view, a "Next step"), **Picture** (progress and the box picture as a map: tap a spot to see its pieces), **Pieces** (all your pieces, with Which pieces join and Sort into trays as pages of their own) and **More** (backup, new lot, scanned pieces, puzzle details, delete). **Scan** is the camera button at the top. Home shows each puzzle as a card with its picture and progress.
 
@@ -25,6 +27,28 @@ These steps are for version **{version}** (Settings shows the version).
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## M9 part 5: the scan camera
+### The camera screen
+1. Open your puzzle and tap the **camera button** at the top. At the top: ‹, a **gear**, 1× and the flask; under them one short instruction in a dark pill with a coloured dot.
+2. The first time, a card asks to **allow the tilt sensor**: tap **Allow** and accept. A round level appears in the middle of the picture.
+3. Tilt the phone: the instruction says "Hold the phone flat". Hold it flat over the pieces and keep still: the white ring around the big round button fills (green) and the photo **takes itself** when it is full.
+4. **Whole table** / **Close-ups** above the big button: the chosen one is yellow and underlined.
+5. Bottom-left: a small map of your pieces; tap it to see it large.
+6. The **gear** opens "Coin and help": choose your coin there.
+7. The photo button right of the big button opens your **photo library**.
+8. If the camera pauses (e.g. after the photo library), a card in the middle says **Camera paused**: **Resume camera** works, and so does ‹.
+
+### After a photo
+1. Take a photo with the big button: a **white flash**, a **click** (silent switch off) and a light **tap** you feel.
+2. While it reads, the picture freezes and darkens with **Reading photo · Finding pieces · Saving**.
+3. A **card** slides up: "Found N pieces", how many are new, how many are ready, and anything to check (touching or faint pieces). Nothing is hidden behind the camera's buttons.
+4. **See photo**: pinch, double-tap and drag the photo. Tap a dashed outline: it zooms in and offers **Retake / It's fine**. **Done** brings the card back.
+5. **Take another**: the card goes in one tap and the big button is free again. While the card is open, no photo takes itself.
+6. **See where they go**: the puzzle's Table tab opens.
+7. Photograph your nearly finished puzzle (or choose IMG_9280): "Finished puzzle: 28 × 36", with the saved empty spots and the loose pieces readable without scrolling.
+8. Settings → **Sounds and taps** → Off: no flash, click or tap. (Put it back On if you like it.)
+9. Does the click play and is the tap felt on your iPhone, also when a photo takes itself?
 
 ## M9 part 4: four tabs in each puzzle
 ### Home
@@ -276,6 +300,7 @@ In the M8 part 3 follow-up I said a darker cloth might help pale pieces. I never
 - Your answers are kept with the puzzle, and in backups.
 
 ## Please tell me
+- M9 part 5: does the new camera feel like the iPhone Camera app? Did the ring and the photo taking itself feel right? Did you hear the click and feel the tap? Is the results card clear?
 - M9 part 4: do the four tabs (Table, Picture, Pieces, More) make sense? Is anything you used before hard to find now? Does the zoomable box picture on Picture work well with your thumb?
 - M9 part 3: does the piece card make it easier to find the spot (the close-up)? Are "It fits / Not there" and "Very likely / Maybe" clear? Are the dashed outlines and badges easy to understand on your cream table?
 - M9 part 2: do the new top bars, lists and message boxes feel more like an iPhone app? Anything harder to find than before? Is the Undo message in a good place, or does it get in the way?

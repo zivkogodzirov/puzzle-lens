@@ -79,6 +79,11 @@
   --cam-scrim: rgba(0, 0, 0, 0.5);
   /* M9 part 2: the camera chrome's material (design plan §3.1 "Camera"): buttons and notes over the picture. */
   --cam-material: rgba(18, 16, 14, 0.66);
+  /* M9 part 5: the scan camera's dock and cards (darker, like the Camera app's bar: the yellow mode word reads
+     7.2:1 on it over a white table, 4.3:1 on the 0.66 material), its secondary text, and the selected mode word. */
+  --cam-dock: rgba(18, 16, 14, 0.8);
+  --cam-text-2: rgba(255, 255, 255, 0.85);
+  --cam-select: #ffd60a;
   --paper-bg: #ffffff;
   --paper-black: #000000;
   --paper-text: #222222;
@@ -999,8 +1004,6 @@ pre.logbox {
 .scan-panel { display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: auto; max-width: 94vw; }
 .scan-counts { display: flex; gap: 12px; background: rgba(0, 0, 0, 0.55); color: var(--white); border-radius: 12px; padding: 6px 12px; font-weight: 600; }
 .scan-modes .chip { background: rgba(0, 0, 0, 0.5); color: var(--white); }
-.scan-note { max-height: 30vh; overflow: auto; }
-.scan-note p { margin: 2px 0; }
 .catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
 .catalog-grid img { width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--panel-2); border-radius: 8px; }
 .catalog-grid img.flag-clump { outline: 2px dashed var(--flag-clump); }
@@ -1010,7 +1013,6 @@ pre.logbox {
 .catalog-groups { margin: 6px 0 8px; }
 .legend-corner { color: var(--kind-corner); font-weight: 600; }
 .legend-edge { color: var(--kind-edge); font-weight: 600; }
-.table-camera .scan-note { color: var(--text); background: var(--panel); text-align: left; }
 .table-camera .table-camera-extra { bottom: calc(var(--safe-bottom) + 120px); }
 .table-camera .gauge-wrap { top: calc(var(--safe-top) + 64px); }
 .coverage-map { width: min(70vw, 260px); max-height: 22vh; background: rgba(0, 0, 0, 0.55); border-radius: 10px; }
@@ -1029,7 +1031,6 @@ pre.logbox {
 .level-ask-big { left: 12px; right: 12px; top: calc(var(--safe-top) + 64px); }
 .table-camera .table-camera-extra { max-height: 50vh; overflow: hidden; align-items: flex-end; }
 .table-camera .scan-panel { gap: 6px; }
-.table-camera .scan-note { font-size: 14px; padding: 8px 10px; max-height: 18vh; }
 .coverage-map { max-height: 16vh; }
 .photo-result { z-index: 50; }
 .coin-pick select { margin-left: 4px; background: rgba(0,0,0,0.5); color: var(--white); min-height: 32px; }
@@ -1046,84 +1047,6 @@ pre.logbox {
 /* Short screens (Safari with its bars): the map may shrink a little more. */
 @media (max-height: 760px) {
   .table-camera .scan-panel .coverage-map { min-height: 8vh; }
-}
-/* The result note gets the room first (review 2026-11-10: squeezed to 2-3 lines, its key lines out of view,
-   nothing saying there was more). While it shows:
-   - the panel reaches up to what is drawn at the top: --scan-top under the safe area is the gauge's lowest
-     (278 px, a two-line message) + 8 px, unless something shorter is there instead: "Allow the tilt sensor"
-     (two lines, to 116 px), "Resume camera", which moves up under the top bar (to 116 px), or the camera's
-     problem box, made one row (to about 144 px). The box is placed from the screen's real top and
-     bottom (not 100vh, which is taller than the screen in Safari with its bars). Never clipped: if even the
-     note's least doesn't fit, it shows above its room rather than being cut off;
-   - "Aim at…" (the map's dashed box stays), an overview's map (nothing to aim at) and the map's extra
-     height make room;
-   - what still doesn't fit scrolls, and "More ▾" in its corner (Scan.tsx) opens all of it. */
-.table-camera { --scan-top: 286px; }
-.table-camera:has(> [data-testid='allow-tilt']):not(:has(> .gauge-wrap)) { --scan-top: 124px; }
-.table-camera:has(.scan-panel.camera-paused.has-note) { --scan-top: 124px; }
-/* Camera refused: while a note shows, its problem box is one row, its words (two lines at most, all of them
-   back when the note is tapped away) beside "Start camera". */
-.table-camera:has(.scan-panel.has-note) > .live-notice-off { display: flex; align-items: center; gap: 10px; overflow: hidden; }
-.table-camera:has(.scan-panel.has-note) > .live-notice-off > p { flex: 1; min-width: 0; margin: 0; font-size: 15px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.table-camera:has(.scan-panel.has-note) > .live-notice-off > button { flex: none; }
-.table-camera:has(> .live-notice-off):has(.scan-panel.has-note) { --scan-top: 152px; }
-.table-camera:has(.scan-panel.camera-paused.has-note) > .live-center { justify-content: flex-start; padding-top: calc(var(--safe-top) + 64px); }
-.table-camera .table-camera-extra:has(> .scan-panel.has-note) { top: calc(var(--safe-top) + var(--scan-top)); height: auto; max-height: none; overflow: visible; }
-.table-camera .scan-panel.has-note { max-height: 100%; }
-.table-camera .scan-panel.has-note .scan-aim,
-.table-camera[data-mode='overview'] .scan-panel.has-note .coverage-map { display: none; }
-.table-camera .scan-panel.has-note .coverage-map { min-height: 8vh; }
-/* With the gauge shown, a finished puzzle's note still showed only its count (check 2026-11-10). A note that
-   doesn't all fit (Scan.tsx needs-room; only that note, so a short one keeps everything as it was) gets more:
-   the coin chooser makes room (back when the note is tapped away), and while no photo takes itself (after a
-   finished puzzle, or a photo that couldn't be used: Scan.tsx auto-off) the gauge is smaller (a 72 px face,
-   no height line) and the note reaches up to it: its lowest with a two-line message is 208 px, + 8.
-   Upright only: sideways the note has its own column (below). */
-@media not all and (orientation: landscape) and (max-height: 500px) {
-  .table-camera .scan-panel.has-note.needs-room .coin-pick { display: none; }
-  .table-camera:has(.scan-panel.has-note.needs-room.auto-off) .gauge svg { width: 72px; height: 72px; }
-  .table-camera:has(.scan-panel.has-note.needs-room.auto-off) .gauge-sub { display: none; }
-  .table-camera:has(> .gauge-wrap):has(.scan-panel.has-note.needs-room.auto-off) { --scan-top: 216px; }
-}
-/* Its least is as before (about two lines): any more and, on a small screen with the gauge, the panel would reach up over the gauge. */
-.table-camera .scan-panel .scan-note-box { position: relative; display: flex; flex-direction: column; flex-shrink: 1; min-height: 52px; width: min(92vw, 440px); }
-.table-camera .scan-panel .scan-note-panel { flex: 0 1 auto; min-height: 0; margin: 0; max-height: none; overflow: auto; font-size: 14px; color: var(--text); background: var(--panel); }
-/* On the note's lower edge (it covers as little of the last lines as it can), with a bigger place to tap than it looks. */
-.scan-note-more { position: absolute; right: 8px; bottom: -4px; z-index: 1; min-height: 24px; padding: 0 11px; border: 0; border-radius: 12px; background: var(--accent); color: var(--on-accent); font-size: 13px; font-weight: 700; line-height: 24px; box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4); }
-.scan-note-more::before { content: ''; position: absolute; inset: -12px -8px -2px -12px; }
-/* A note squeezed to its least (about two lines, Scan.tsx "tight"): its second line is at the very bottom, so
-   "More ▾" sits on the top edge instead, over the padding only, to the right of the gauge (at most half the
-   screen wide, centred) and of "Resume camera". Check 2026-11-10: it covered the end of that line. */
-.table-camera .scan-note-box.tight .scan-note-more { top: -15px; bottom: auto; }
-.table-camera .scan-note-box.tight .scan-note-more::before { inset: -2px -8px -12px -12px; }
-/* Centred while it fits; a longer one scrolls from its top (auto margins, not justify-content: center, which would cut its top off). */
-.scan-note-sheet { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: calc(var(--safe-top) + 16px) 16px calc(var(--safe-bottom) + 16px); overflow-y: auto; background: rgba(0, 0, 0, 0.82); }
-.scan-note-sheet .notice { flex: none; width: min(100%, 560px); margin: auto 0 0; color: var(--text); text-align: left; }
-.scan-note-sheet .btn { flex: none; margin-bottom: auto; }
-.scan-note-sheet .notice p { margin: 4px 0; }
-/* A phone held sideways: the gauge and the panel fill the middle from top to bottom, so the note goes to the
-   free column on the left, from under the top bar (or "Allow the tilt sensor", or the camera's problem box,
-   which reach across) down to the bottom. */
-@media (orientation: landscape) and (max-height: 500px) {
-  .table-camera { --scan-side-top: 64px; }
-  .table-camera:has(> [data-testid='allow-tilt']) { --scan-side-top: 124px; }
-  .table-camera:has(> .live-notice-off):has(.scan-panel.has-note) { --scan-side-top: 152px; }
-  .table-camera .table-camera-extra:has(> .scan-panel.has-note) { top: auto; height: 50vh; overflow: hidden; }
-  .table-camera .scan-panel.has-note { max-height: min(50vh, calc(100vh - var(--safe-top) - var(--safe-bottom) - 406px)); }
-  .table-camera:has(.scan-panel.camera-paused.has-note) > .live-center { justify-content: center; padding-top: 24px; }
-  /* The column ends 178 px left of the middle: a long gauge message (it made the gauge up to half the screen
-     wide) wraps narrower so the gauge (at most 348 px) stays clear of it. */
-  .table-camera:has(.scan-panel.has-note) .gauge-msg { max-width: 320px; }
-  /* The coin chooser makes room while any note shows (check 2026-11-10: with it, the middle panel reached up over
-     "Allow the tilt sensor" and the camera's problem box). It is back when the note is tapped away. */
-  .table-camera .scan-panel.has-note .coin-pick { display: none; }
-  .table-camera .scan-panel .scan-note-box {
-    position: fixed;
-    left: calc(env(safe-area-inset-left, 0px) + 12px);
-    top: calc(var(--safe-top) + var(--scan-side-top));
-    width: calc(50vw - 190px - env(safe-area-inset-left, 0px));
-    max-height: calc(100dvh - var(--safe-top) - var(--scan-side-top) - var(--safe-bottom) - 12px);
-  }
 }
 .scan-photo-row { flex-wrap: wrap; justify-content: center; gap: 6px; }
 .res-assembled { stroke: var(--ov-good); stroke-width: 3; }
@@ -1476,7 +1399,6 @@ h1[tabindex='-1']:focus { outline: none; }
 .inline-icon { vertical-align: -0.15em; }
 .chip.ok { display: inline-flex; align-items: center; gap: var(--s-1); }
 .pick-photo { gap: var(--s-2); }
-.scan-note-more { display: inline-flex; align-items: center; gap: 2px; }
 /* The live view's piece box: the answer buttons with their icons; Fits filled green (.btn-good). */
 .live-table-info .btn-fits, .live-table-info [data-testid='live-not'] { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .live-table-info .btn-fits { border-color: transparent; }
@@ -1790,6 +1712,168 @@ h1[tabindex='-1']:focus { outline: none; }
 .app:has(.ui-sheet-root:not(.is-closing) .ui-sheet-medium .fill-sheet) { --toast-bottom: calc(60dvh + var(--s-2)); }
 .app:has(.ui-sheet-root:not(.is-closing) .ui-sheet-large .fill-sheet) { --toast-bottom: calc(var(--safe-bottom) + var(--s-3)); }
 .app:has(.ui-toast) .ui-sheet-large .fill-sheet { padding-bottom: 64px; }
+
+/* M9 part 5: result */
+/* After the shutter (components/ScanResult.tsx, design plan §3.4, §3.8 rule 12, §4 item 5). The flash: white over
+   the viewfinder for 260 ms; none under Reduce Motion (the frozen photo is the still frame). */
+.shutter-flash { position: fixed; inset: 0; z-index: 70; background: var(--white); opacity: 0; pointer-events: none; animation: shutter-flash 260ms ease-out; }
+@keyframes shutter-flash { from { opacity: 0.9; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .shutter-flash { display: none; } }
+/* The haptic tick's hidden switch (feedback.ts). */
+.haptic-tick { display: none; }
+/* The wait: the frozen photo dimmed (the camera's 0.5 scrim), the stages on the camera material above where the dock is. */
+.scan-wait { position: fixed; inset: 0; z-index: 60; background: var(--black); touch-action: none; }
+/* Back while a photo is read, where the camera's own Back is (the wait covers the top bar). */
+.scan-wait-back { position: absolute; z-index: 2; top: calc(var(--safe-top) + var(--s-2)); left: calc(var(--safe-left) + var(--s-2)); }
+.scan-wait-photo, .scan-wait-photo-box, .scan-wait-photo-box > canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.scan-wait::after { content: ''; position: absolute; inset: 0; background: var(--cam-scrim); pointer-events: none; }
+.scan-wait-card { position: absolute; z-index: 1; left: 50%; bottom: calc(var(--safe-bottom) + 24px); transform: translateX(-50%); display: flex; flex-direction: column; gap: var(--s-3); width: min(calc(100% - 32px), 340px); padding: var(--s-4) var(--s-5); border-radius: var(--r-card); background: var(--cam-material); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); color: var(--white); }
+.scan-wait-stages { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; font: var(--t-headline); }
+.scan-wait-stages li { display: flex; align-items: center; gap: var(--s-3); min-height: 28px; }
+.scan-wait-stages li[data-state='next'], .scan-wait-stages li[data-state='done'] { color: rgba(255, 255, 255, 0.85); font-weight: 400; }
+.scan-wait-mark { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; }
+.scan-wait-mark .icon { color: var(--cam-good); }
+.scan-wait-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.85); }
+.scan-wait .spinner { border-color: rgba(255, 255, 255, 0.3); border-top-color: var(--white); }
+.scan-wait .scan-wait-cancel { align-self: stretch; background: rgba(255, 255, 255, 0.2); color: var(--white); }
+/* The result sheet (data-testid scan-note): as tall as its words, at most the medium height (more on a small or sideways screen, so what to do is in view), the buttons always below the list. */
+.ui-sheet[data-testid='scan-note'].ui-sheet-medium { height: auto; max-height: max(60vh, min(440px, calc(100vh - var(--safe-top) - 10px))); max-height: max(60dvh, min(440px, calc(100dvh - var(--safe-top) - 10px))); }
+.ui-sheet[data-testid='scan-note'] .ui-sheet-body { display: flex; flex-direction: column; overflow: hidden; padding-bottom: calc(var(--safe-bottom) + var(--s-3)); }
+.scan-result { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--s-3); }
+.scan-result-list { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.scan-result-list ul { display: flex; flex-direction: column; gap: var(--s-2); margin: 0; padding: 0; list-style: none; }
+.scan-result-sub { margin: 0 0 var(--s-3); font: var(--t-subhead); color: var(--muted); }
+.scan-result-item { display: flex; align-items: flex-start; gap: var(--s-3); }
+.scan-result-item p { margin: 0; font: var(--t-callout); }
+.scan-result-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 21px; color: var(--muted); }
+.tone-good .scan-result-icon { color: var(--good-ink); }
+.tone-warn .scan-result-icon { color: var(--warn-ink); }
+.tone-bad .scan-result-icon { color: var(--bad-ink); }
+.scan-result-actions { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
+.scan-result-actions > .btn { min-width: 0; padding: 0 var(--s-3); }
+.scan-result-actions > .scan-result-main, .scan-result-actions > .btn:only-child { grid-column: 1 / -1; }
+@media (orientation: landscape) and (max-height: 500px) { .scan-result-actions:not(.no-table) { grid-template-columns: 1.4fr 1fr 1fr; } .scan-result-actions > .scan-result-main { grid-column: auto; } }
+/* The photo viewer: the photo fills the screen above a legend row and Done; it zooms inside its box only. */
+.photo-result.photo-view { align-items: stretch; justify-content: flex-start; padding: calc(var(--safe-top) + 8px) 0 0; background: var(--black); color: var(--white); }
+.photo-view-port { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.photo-result .photo-view-svg { display: block; width: 100%; height: 100%; max-height: none; }
+.res-picked { fill: none; stroke: var(--white); stroke-width: 3; }
+.photo-view-bottom { flex: none; display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-3) calc(var(--safe-right) + var(--s-4)) calc(var(--safe-bottom) + var(--s-3)) calc(var(--safe-left) + var(--s-4)); }
+.photo-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 14px; margin: 0; padding: 0; list-style: none; font: var(--t-footnote); color: rgba(255, 255, 255, 0.85); }
+.photo-legend-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.photo-view-hint { margin: 0; text-align: center; font: var(--t-subhead); color: rgba(255, 255, 255, 0.85); }
+.photo-view-offer p { margin: 0 0 var(--s-3); text-align: center; font: var(--t-callout); color: var(--white); }
+.photo-view-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
+/* The wait card replaces the camera's own busy chip ("Finding pieces…"). */
+body:has(.scan-wait) [data-testid='camera-busy'] { display: none; }
+
+/* M9 part 5: camera */
+/* The puzzle camera laid out like the iPhone Camera app (TableCamera.tsx; design plan §3.5 camera chrome, §4 item 5,
+   decisions 12, 14, 15). Three rows: the top bar (Back, the gear, zoom, 🧪, and under them the status capsule), the
+   middle (clear: only the level reticle, or one card when the camera is off or the tilt sensor is asked for), and the
+   bottom (the result note for now, the mini map and the counts, the dock). The rows can't overlap, so no card covers a
+   button. Camera colours in both themes; no backdrop blur (it would cost on every video frame). */
+.table-camera { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
+.table-camera > .cam-top { position: relative; grid-row: 1; z-index: 5; display: flex; flex-direction: column; align-items: stretch; gap: var(--s-2); padding: calc(var(--safe-top) + var(--s-2)) calc(var(--safe-right) + var(--s-2)) var(--s-2) calc(var(--safe-left) + var(--s-2)); background: none; pointer-events: none; }
+.cam-top-row { display: flex; align-items: center; gap: var(--s-1); }
+.cam-top-row > *, .cam-top-status > * { pointer-events: auto; }
+.cam-top-gap { flex: 1; }
+.cam-top-status { display: flex; flex-direction: column; align-items: center; gap: var(--s-2); }
+.cam-top-status:empty { display: none; }
+/* The status capsule: the one instruction (17 px, two lines at most) and the level dot (filled green = flat, an amber ring = tilted, grey = no reading). */
+.cam-status { display: flex; align-items: center; gap: var(--s-2); max-width: min(100%, 440px); min-height: var(--tap-min); padding: 6px var(--s-4) 6px var(--s-3); border-radius: 22px; background: var(--cam-material); color: var(--white); }
+.cam-status-dot { flex: none; width: 12px; height: 12px; border: 2px solid var(--cam-text-2); border-radius: 50%; }
+.cam-status-dot-level { border-color: var(--cam-good); background: var(--cam-good); }
+.cam-status-dot-tilted { border-color: var(--cam-warn); }
+.cam-status-words { display: flex; flex-direction: column; min-width: 0; }
+.cam-status .gauge-msg, .cam-status .gauge-msg.ok { max-width: none; color: var(--white); font: var(--t-headline); text-align: left; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.cam-status .gauge-sub { color: var(--cam-text-2); font: var(--t-footnote); font-variant-numeric: tabular-nums; opacity: 1; }
+.cam-hint { display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2); max-width: min(100%, 440px); min-height: 36px; margin: 0; padding: 6px var(--s-4); border: 0; border-radius: var(--r-pill); background: var(--cam-material); color: var(--white); font: var(--t-subhead); font-weight: 600; text-align: center; }
+.cam-hint-button { min-height: var(--tap-min); cursor: pointer; }
+.cam-hint-button:focus-visible, .cam-mode:focus-visible, .cam-thumb:focus-visible, .cam-photos:focus-visible, .cam-map:focus-visible, .table-camera .snap-btn:focus-visible { outline: 2px solid var(--white); outline-offset: 2px; }
+/* The level: a 104 px reticle in the middle of the picture, no panel; each line over a dark halo. */
+.table-camera > .gauge-wrap { top: 50%; left: 50%; z-index: 1; transform: translate(-50%, -50%); }
+.table-camera .gauge { padding: 0; border-radius: 0; background: none; }
+.table-camera .gauge svg { display: block; }
+.gauge-halo { fill: none; stroke: var(--ov-halo); stroke-width: 5; }
+.table-camera .gauge-face { fill: none; stroke: var(--white); stroke-width: 2; }
+.table-camera .gauge-target { stroke: var(--white); stroke-opacity: 0.75; }
+.gauge-cross-halo { fill: none; stroke: var(--ov-halo); stroke-width: 5; stroke-linecap: round; }
+.gauge-cross { fill: none; stroke: var(--white); stroke-width: 2; stroke-linecap: round; }
+.table-camera .gauge-bubble { stroke: var(--ov-halo); stroke-width: 3; paint-order: stroke; }
+.table-camera .gauge-arrow { stroke: var(--white); paint-order: stroke; }
+/* The middle row: one card (camera off, the tilt sensor), centred between the top bar and the dock. */
+.cam-center { position: relative; grid-row: 2; z-index: 4; display: flex; align-items: center; justify-content: center; min-height: 0; padding: var(--s-2) calc(var(--safe-right) + var(--s-4)) var(--s-2) calc(var(--safe-left) + var(--s-4)); pointer-events: none; }
+.cam-center > * { pointer-events: auto; }
+.cam-card { display: flex; flex-direction: column; align-items: center; gap: var(--s-3); width: min(100%, 360px); max-height: 100%; overflow-y: auto; padding: var(--s-5) var(--s-4) var(--s-4); border-radius: var(--r-card); background: var(--cam-dock); color: var(--cam-text); text-align: center; }
+.cam-card h2 { margin: 0; color: var(--white); font: var(--t-title-3); }
+.cam-card p { margin: 0; font: var(--t-subhead); }
+.cam-card-steps { margin: 0; padding-left: 1.4em; font: var(--t-subhead); text-align: left; }
+.cam-card-steps li + li { margin-top: var(--s-1); }
+.cam-card-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 52px; height: 52px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); color: var(--white); }
+.cam-card .btn { flex: none; }
+.cam-card .btn-plain { color: var(--white); }
+@media (max-height: 620px) { .cam-card-icon { display: none; } .cam-card { gap: var(--s-2); padding-top: var(--s-4); } }
+/* The bottom row: the screen's panel (the result note for now), a photo that failed, the mini map and the counts, the dock. */
+.cam-bottom { position: relative; grid-row: 3; z-index: 5; display: flex; flex-direction: column; gap: var(--s-2); min-width: 0; pointer-events: none; }
+.table-camera-panel { display: flex; justify-content: center; min-height: 0; max-height: 36vh; padding: 0 calc(var(--safe-right) + var(--s-3)) 0 calc(var(--safe-left) + var(--s-3)); pointer-events: none; }
+.table-camera-panel .scan-panel { max-height: 100%; min-height: 0; }
+.table-camera-panel .scan-panel > * { pointer-events: auto; }
+.table-camera-panel:has(.scan-panel:empty) { display: none; }
+.cam-problem { align-self: center; max-width: min(calc(100% - 32px), 440px); margin: 0; padding: var(--s-2) var(--s-4); border-radius: var(--r-control); background: var(--cam-dock); box-shadow: inset 0 0 0 1.5px var(--cam-bad); color: var(--cam-text); font: var(--t-subhead); pointer-events: auto; }
+.cam-above { display: flex; align-items: flex-end; gap: var(--s-2); min-width: 0; padding: 0 calc(var(--safe-right) + var(--s-4)) 0 calc(var(--safe-left) + var(--s-4)); }
+.cam-above > * { pointer-events: auto; }
+/* The mini map (decision 14): bottom-left above the dock, where the thumb reaches it; a tap opens it large. */
+.cam-map { flex: none; width: 104px; height: 104px; padding: 4px; border: 0; border-radius: 12px; background: var(--cam-material); cursor: pointer; }
+.cam-map .coverage-map { display: block; width: 100%; height: 100%; max-height: none; border-radius: 8px; background: none; }
+@media (max-height: 620px) { .cam-map { width: 84px; height: 84px; } }
+.cam-map-big { padding: var(--s-2); border-radius: var(--r-control); background: var(--black); }
+.cam-map-big .coverage-map { display: block; width: 100%; height: auto; max-height: 50vh; background: none; }
+.scan-map-legend { margin: var(--s-3) 0 0; color: var(--muted); font: var(--t-subhead); }
+/* The counts: a small capsule, centred in the room the map leaves. */
+.cam-above .scan-counts { display: inline-block; min-width: 0; margin: 0 auto; padding: 7px var(--s-4); border-radius: 18px; background: var(--cam-material); color: var(--white); font: var(--t-subhead); font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; }
+.scan-counts-done { color: var(--white); white-space: nowrap; }
+/* The dock: the mode words over the shutter, the last photo on its left and Photos on its right (decision 15). */
+.cam-dock { display: flex; flex-direction: column; align-items: center; gap: var(--s-1); padding: var(--s-1) calc(var(--safe-right) + var(--s-6)) calc(var(--safe-bottom) + var(--s-3)) calc(var(--safe-left) + var(--s-6)); background: var(--cam-dock); pointer-events: auto; }
+.cam-modes-row { display: flex; justify-content: center; gap: var(--s-2); }
+.cam-mode { min-width: var(--tap-min); min-height: var(--tap-min); padding: 0 var(--s-3); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--white); font: var(--t-subhead); font-weight: 600; cursor: pointer; }
+.cam-mode[aria-pressed='true'] { color: var(--cam-select); text-decoration: underline 2px; text-underline-offset: 6px; }
+.cam-dock-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; width: 100%; max-width: 420px; }
+.cam-slot { display: flex; align-items: center; min-width: 50px; min-height: 50px; }
+.cam-slot:first-child { justify-self: start; }
+.cam-slot:last-child { justify-self: end; }
+.cam-thumb { display: block; flex: none; width: 50px; height: 50px; padding: 0; border: 2px solid var(--white); border-radius: var(--r-thumb); overflow: hidden; background: var(--black); cursor: pointer; }
+.cam-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cam-photos { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 50px; height: 50px; padding: 0; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.16); color: var(--white); cursor: pointer; }
+/* The shutter: a white disc in a 4 px white ring; the ring turns green as it fills while the phone is held still, and the photo takes itself when it is full. */
+.table-camera .snap-btn { position: relative; width: 78px; height: 78px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
+.table-camera .snap-btn:active { background: transparent; }
+.snap-ring { position: absolute; inset: 0; width: 100%; height: 100%; }
+.snap-ring-track { fill: none; stroke: var(--white); stroke-width: 4; }
+.snap-ring-fill { fill: none; stroke: var(--cam-good); stroke-width: 4; transition: stroke-dashoffset 0.1s linear; }
+.snap-disc { position: absolute; inset: 8px; border-radius: 50%; background: var(--white); transition: transform var(--m-press); }
+.table-camera .snap-btn:active .snap-disc { transform: scale(0.92); }
+.scan-help-section h3 { margin: var(--s-4) 0 var(--s-2); font: var(--t-headline); }
+.scan-help-section p, .scan-help-section li { font: var(--t-subhead); }
+.scan-help-section p { margin: 0 0 var(--s-2); }
+.scan-help-section ol { margin: 0; padding-left: 1.4em; }
+.scan-help-section li + li { margin-top: var(--s-2); }
+.scan-coin { display: flex; align-items: center; gap: var(--s-3); min-height: var(--tap-min); font: var(--t-body); }
+.scan-coin select { flex: 1; min-width: 0; min-height: var(--tap-min); }
+/* A phone held sideways (a Safari tab): the dock is a column on the right (Photos, the mode words, the shutter, the
+   last photo, top to bottom); the map and the counts stay bottom-left. Usable, not pretty. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .table-camera { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr) auto auto auto; }
+  .table-camera > .cam-top { grid-column: 1; }
+  .table-camera > .cam-center { grid-column: 1; }
+  .table-camera > .cam-bottom { display: contents; }
+  .table-camera .table-camera-panel { position: relative; z-index: 5; grid-column: 1; grid-row: 3; }
+  .table-camera .cam-problem { position: relative; z-index: 5; grid-column: 1; grid-row: 4; }
+  .table-camera .cam-above { position: relative; z-index: 5; grid-column: 1; grid-row: 5; padding-bottom: calc(var(--safe-bottom) + var(--s-3)); pointer-events: none; }
+  .table-camera .cam-dock { position: relative; z-index: 5; grid-column: 2; grid-row: 1 / -1; justify-content: center; gap: var(--s-3); padding: calc(var(--safe-top) + var(--s-3)) calc(var(--safe-right) + var(--s-3)) calc(var(--safe-bottom) + var(--s-3)) var(--s-3); }
+  .cam-modes-row { flex-direction: column; gap: 0; }
+  .cam-dock-row { display: flex; flex-direction: column-reverse; gap: var(--s-3); width: auto; }
+}
 
 /* ---------- Reduce Motion (M9 part 1) ---------- */
 /* iPhone Settings > Accessibility > Motion > Reduce Motion: nothing moves or slides. The spinner only fades in

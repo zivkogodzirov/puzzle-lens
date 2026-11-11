@@ -116,6 +116,20 @@ export function SettingsScreen() {
         </ListSection>
       )}
 
+      {/* M9 part 5 result: the shutter's feedback (design plan §3.4). */}
+      <SegmentGroup header="Sounds and taps" footer="When the scan camera takes a photo: a white flash, a shutter sound and a light tap you can feel.">
+        <Segmented<'on' | 'off'>
+          label="Sounds and taps"
+          testId="sounds-taps"
+          value={settings.soundsAndTaps.value ? 'on' : 'off'}
+          options={[
+            ['on', 'On'],
+            ['off', 'Off'],
+          ]}
+          onChange={(v) => (settings.soundsAndTaps.value = v === 'on')}
+        />
+      </SegmentGroup>
+
       <SegmentGroup header="Units" footer="Only changes how sizes are shown.">
         <Segmented<Units>
           label="Units"

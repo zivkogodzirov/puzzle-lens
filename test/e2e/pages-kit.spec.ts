@@ -201,10 +201,21 @@ test('Settings: grouped sections, the kit’s segmented controls, Tester mode fi
   await gotoScreen(page, 'settings');
   const headers = await page.locator('main .list-header').allTextContents();
   expect(headers[0]).toBe('Tester mode');
-  for (const h of ['Accuracy', 'Units', 'Live camera format', 'Camera lens', 'Scan mode', 'Live tracking speed', 'Performance display', 'Storage', 'Erase'])
+  for (const h of [
+    'Accuracy',
+    'Sounds and taps',
+    'Units',
+    'Live camera format',
+    'Camera lens',
+    'Scan mode',
+    'Live tracking speed',
+    'Performance display',
+    'Storage',
+    'Erase',
+  ])
     expect(headers, h).toContain(h);
   // Every choice is the kit's segmented control.
-  await expect(page.locator('main .segmented .segmented-btn')).toHaveCount(2 + 3 + 3 + 2 + 2 + 2);
+  await expect(page.locator('main .segmented .segmented-btn')).toHaveCount(2 + 2 + 3 + 3 + 2 + 2 + 2); // M9 part 5: + Sounds and taps (On / Off)
   await page.getByTestId('units-in').click();
   await expect(page.getByTestId('units-in')).toHaveAttribute('aria-pressed', 'true');
   await page.getByTestId('units-cm').click();

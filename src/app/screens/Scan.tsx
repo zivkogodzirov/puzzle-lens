@@ -1,13 +1,12 @@
 import { settings } from '../settings';
-import { Fragment } from 'preact';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { go, routeArg, routeSub } from '../router';
 import { readerWorker, restartReader, trackerWorker } from '../workers';
 import { TableCamera, type CaptureMeta } from '../components/TableCamera';
 import { TopBar } from '../components/TopBar';
-import { TestStrip } from '../components/TestSteps';
 import { plural } from '../words';
 import { cameraState } from '../../camera/camera';
+import { snapBusy } from '../../camera/snap';
 import { deleteBlob, getProject, newId, projectBlobId, putBlob, updateProject } from '../../project/store';
 import { measurePitch, planMerge } from '../../project/catalog';
 import { snapsOfBatch } from '../../project/batches';
@@ -28,6 +27,21 @@ import { logError, logInfo } from '../../log/logger';
 import { errorWords } from './puzzle/shared';
 import { Callout } from '../ui/Callout';
 import { Icon } from '../ui/icons';
+import { ResultSheet, ScanWait, ShutterFlash, type Frozen, type WaitStage } from '../components/ScanResult';
+import {
+  blockedResult,
+  errorResult,
+  fewResult,
+  noMarkerResult,
+  nothingResult,
+  piecesResult,
+  unmatchedResult,
+  type ResultTone,
+  type ScanResult,
+} from '../scanResult';
+import { hapticTick, playShutterSound, primeFeedback } from '../feedback';
+import { IconButton } from '../ui/Button';
+import { Sheet } from '../ui/Sheet';
 
 const SCAN_TIMEOUT_MS = 120_000;
 
@@ -44,9 +58,6 @@ interface Unified {
   height: number;
   quality: PhotoQuality;
 }
-/** Where a result note that doesn't fit gets room (styles.css needs-room): not on a phone held sideways. */
-const ROOM_UPRIGHT = 'not all and (orientation: landscape) and (max-height: 500px)';
-
 /** How many scan photos keep their full-size picture. */
 const KEEP_FULL_PHOTOS = 10;
 
@@ -58,11 +69,6 @@ async function pruneFullPhotos(projectId: string): Promise<void> {
     await deleteBlob(s.blobId!);
     await db().snaps.update(s.id, { blobId: null });
   }
-}
-
-interface ScanNote {
-  ok: boolean;
-  lines: string[];
 }
 
 /** Pixels per mm at the image centre of a photo → table mapping. */
@@ -142,23 +148,19 @@ async function rescaleCatalog(projectId: string, k: number): Promise<void> {
  * close-ups (2×) cover the table for shape reading. Each photo is checked, placed on the table and
  * merged into the catalog; grey outlines show what has been found.
  */
-/**
- * One line of the result note. A "✓" in it ("Coin found ✓") is drawn as the check icon (M9 part 2); one in
- * quotes names a button ("✓ in the puzzle") and stays text.
- */
-function NoteLine({ text }: { text: string }) {
-  const parts = text.split(/(?<!")✓/);
-  if (parts.length === 1) return <p>{text}</p>;
-  return (
-    <p>
-      {parts.map((t, i) => (
-        <Fragment key={i}>
-          {i > 0 && <Icon name="check" size={16} class="inline-icon" />}
-          {t}
-        </Fragment>
-      ))}
-    </p>
-  );
+/** A small copy of a photo for showing (about 1,200 px wide), or null where the browser can't resize while decoding. */
+async function smallCopy(blob: Blob): Promise<HTMLCanvasElement | null> {
+  try {
+    const bmp = await createImageBitmap(blob, { resizeWidth: 1200, resizeQuality: 'medium' });
+    const c = document.createElement('canvas');
+    c.width = bmp.width;
+    c.height = bmp.height;
+    c.getContext('2d')?.drawImage(bmp, 0, 0);
+    bmp.close();
+    return c;
+  } catch {
+    return null;
+  }
 }
 
 export function ScanScreen() {
@@ -168,7 +170,6 @@ export function ScanScreen() {
   const [snaps, setSnaps] = useState<SnapRow[]>([]);
   const [kind, setKind] = useState<CaptureKind>('overview');
   const [busy, setBusy] = useState<string | null>(null);
-  const [note, setNote] = useState<ScanNote | null>(null);
   const [frameSize, setFrameSize] = useState<{
     width: number;
     height: number;
@@ -180,91 +181,61 @@ export function ScanScreen() {
     size: { width: number; height: number };
     outlines: Array<{ points: number[]; flag: OutlineFlag }>;
   } | null>(null);
-  const [showPhoto, setShowPhoto] = useState(false);
+  // The photo viewer, and whether it was opened from the result sheet (Done then shows the sheet again).
+  const [showPhoto, setShowPhoto] = useState<boolean | 'sheet'>(false);
+  // M9 part 5 camera: the gear's sheet (coin and help), the map opened large, and the hidden photo picker.
+  const [gearOpen, setGearOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
+  const pickInput = useRef<HTMLInputElement>(null);
   // After a photo that couldn't be used, wait for a tap instead of firing again and again.
   const [autoPaused, setAutoPaused] = useState(false);
-  // The result note shows what fits in its place. When part of it is out of view, "More ▾" says so and
-  // opens all of it over the camera (review 2026-11-10: only its first lines showed, with no sign of the
-  // rest). No photo is taken by itself while it is open.
-  const noteRef = useRef<HTMLDivElement>(null);
-  const [noteMore, setNoteMore] = useState(false);
-  // Squeezed to its least (about two lines, on a small screen): "More ▾" goes on its top edge, so it
-  // doesn't cover the last line that shows (check 2026-11-10).
-  const [noteTight, setNoteTight] = useState(false);
-  const [noteOpen, setNoteOpen] = useState(false);
-  // The note that didn't all fit with everything else in place: until the next note, the coin choice
-  // and (while no photo takes itself) the gauge's height line make room for it (styles.css needs-room).
-  // Only that note: a short one keeps the full gauge and the coin choice (check 2026-11-10).
-  const [roomFor, setRoomFor] = useState<ScanNote | null>(null);
-  const roomRef = useRef<ScanNote | null>(null);
-  roomRef.current = roomFor;
-  const recheck = useRef<(() => void) | null>(null);
-  useEffect(() => setNoteOpen(false), [note]);
-  useLayoutEffect(() => {
-    const el = noteRef.current;
-    if (!el) {
-      recheck.current = null;
-      setNoteMore(false);
-      setNoteTight(false);
+  // M9 part 5 result: the last photo's result, shown as a sheet (it replaces M8's note over the camera). No
+  // photo takes itself while it is open; "Take another" (or a tap beside it) closes it.
+  const [result, setResult] = useState<ScanResult | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  // The wait for a photo: from the shutter (or a chosen photo) to its result. `run` counts the photos, so the
+  // result of a photo whose wait was cancelled is recognised and ignored when it arrives.
+  const [wait, setWait] = useState<{ stage: WaitStage; since: number; frozen: Frozen | null } | null>(null);
+  const run = useRef(0);
+  const reading = useRef(false);
+  // The camera picture at the shutter (the frozen photo while the photo is read), and the shutter's flash.
+  const shutterFrame = useRef<{ canvas: HTMLCanvasElement; at: number } | null>(null);
+  const [flash, setFlash] = useState(0);
+  const frozenUrl = useRef<string | null>(null);
+  /** Ends the wait (and lets go of a chosen photo's frozen copy). */
+  const endWait = () => {
+    reading.current = false;
+    setWait(null);
+    if (frozenUrl.current) URL.revokeObjectURL(frozenUrl.current);
+    frozenUrl.current = null;
+  };
+  /** Shows a photo's result in the sheet. */
+  const report = (r: ScanResult) => {
+    setResult(r);
+    setSheetOpen(true);
+  };
+  // The sound wakes on the first tap on this screen (iPhone Safari needs one), so a photo that takes itself has it too.
+  useEffect(() => primeFeedback(), []);
+  // The shutter (a tap, or a photo that takes itself): the flash, the sound and the tick, and the camera
+  // picture kept as the frozen photo. A photo chosen from the library has none of these. Should the photo
+  // fail (no result is read), the wait ends with it.
+  const taking = snapBusy.value;
+  useEffect(() => {
+    if (!taking) {
+      if (!reading.current) setWait(null);
       return;
     }
-    const check = () => {
-      // Words still below its window: the bottom of its last line of text (not of its last paragraph's
-      // box, whose line spacing alone may be cut: check 2026-11-10, a two-line note that showed whole
-      // lost the gauge's height line). None once scrolled to the end.
-      const last = el.lastElementChild;
-      let bottom = -Infinity;
-      if (last) {
-        const range = document.createRange();
-        range.selectNodeContents(last);
-        for (const r of range.getClientRects()) if (r.height > 0) bottom = Math.max(bottom, r.bottom);
-        if (bottom === -Infinity) bottom = last.getBoundingClientRect().bottom;
-      }
-      const hidden = bottom - (el.getBoundingClientRect().top + el.clientTop + el.clientHeight) > 2;
-      // Even its least (about two lines) doesn't fit below what is drawn at the top: it lies over the
-      // gauge's words, or over the button or box there (check 2026-11-10, a two-line note on a small
-      // screen). Only reaching into the room's own 8 px margin doesn't count (a later check: on an SE
-      // the gauge then shrank with its words still well clear of the note).
-      const gauge = el.closest('.table-camera')?.querySelector('[data-testid="level-gauge"]');
-      const room = el.closest('.table-camera-extra');
-      const above = gauge ? gauge.getBoundingClientRect().bottom : room ? room.getBoundingClientRect().top - 8 : -Infinity;
-      const squeezed = el.getBoundingClientRect().top < above - 1;
-      setNoteTight(el.clientHeight < 60);
-      // It doesn't fit: first it gets the room (upright only, where styles.css gives it); "More ▾" is
-      // decided again once the room is there (the effect on roomFor below), so it doesn't flash. Sideways
-      // the note has its own column and gets no room, so the flag isn't set there (check 2026-11-10: set
-      // sideways, it stayed on back upright where the note fitted).
-      if ((hidden || squeezed) && roomRef.current !== note && matchMedia(ROOM_UPRIGHT).matches) {
-        setRoomFor(note);
-        return;
-      }
-      setNoteMore(hidden);
-    };
-    recheck.current = check;
-    check();
-    // On a resize, checked in the next frame: the room it may give changes the note's size again, which
-    // within the same frame is a "ResizeObserver loop" error.
-    let frame = 0;
-    const ro = new ResizeObserver(() => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(check);
-    });
-    ro.observe(el);
-    el.addEventListener('scroll', check, { passive: true });
-    // Turned upright or sideways: checked before that frame is drawn (from the next frame, the first
-    // upright frame showed the note without its room: check 2026-11-10).
-    const upright = matchMedia(ROOM_UPRIGHT);
-    upright.addEventListener('change', check);
-    return () => {
-      cancelAnimationFrame(frame);
-      ro.disconnect();
-      el.removeEventListener('scroll', check);
-      upright.removeEventListener('change', check);
-    };
-  }, [note]);
-  // The room is there now (or gone), or photos stopped or started taking themselves (the gauge's size):
-  // measured again before the screen shows it.
-  useLayoutEffect(() => recheck.current?.(), [roomFor, autoPaused]);
+    const canvas = grabFrame();
+    shutterFrame.current = canvas ? { canvas, at: performance.now() } : null;
+    if (settings.soundsAndTaps.value) {
+      setFlash((n) => n + 1);
+      playShutterSound();
+      hapticTick();
+    }
+    setResult(null);
+    setSheetOpen(false);
+    setWait({ stage: 'read', since: performance.now(), frozen: canvas ? { canvas } : null });
+  }, [taking]);
   /** Sharpness of the good photos so far, per kind: a photo far below them is blurred. */
   const sharpSeen = useRef<Record<string, number[]>>({});
   const lastUrl = useRef<string | null>(null);
@@ -272,6 +243,9 @@ export function ScanScreen() {
   useEffect(
     () => () => {
       if (lastUrl.current) URL.revokeObjectURL(lastUrl.current);
+      if (frozenUrl.current) URL.revokeObjectURL(frozenUrl.current);
+      // A photo still being read when the screen closes: its result is ignored.
+      run.current++;
     },
     [],
   );
@@ -363,15 +337,42 @@ export function ScanScreen() {
   const pitchMm = project.piecePitch ? Math.sqrt(project.piecePitch.wMm * project.piecePitch.hMm) : DEFAULT_PITCH_MM;
 
   const onPhoto = async (blob: Blob, meta: CaptureMeta) => {
+    // M9 part 5 result: this photo's number. Cancel (or leaving the screen) moves `run` on, and from then on
+    // nothing of this photo is shown or saved: every step below checks `gone()` after each wait.
+    const mine = ++run.current;
+    const gone = () => run.current !== mine;
+    reading.current = true;
     setBusy(kind === 'overview' ? 'Finding pieces…' : 'Reading the close-up…');
-    setNote(null);
+    setResult(null);
+    setSheetOpen(false);
+    // The frozen photo: the camera picture at the shutter (taken just now), else the chosen photo itself.
+    const shot = shutterFrame.current && performance.now() - shutterFrame.current.at < 30_000 ? shutterFrame.current : null;
+    shutterFrame.current = null;
+    let frozen: Frozen | null = shot ? { canvas: shot.canvas } : null;
+    if (!frozen) {
+      // A chosen photo: a small copy (about 1,200 px) for the frozen picture; decoding the 12 MP photo at full size
+      // next to the reader's own copy cost about 48 MB more on the phone (review 2026-11-11). Without resizing, the photo itself.
+      const small = await smallCopy(blob);
+      if (small) frozen = { canvas: small };
+      else {
+        if (frozenUrl.current) URL.revokeObjectURL(frozenUrl.current);
+        frozenUrl.current = URL.createObjectURL(blob);
+        frozen = { url: frozenUrl.current };
+      }
+    }
+    const started = performance.now();
+    setWait((w) => ({ stage: 'read', since: w?.since ?? started, frozen }));
+    const stage = (s: WaitStage) => setWait((w) => (w ? { ...w, stage: s } : w));
     const snapId = newId();
     const coinLines: string[] = [];
     let scaleChanged: { k: number; coin: CoinType } | null = null;
     const zoom = meta.zoom >= 1.5 ? 2 : 1;
+    // This photo's outlines can be shown ("See photo").
+    let photo = false;
     try {
       const reader = readerWorker();
       const info = await reader.ready;
+      if (gone()) return;
       if (!info?.ok) throw new Error(info?.error ?? 'The photo helper could not start');
       const pitch = project.piecePitch;
       const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Reading the photo took too long; please try again')), SCAN_TIMEOUT_MS));
@@ -380,6 +381,7 @@ export function ScanScreen() {
       let first: PieceList | null = null;
       if (free) {
         first = await readPieceList(project.id);
+        if (gone()) return;
         const catalog = first.rows
           .filter((p) => p.status === 'table' || p.status === 'pending')
           .map((p) => ({
@@ -390,6 +392,7 @@ export function ScanScreen() {
             colour: p.colour,
             status: p.status,
           }));
+        stage('find');
         const f = await Promise.race([
           reader.api.scanFree(blob, {
             catalog,
@@ -412,6 +415,10 @@ export function ScanScreen() {
           }),
           timeout,
         ]);
+        if (gone()) {
+          logInfo('scan', `A cancelled ${kind} photo's result arrived (${f.pieces.length} pieces): ignored, nothing saved`);
+          return;
+        }
         logInfo(
           'scan',
           `${kind} photo (no markers): ${f.pieces.length} pieces, ${f.registered ? `placed by ${f.inliers} pieces (±${f.rmsMm.toFixed(1)} mm)` : f.isNewFrame ? 'first photo' : 'not placed'} in ${Math.round(f.ms)} ms`,
@@ -433,6 +440,7 @@ export function ScanScreen() {
                 ],
           };
         });
+        photo = true;
         if (f.finished) {
           // A finished puzzle: report the count and any gaps; nothing goes into the catalog.
           logInfo(
@@ -449,6 +457,7 @@ export function ScanScreen() {
             if (!gridMatches(project.grid, f.finished)) {
               logInfo('scan', `Finished-puzzle count ${f.finished.cols} × ${f.finished.rows} doesn't match the grid: nothing saved`);
             } else {
+              stage('save');
               // The puzzle finished since the last photo of it (M7 part 4): the pieces the app had for
               // its empty spots went in.
               if (!f.finished.gaps.length && project.openSpots) {
@@ -466,15 +475,12 @@ export function ScanScreen() {
           } catch (err) {
             logError('scan', 'The empty spots could not be saved', err);
           }
-          setNote({ ok: true, lines: [...finishedLines(f.finished, next), ...extra] });
+          report(finishedResult(f.finished, next, extra));
           return;
         }
         if (f.isNewFrame && f.pieces.filter((p) => !p.flags.cut).length < 5) {
           setAutoPaused(true);
-          setNote({
-            ok: false,
-            lines: ['Hardly any pieces in this photo, so it wasn’t used.', 'Hold the phone over the spread-out pieces and tap the button.'],
-          });
+          report(fewResult(photo));
           return;
         }
         // Without markers, blur is judged against the earlier good photos of the same kind, and
@@ -499,13 +505,7 @@ export function ScanScreen() {
               meta: { kind, zoom, pitchMm, pieces: f.pieces.length },
             })
             .catch(() => {});
-          setNote({
-            ok: false,
-            lines: [
-              'This photo could not be matched to the pieces found so far.',
-              'Include more of the same pieces (keep about half the picture on pieces already scanned) and try again.',
-            ],
-          });
+          report(unmatchedResult(photo));
           return;
         }
         // The coin: the true size. The catalog so far (and this photo) are rescaled from the
@@ -551,6 +551,7 @@ export function ScanScreen() {
           },
         };
       } else {
+        stage('find');
         const m = await Promise.race([
           reader.api.scanPhoto(blob, {
             map: map!,
@@ -561,12 +562,10 @@ export function ScanScreen() {
           }),
           timeout,
         ]);
+        if (gone()) return;
         logInfo('scan', `${kind} photo: ${m.pieces.length} pieces in ${Math.round(m.ms)} ms`, { quality: m.quality, timings: m.timings, decodeMs: m.decodeMs });
         if (!m.imgToTable || !m.pxPerMm) {
-          setNote({
-            ok: false,
-            lines: ['No marker in this photo, so it can’t be placed on the table yet.', 'Aim so at least one marker card is in the picture.'],
-          });
+          report(noMarkerResult(photo));
           return;
         }
         r = {
@@ -581,22 +580,19 @@ export function ScanScreen() {
         };
       }
       if (!r.imgToTable || !r.pxPerMm) {
-        setNote({
-          ok: false,
-          lines: ['No pieces could be measured in this photo. Point at the pieces and try again.'],
-        });
+        report(nothingResult(photo));
         return;
       }
       // Blurred or tilted close-ups would give wrong shapes: don't use them.
       const blocking = r.reasons.filter((q) => /Blurred|Tilted/.test(q));
       if (blocking.length) {
         setAutoPaused(true);
-        setNote({
-          ok: false,
-          lines: [...blocking, 'Nothing was added from this photo.'],
-        });
+        report(blockedResult(blocking, photo));
         return;
       }
+      // From here on this photo is saved: it can no longer be cancelled (nothing is half-saved).
+      if (gone()) return;
+      stage('save');
       if (scaleChanged) {
         const k = scaleChanged.k;
         const scaled = { pieces: r.pieces, imgToCatalog: r.imgToTable, pxPerMm: r.pxPerMm };
@@ -704,46 +700,28 @@ export function ScanScreen() {
       setPieces(all);
       if (scaleChanged) setSnaps(snapsOfBatch(next, await db().snaps.where('projectId').equals(project.id).toArray()));
       else setSnaps((s) => [...s, snap]);
-      const lines0: string[] = [];
       if (plan.moved || plan.missing) logInfo('scan', `Moved pieces recognised: ${plan.moved}; no longer at their spot: ${plan.missing}`);
-      if (plan.back)
-        lines0.push(
-          `${plan.back === 1 ? '1 piece' : `${plan.back} pieces`} set aside in an earlier batch ${plan.back === 1 ? 'is' : 'are'} back: recognised, not counted again.`,
-        );
-      const movedHere = plan.moved - plan.back;
-      if (movedHere) lines0.push(`${movedHere === 1 ? '1 piece was' : `${movedHere} pieces were`} moved: recognised, not counted again.`);
-      if (plan.pending)
-        lines0.push(
-          `${plan.pending === 1 ? '1 piece' : `${plan.pending} pieces`} may be ${plan.pending === 1 ? 'one' : 'ones'} you moved: check ${plan.pending === 1 ? 'it' : 'them'} on the puzzle page ("Pieces to check"), or take a close-up.`,
-        );
-      if (plan.missing)
-        lines0.push(
-          `${plan.missing === 1 ? '1 piece is' : `${plan.missing} pieces are`} no longer where ${plan.missing === 1 ? 'it was' : 'they were'} (taken away, or moved out of view).`,
-        );
-      const clumps = r.pieces.filter((p) => p.flags.clump).length;
-      const weak = r.pieces.filter((p) => p.flags.weak).length;
-      const lines: string[] = [
-        kind === 'overview'
-          ? `Found ${plural(r.pieces.filter((p) => !p.flags.cut).length, 'piece')} (${plan.added.length} new).`
-          : `Close-up read: ${plural(plan.updates.length - plan.missing + plan.added.length, 'piece')} (${plan.added.length} new).`,
-        ...lines0,
-      ];
-      if (clumps)
-        lines.push(
-          `${clumps === 1 ? 'One spot where pieces touch' : `${clumps} spots where pieces touch`} (orange dashes): spread them apart and take the photo again.`,
-        );
-      const part = r.pieces.filter((p) => p.flags.part).length;
-      const faint = weak - part;
-      if (faint)
-        lines.push(`${faint} pale piece${faint > 1 ? 's' : ''} with a faint outline (yellow): check ${faint > 1 ? 'they are' : 'it is'} outlined right.`);
-      if (part)
-        lines.push(
-          `${part === 1 ? '1 piece' : `${part} pieces`} only partly outlined (yellow, smaller than the others): ${part === 1 ? 'its' : 'their'} shape is not used. A close-up helps.`,
-        );
-      for (const q of r.reasons) if (!/Blurred|Tilted/.test(q)) lines.push(q);
-      lines.unshift(...coinLines);
-      if (kind === 'overview' && settings.scanMode.value === 'quick') lines.push('Quick scan done. Close-ups (2×) read the shapes better, if you want them.');
-      setNote({ ok: true, lines });
+      const flagged = (f: 'clump' | 'weak' | 'part') => r.pieces.filter((p) => p.flags[f]).length;
+      const part = flagged('part');
+      report(
+        piecesResult({
+          kind,
+          count: kind === 'overview' ? r.pieces.filter((p) => !p.flags.cut).length : plan.updates.length - plan.missing + plan.added.length,
+          added: plan.added.length,
+          ready: r.pieces.filter((p) => !p.flags.cut && !p.flags.clump && !p.flags.weak).length,
+          clumps: flagged('clump'),
+          faint: flagged('weak') - part,
+          part,
+          back: plan.back,
+          moved: plan.moved,
+          pending: plan.pending,
+          missing: plan.missing,
+          reasons: r.reasons,
+          coinLines,
+          quick: settings.scanMode.value === 'quick',
+          photo,
+        }),
+      );
       setAutoPaused(false);
       // Full scan mode: close-ups next. Quick: stay on overviews (M5 part 4).
       if (kind === 'overview' && settings.scanMode.value === 'full') {
@@ -751,12 +729,26 @@ export function ScanScreen() {
         setKind('detail');
       }
     } catch (err) {
+      if (gone()) return;
       logError('scan', 'Scan photo failed', err);
-      setNote({ ok: false, lines: [errorWords(err)] });
+      report(errorResult(errorWords(err), photo));
       if (/too long/.test(String((err as Error)?.message))) restartReader();
     } finally {
-      setBusy(null);
+      if (!gone()) {
+        setBusy(null);
+        endWait();
+      }
     }
+  };
+
+  /** Cancel (after 10 s): stop waiting for this photo. Its result is ignored when it arrives; the photo helper keeps going. */
+  const cancelWait = () => {
+    run.current++;
+    logInfo('scan', 'Photo cancelled while it was read: its result will be ignored');
+    setBusy(null);
+    endWait();
+    // No photo takes itself right away (it would likely be as slow): the next one waits for a tap.
+    setAutoPaused(true);
   };
 
   const onTable = pieces.filter((p) => p.status === 'table' || p.status === 'pending');
@@ -765,8 +757,101 @@ export function ScanScreen() {
   const cameraOff = cameraState.value === 'error' || cameraState.value === 'paused';
   // Paused: TableCamera shows "Resume camera" in the middle of the screen; with a note it moves up under
   // the top bar and the panel keeps below it (styles.css .scan-panel.camera-paused, 2026-11-10: the note
-  // covered it). Refused: "Start camera" is in the problem box at the top.
+  // covered it). Refused: "Start camera" is in the problem box at the top. (M9 part 5: both are one card in the
+  // middle row now, between the top bar and the dock; the class stays for the result note.)
   const paused = cameraState.value === 'paused';
+  // M9 part 5 camera: the chrome laid out like the iPhone Camera app (design plan §3.5, §4 item 5).
+  const closeUps = snaps.filter((s) => s.kind === 'detail').length;
+  const allCloseUps = kind === 'detail' && !target && covered >= 98;
+  const pickMode = (k: CaptureKind) => {
+    kindChosen.current = true;
+    setAutoPaused(false);
+    setKind(k);
+  };
+  const modes = (
+    <div class="cam-modes-row" role="group" aria-label="Kind of photo">
+      <button type="button" class="cam-mode" aria-pressed={kind === 'overview'} data-testid="mode-overview" onClick={() => pickMode('overview')}>
+        Whole table
+      </button>
+      <button type="button" class="cam-mode" aria-pressed={kind === 'detail'} data-testid="mode-detail" onClick={() => pickMode('detail')}>
+        Close-ups
+      </button>
+    </div>
+  );
+  // The last photo, as in the Camera app: a 50 px thumbnail that opens it.
+  const dockLeft = lastPhoto ? (
+    <button type="button" class="cam-thumb" data-testid="show-photo" aria-label="See the last photo" onClick={() => setShowPhoto(true)}>
+      <img src={lastPhoto.url} alt="" />
+    </button>
+  ) : null;
+  // Photos (decision 15): a real button that opens the photo picker through the hidden file input.
+  const dockRight = free ? (
+    <>
+      <button
+        type="button"
+        class="cam-photos"
+        data-testid="pick-photo"
+        aria-label="Choose a photo from Photos"
+        onClick={() => {
+          setAutoPaused(true);
+          pickInput.current?.click();
+        }}
+      >
+        <Icon name="image" size={26} />
+      </button>
+      <input
+        ref={pickInput}
+        type="file"
+        accept="image/*"
+        data-testid="pick-photo-input"
+        hidden
+        onClick={() => setAutoPaused(true)}
+        onChange={(e) => {
+          const input = e.currentTarget as HTMLInputElement;
+          const file = input.files?.[0];
+          input.value = '';
+          // A photo from the library goes through exactly the same reading as a camera photo
+          // (as a whole-table photo or a 2× close-up, whichever is selected).
+          if (file) {
+            // A chosen photo shows itself while it is read, never a camera frame left from a photo that failed (review 2026-11-11).
+            shutterFrame.current = null;
+            void onPhoto(file, { zoom: kind === 'detail' ? 2 : 1, fix: null, auto: false, sensorTiltDeg: null });
+          }
+        }}
+      />
+    </>
+  ) : null;
+  // No camera, nothing to aim with: the map is left out. Tapped, it opens large.
+  const mapShown = free && !cameraOff && coverage && onTable.length > 0;
+  const above = (
+    <>
+      {mapShown && (
+        <button type="button" class="cam-map" data-testid="coverage-map-open" aria-label="Map of your pieces (tap to enlarge)" onClick={() => setMapOpen(true)}>
+          <CoverageMap pieces={onTable} coverage={coverage} target={kind === 'detail' ? target : null} view={viewMm} />
+        </button>
+      )}
+      <p class="scan-counts" data-testid="scan-counts">
+        <span data-testid="scan-count">{plural(onTable.length, 'piece')} found</span>
+        <span aria-hidden="true"> · </span>
+        <span data-testid="scan-coverage">
+          {plural(closeUps, 'close-up')}
+          {settings.testerMode.value && closeUps > 0 && coverage ? ` (${covered}%)` : ''}
+        </span>
+        {allCloseUps && (
+          <span class="scan-counts-done">
+            {' '}
+            <Icon name="check" size={16} class="inline-icon" />
+            all done
+          </span>
+        )}
+      </p>
+    </>
+  );
+  const gear = (
+    <IconButton label="Coin and help" class="btn-cam" testId="camera-settings" onClick={() => setGearOpen(true)}>
+      <Icon name="settings" />
+    </IconButton>
+  );
 
   return (
     <>
@@ -775,151 +860,107 @@ export function ScanScreen() {
         map={map}
         target={target}
         busy={busy}
-        autoCapture={!autoPaused && !noteOpen && (kind === 'overview' || target !== null)}
+        // M9 part 5: no photo takes itself while the result sheet, the photo viewer, the gear's sheet or the big map is open.
+        autoCapture={!autoPaused && !sheetOpen && !showPhoto && !gearOpen && !mapOpen && (kind === 'overview' || target !== null)}
         pieces={free ? undefined : onTable}
         free={free ? { pitchMm } : null}
         onPhoto={(b, m) => void onPhoto(b, m)}
         // M9 part 4 picture: opened from the Picture tab's "Photograph the puzzle so far" (#/scan/<id>/picture), it returns there.
         onClose={() => go('puzzle', project.id, routeSub.value === 'picture' ? 'picture' : null)}
+        topExtra={gear}
+        modes={modes}
+        dockLeft={dockLeft}
+        dockRight={dockRight}
+        above={above}
       >
-        {/* auto-off: no photo takes itself (after a finished puzzle or a photo that couldn't be used);
-            needs-room: the note didn't all fit. With both, the gauge is smaller and the note gets the room
-            (styles.css, 2026-11-10). */}
-        <div
-          class={`scan-panel${note ? ' has-note' : ''}${note && roomFor === note ? ' needs-room' : ''}${paused ? ' camera-paused' : ''}${autoPaused ? ' auto-off' : ''}`}
-          data-testid="scan-panel"
-        >
-          {/* The result of the last photo, at the top of the panel until it is tapped away or the next
-              photo starts (M8 part 4, 2026-11-10): fixed near the top of the screen, it covered the
-              gauge's instruction and the buttons. While it shows, the panel reaches up to what is drawn
-              at the top and the note gets that room first (styles.css); what doesn't fit scrolls, with
-              "More ▾" to open all of it. On a phone held sideways it sits in the free column on the left. */}
-          {note && (
-            <div class={noteTight ? 'scan-note-box tight' : 'scan-note-box'}>
-              <div
-                ref={noteRef}
-                class={note.ok ? 'notice notice-good scan-note scan-note-panel' : 'notice notice-bad scan-note scan-note-panel'}
-                data-testid="scan-note"
-                role="status"
-                onClick={() => setNote(null)}
-              >
-                {note.lines.map((l) => (
-                  <NoteLine key={l} text={l} />
-                ))}
-              </div>
-              {noteMore && (
-                <button type="button" class="scan-note-more" data-testid="scan-note-more" onClick={() => setNoteOpen(true)}>
-                  More
-                  <Icon name="chevron-down" size={14} />
-                </button>
-              )}
-            </div>
-          )}
-          <div class="scan-counts">
-            <span data-testid="scan-count">{plural(onTable.length, 'piece')} found</span>
-            <span data-testid="scan-coverage">close-ups {covered}%</span>
-          </div>
-          <div class="row scan-modes">
-            <button
-              class="chip"
-              aria-pressed={kind === 'overview'}
-              data-testid="mode-overview"
-              onClick={() => {
-                kindChosen.current = true;
-                setAutoPaused(false);
-                setKind('overview');
-              }}
-            >
-              Overview 1×
-            </button>
-            <button
-              class="chip"
-              aria-pressed={kind === 'detail'}
-              data-testid="mode-detail"
-              onClick={() => {
-                kindChosen.current = true;
-                setAutoPaused(false);
-                setKind('detail');
-              }}
-            >
-              Close-ups 2×
-            </button>
-          </div>
-          {free && kind === 'detail' && target && !cameraOff && <p class="chip scan-aim">Aim at the dashed box on the map</p>}
-          {free && kind === 'overview' && project.scaleSource !== 'coin' && (
-            <label class="chip coin-pick">
-              Coin for true size:{' '}
-              <select
-                data-testid="coin-select"
-                value={project.coin ?? ''}
-                onChange={(e) => {
-                  const v = (e.currentTarget as HTMLSelectElement).value || null;
-                  void updateProject(project.id, { coin: v }).then(setProject);
-                }}
-              >
-                <option value="">none</option>
-                {MK_COINS.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label} ({c.diameterMm} mm)
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {/* No camera, nothing to aim with: the map (and "Aim at…") are left out. */}
-          {free && !cameraOff && <CoverageMap pieces={onTable} coverage={coverage} target={kind === 'detail' ? target : null} view={viewMm} />}
-          {/* Side by side (they wrap on a narrow screen): one row less, so the note and the map fit. */}
-          {(free || lastPhoto) && (
-            <div class="row scan-photo-row">
-              {free && (
-                <label class="chip pick-photo" data-testid="pick-photo">
-                  <Icon name="image" size={20} />
-                  Choose a photo
-                  <input
-                    type="file"
-                    accept="image/*"
-                    data-testid="pick-photo-input"
-                    hidden
-                    onClick={() => setAutoPaused(true)}
-                    onChange={(e) => {
-                      const input = e.currentTarget as HTMLInputElement;
-                      const file = input.files?.[0];
-                      input.value = '';
-                      // A photo from the library goes through exactly the same reading as a camera photo
-                      // (as an overview or a 2× close-up, whichever is selected above).
-                      if (file) void onPhoto(file, { zoom: kind === 'detail' ? 2 : 1, fix: null, auto: false, sensorTiltDeg: null });
-                    }}
-                  />
-                </label>
-              )}
-              {lastPhoto && (
-                <button class="chip" data-testid="show-photo" onClick={() => setShowPhoto(true)}>
-                  See the last photo
-                </button>
-              )}
-            </div>
-          )}
-          {kind === 'detail' && !target && covered >= 98 && (
-            <p class="chip ok">
-              All close-ups done <Icon name="check" size={18} />
-            </p>
-          )}
-        </div>
+        {/* auto-off: no photo takes itself (after a finished puzzle or a photo that couldn't be used). M9 part 5 result:
+            the result is a sheet now (below), so the panel is empty (styles.css hides the row then). */}
+        <div class={`scan-panel${paused ? ' camera-paused' : ''}${autoPaused ? ' auto-off' : ''}`} data-testid="scan-panel" />
       </TableCamera>
-      {showPhoto && lastPhoto && <PhotoResult url={lastPhoto.url} size={lastPhoto.size} outlines={lastPhoto.outlines} onClose={() => setShowPhoto(false)} />}
-      {/* All of the note, over the camera; a tap anywhere closes it (the note stays). */}
-      {noteOpen && note && (
-        <div class="scan-note-sheet" data-testid="scan-note-sheet" onClick={() => setNoteOpen(false)}>
-          <TestStrip />
-          <div class={note.ok ? 'notice notice-good' : 'notice notice-bad'}>
-            {note.lines.map((l) => (
-              <NoteLine key={l} text={l} />
-            ))}
-          </div>
-          <button type="button" class="btn btn-filled" data-testid="scan-note-close">
-            Close
-          </button>
+      {/* M9 part 5 camera: coin and help behind the gear; no photo takes itself while it is open. */}
+      <Sheet open={gearOpen} onClose={() => setGearOpen(false)} title="Coin and help" testId="camera-settings-sheet">
+        {free && (
+          <section class="scan-help-section">
+            <h3>Coin for true size</h3>
+            {project.scaleSource === 'coin' ? (
+              <p data-testid="coin-measured">
+                <Icon name="check" size={18} class="inline-icon" /> Sizes are measured with your {coinType?.label ?? ''} coin.
+              </p>
+            ) : (
+              <>
+                <p>Put a coin flat on the table, away from the pieces, in a Whole table photo: the app then measures true sizes.</p>
+                <label class="scan-coin">
+                  <span>Coin</span>
+                  <select
+                    data-testid="coin-select"
+                    value={project.coin ?? ''}
+                    onChange={(e) => {
+                      const v = (e.currentTarget as HTMLSelectElement).value || null;
+                      void updateProject(project.id, { coin: v }).then(setProject);
+                    }}
+                  >
+                    <option value="">None</option>
+                    {MK_COINS.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label} ({c.diameterMm} mm)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            )}
+          </section>
+        )}
+        <section class="scan-help-section" data-testid="scan-help">
+          <h3>How to scan</h3>
+          <ol>
+            <li>Spread the pieces out on the table, picture side up, not touching.</li>
+            <li>Hold the phone flat over them. The ring around the button fills while you hold still, then the photo takes itself.</li>
+            <li>Start with a Whole table photo, then take Close-ups. The map shows what is done (green) and where to aim next (dashed box).</li>
+            <li>Tap the big button for a photo at any time, or choose one from Photos with the button on the right.</li>
+          </ol>
+        </section>
+      </Sheet>
+      <Sheet open={mapOpen} onClose={() => setMapOpen(false)} title="Map of your pieces" testId="coverage-map-sheet">
+        <div class="cam-map-big">
+          <CoverageMap pieces={onTable} coverage={coverage} target={kind === 'detail' ? target : null} view={viewMm} testId="coverage-map-big" />
         </div>
+        <p class="scan-map-legend">
+          Dots: your pieces. Green: a close-up has them.{kind === 'detail' && target ? ' Dashed box: aim the next close-up there.' : ''}
+        </p>
+      </Sheet>
+      {/* M9 part 5 result: the shutter's flash, the wait for the photo, its result and the photo viewer. */}
+      {flash > 0 && <ShutterFlash key={flash} onEnd={() => setFlash(0)} />}
+      {wait && (
+        <ScanWait
+          stage={wait.stage}
+          since={wait.since}
+          frozen={wait.frozen}
+          onCancel={wait.stage !== 'save' && reading.current ? cancelWait : null}
+          // The wait covers the camera's top bar: its own Back, as the camera's (leaving ignores the photo's result).
+          onBack={() => go('puzzle', project.id, routeSub.value === 'picture' ? 'picture' : null)}
+        />
+      )}
+      <ResultSheet
+        result={result}
+        open={sheetOpen && !showPhoto}
+        onClose={() => setSheetOpen(false)}
+        onSeeTable={result && (result.kind === 'found' || result.kind === 'closeup') ? () => go('puzzle', project.id, 'table') : null}
+        onAnother={() => setSheetOpen(false)}
+        onSeePhoto={result?.photo && lastPhoto ? () => setShowPhoto('sheet') : null}
+      />
+      {showPhoto && lastPhoto && (
+        <PhotoResult
+          url={lastPhoto.url}
+          size={lastPhoto.size}
+          outlines={lastPhoto.outlines}
+          // Opened from the result sheet: Done goes back to it; Retake goes back to the camera.
+          onClose={() => setShowPhoto(false)}
+          onRetake={() => {
+            setShowPhoto(false);
+            setSheetOpen(false);
+          }}
+        />
       )}
     </>
   );
@@ -954,8 +995,8 @@ export function gridMatches(g: Pick<Grid, 'cols' | 'rows'> | null | undefined, f
 
 /**
  * The finished-puzzle check in plain words. What to do next (the saved empty spots, the loose pieces
- * beside the puzzle) comes right after the count, before the long list of gaps: on a small screen the
- * note shows only its first lines (review 2026-11-10).
+ * beside the puzzle) comes right after the count, before the long list of gaps, so it is in view as the
+ * result sheet opens, even on a small screen (review 2026-11-10; finishedResult).
  */
 export function finishedLines(fin: FinishedCheck, project: Pick<Project, 'grid' | 'pieceCount' | 'box' | 'openSpots'>): string[] {
   const n = fin.cols * fin.rows;
@@ -1005,4 +1046,39 @@ function finishedOutlines(fin: FinishedCheck): Array<{ points: number[]; flag: O
     { points: c.flat(), flag: 'finished' },
     ...fin.gapsPreview.map(([x, y]) => ({ points: [x - h, y - h, x + h, y - h, x + h, y + h, x - h, y + h], flag: 'gap' as const })),
   ];
+}
+
+/**
+ * The finished-puzzle result (M9 part 5): the count as the title, then finishedLines' lines in their order
+ * (what to do next first: the saved empty spots and the loose pieces, then the gaps).
+ */
+export function finishedResult(fin: FinishedCheck, project: Pick<Project, 'grid' | 'pieceCount' | 'box' | 'openSpots'>, extra: string[] = []): ScanResult {
+  const [count, ...rest] = finishedLines(fin, project);
+  const tone = (l: string): ResultTone =>
+    /^That matches|^Saved|^No gaps found|^All \d+ empty/.test(l) ? 'good' : /^Your puzzle is set to|possible gap|loose piece/.test(l) ? 'warn' : 'info';
+  return {
+    kind: 'finished',
+    ok: gridMatches(project.grid, fin),
+    title: `Finished puzzle: ${fin.cols} × ${fin.rows}`,
+    sub: count!.replace(/^Finished puzzle: /, ''),
+    items: [...rest, ...extra].map((text) => ({ tone: tone(text), text })),
+    photo: true,
+  };
+}
+
+/** The camera picture right now (at most 1280 px across), as the frozen photo while the photo is read; null without one. */
+function grabFrame(): HTMLCanvasElement | null {
+  const v = document.querySelector<HTMLVideoElement>('.table-camera video');
+  if (!v || !v.videoWidth || !v.videoHeight) return null;
+  try {
+    const k = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(v.videoWidth * k);
+    c.height = Math.round(v.videoHeight * k);
+    c.className = 'scan-wait-photo';
+    c.getContext('2d')?.drawImage(v, 0, 0, c.width, c.height);
+    return c;
+  } catch {
+    return null;
+  }
 }

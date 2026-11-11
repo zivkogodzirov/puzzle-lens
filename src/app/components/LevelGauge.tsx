@@ -2,9 +2,11 @@ import type { GaugeState } from '../../scan/autoCapture';
 import { settings } from '../settings';
 
 /**
- * The level-and-height gauge for hand-held photos (PLAN §2 "Phone"): a bubble that sits in the
- * middle when the phone is flat, a ring that fills while the phone is held still, an arrow towards
- * the next close-up, and one plain-English instruction.
+ * The level for hand-held photos (PLAN §2 "Phone"; M9 part 5, design plan §3.5 camera chrome): a 104 px
+ * reticle in the middle of the picture, with no panel behind it, so the view stays clear. A bubble sits in
+ * the middle when the phone is flat and an arrow points towards the next close-up. The one instruction is
+ * in the status capsule at the top (CameraStatus) and the steadiness ring is around the shutter
+ * (TableCamera), as in the iPhone Camera app.
  *
  * `lean` is in screen coordinates (x right, y down). The bubble moves the way a spirit level's
  * bubble would: away from the low side.
@@ -29,19 +31,15 @@ export function LevelGauge({
   const bx = -lean[0] * k * (R - 12);
   const by = -lean[1] * k * (R - 12);
   const level = tiltDeg !== null && t <= maxTiltDeg;
-  const ready = state.status === 'ready';
-  const ring = 2 * Math.PI * (R + 6);
   return (
-    <div class={`gauge gauge-${state.status}`} data-testid="level-gauge" data-status={state.status}>
-      <svg viewBox="-60 -60 120 120" width="120" height="120" aria-hidden="true">
+    <div class={`gauge gauge-${state.status}`} data-testid="level-gauge" data-status={state.status} aria-hidden="true">
+      <svg viewBox="-52 -52 104 104" width="104" height="104">
+        {/* Each line over a dark halo, so it reads over a white table as well as a dark one (§3.1). */}
+        <circle r={R} class="gauge-halo" />
         <circle r={R} class="gauge-face" />
         <circle r={(maxTiltDeg / (2 * maxTiltDeg)) * (R - 12) + 12} class="gauge-target" />
-        <circle
-          r={R + 6}
-          class="gauge-steady"
-          style={{ strokeDasharray: `${ring}`, strokeDashoffset: `${ring * (1 - state.steady)}` }}
-          transform="rotate(-90)"
-        />
+        <path d="M -8 0 H 8 M 0 -8 V 8" class="gauge-cross-halo" />
+        <path d="M -8 0 H 8 M 0 -8 V 8" class="gauge-cross" />
         {tiltDeg !== null && <circle cx={bx} cy={by} r={11} class={level ? 'gauge-bubble ok' : 'gauge-bubble'} />}
         {arrow && (
           <g transform={`rotate(${(Math.atan2(arrow[1], arrow[0]) * 180) / Math.PI})`}>
@@ -49,15 +47,33 @@ export function LevelGauge({
           </g>
         )}
       </svg>
-      <p class={ready ? 'gauge-msg ok' : 'gauge-msg'} role="status" aria-live="polite">
-        {state.message}
-      </p>
-      {/* Height and tilt in numbers: for testing only (M9 part 1, design plan §3.7). */}
-      {state.heightMm !== null && settings.testerMode.value && (
-        <p class="gauge-sub">
-          {Math.round(state.heightMm / 10)} cm high · tilt {t.toFixed(0)}°
-        </p>
-      )}
+    </div>
+  );
+}
+
+/**
+ * The status capsule at the top of a camera screen: a level dot (green when the phone is flat, amber when
+ * not, grey without a reading) and the one instruction. In Tester mode the gauge's numbers ("cm high ·
+ * tilt") follow on a second line.
+ */
+export function CameraStatus({ state, tiltDeg, maxTiltDeg }: { state: GaugeState | null; tiltDeg: number | null; maxTiltDeg: number }) {
+  if (!state) return null;
+  const dot = tiltDeg === null ? 'none' : tiltDeg <= maxTiltDeg ? 'level' : 'tilted';
+  const ready = state.status === 'ready';
+  return (
+    <div class="cam-status" data-testid="camera-status" data-level={dot}>
+      <span class={`cam-status-dot cam-status-dot-${dot}`} aria-hidden="true" />
+      <span class="cam-status-words">
+        <span class={ready ? 'gauge-msg ok' : 'gauge-msg'} role="status" aria-live="polite">
+          {state.message}
+        </span>
+        {/* Height and tilt in numbers: for testing only (M9 part 1, design plan §3.7). */}
+        {state.heightMm !== null && settings.testerMode.value && (
+          <span class="gauge-sub">
+            {Math.round(state.heightMm / 10)} cm high · tilt {(tiltDeg ?? 0).toFixed(0)}°
+          </span>
+        )}
+      </span>
     </div>
   );
 }

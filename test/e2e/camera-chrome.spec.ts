@@ -94,7 +94,7 @@ for (const size of WIDTHS) {
       await expect(page.locator('#app > .app.route-home')).toBeAttached();
     });
 
-    test('scan camera: Back is an icon button that goes to the puzzle page; zoom and 🧪 in the row; Choose a photo has its icon', async ({ page }) => {
+    test('scan camera: Back is an icon button that goes to the puzzle page; zoom, the gear and 🧪 in the row; Photos has its icon', async ({ page }) => {
       await page.addInitScript(() => {
         navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Permission denied', 'NotAllowedError'));
       });
@@ -108,8 +108,11 @@ for (const size of WIDTHS) {
       await expect(page.getByTestId('camera-zoom')).toHaveAccessibleName(/Zoom [12]×/);
       await iconButton(page.getByTestId('test-tab'), 'flask-conical');
       await expect(page.getByTestId('test-tab')).toHaveCount(1);
-      await expect(page.getByTestId('pick-photo').locator('svg[data-icon="image"]')).toHaveCount(1);
-      await expect(page.getByTestId('pick-photo')).toContainText('Choose a photo');
+      // M9 part 5: Photos is a 50 px icon button in the dock, its name read by VoiceOver; the gear is in the top row.
+      await iconButton(page.getByTestId('pick-photo'), 'image');
+      await expect(page.getByTestId('pick-photo')).toHaveAccessibleName(/Choose a photo/);
+      await iconButton(page.getByTestId('camera-settings'), 'settings');
+      await expect(page.getByTestId('camera-settings')).toHaveAccessibleName('Coin and help');
       await topRowTargets(page, 'scan');
       await noSidewaysScroll(page, 'scan');
       await back.click();

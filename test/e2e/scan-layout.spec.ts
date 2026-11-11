@@ -4,12 +4,12 @@
  * once a chosen photo's result note shows; a puzzle that isn't on this iPhone gets the normal top
  * bar with a way back.
  *
- * The result note is readable (review 2026-11-10: squeezed to 2-3 lines, its key lines out of view,
- * cut off completely on a phone held sideways): on the iPhone 17 Pro's Safari screen (402×681) its
- * first lines are all in view, "More ▾" opens all of it when it doesn't fit, it sits beside the gauge
- * sideways, and with the camera paused "Resume camera" moves up instead of being covered.
- * With the gauge shown (check 2026-11-10), the coin choice makes room while a note shows, the gauge
- * is smaller while no photo takes itself, and on a small phone "More ▾" doesn't cover a line.
+ * The result is readable (review 2026-11-10: M8's note was squeezed to 2-3 lines, its key lines out of
+ * view, cut off completely on a phone held sideways). M9 part 5 replaced the note with a result sheet:
+ * from 375×553 to 402×874 and sideways its title and first lines are in view, the rest a scroll away
+ * inside it, nothing cut off sideways, its buttons in view; for the owner's nearly finished puzzle the
+ * saved empty spots and the loose pieces are in view as it opens. Closed ("Take another", one tap),
+ * nothing lies over the shutter or the other controls, and the gauge is as it was.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { generatePuzzle, renderScene } from '../synth/index';
@@ -124,7 +124,7 @@ for (const size of [
       // Light text on the dark box, in the light theme too (it was dark on dark: 1.05:1).
       expect(await notice.evaluate((el) => getComputedStyle(el).color)).toBe('rgb(238, 242, 246)');
       // No camera, no map to aim with: only what still works is shown. "Start camera" once, in the
-      // notice (a second one in the middle of the screen landed on the buttons).
+      // notice (M9 part 5: one card in the middle, between the top bar and the dock).
       await expect(page.getByTestId('coverage-map')).toHaveCount(0);
       await expect(page.getByTestId('start-camera')).toHaveCount(1);
       await expect(notice.getByTestId('start-camera')).toBeVisible();
@@ -157,9 +157,12 @@ for (const size of [
           await expect(page.getByTestId('scan-note')).toContainText('Found', { timeout: 150_000 });
           // Full scan goes on to close-ups; quick stays on overviews (the coin choice makes room while the note shows).
           await expect(page.getByTestId('table-camera')).toHaveAttribute('data-mode', scanMode === 'full' ? 'detail' : 'overview');
+          // M9 part 5 result: the result is a sheet over the screen (tests in "the result sheet is readable");
+          // "Take another" closes it, and the screen's own parts are checked below as before.
+          await page.getByTestId('result-another').click();
+          await expect(page.getByTestId('scan-note')).toHaveCount(0);
           await allApart(page, {
             notice: '[data-testid="camera-problem"]',
-            note: '[data-testid="scan-note"]',
             counts: '.scan-counts',
             overview: '[data-testid="mode-overview"]',
             detail: '[data-testid="mode-detail"]',
@@ -167,11 +170,7 @@ for (const size of [
             last: '[data-testid="show-photo"]',
             snap: '[data-testid="snap"]',
           });
-          // Nothing of the panel is cut off at its top (it is clipped to half the screen).
-          const panel = (await page.locator('.table-camera-extra').boundingBox())!;
-          expect((await page.getByTestId('scan-note').boundingBox())!.y).toBeGreaterThanOrEqual(panel.y - 1);
-          for (const id of ['start-camera', 'mode-overview', 'mode-detail', 'pick-photo', 'show-photo', 'scan-note'])
-            await page.getByTestId(id).click({ trial: true });
+          for (const id of ['start-camera', 'mode-overview', 'mode-detail', 'pick-photo', 'show-photo']) await page.getByTestId(id).click({ trial: true });
         });
       });
     }
@@ -186,94 +185,66 @@ for (const size of [
 }
 
 /**
- * Per paragraph of the result note: every line of it in view, i.e. inside the note's window (it
- * scrolls), inside the screen, not clipped by a box around it, and not under "More ▾".
+ * M9 part 5 result: per line (<p>) of the result sheet, where it is: `shown` = all of it inside the sheet's list
+ * as it is scrolled now and inside the screen; `cut` = some of it lies outside the screen sideways or outside
+ * the list across (it could never be read by scrolling).
  */
-async function noteLinesInView(page: Page): Promise<boolean[]> {
-  return page.getByTestId('scan-note').evaluate((note) => {
-    const n = note.getBoundingClientRect();
-    let top = Math.max(0, n.top + note.clientTop);
-    let bottom = Math.min(innerHeight, n.top + note.clientTop + note.clientHeight);
-    let left = 0;
-    let right = innerWidth;
-    // A box that hides what sticks out clips the note (a fixed note escapes the boxes above it).
-    let fixed = getComputedStyle(note).position === 'fixed';
-    for (let a = note.parentElement; a && !fixed; a = a.parentElement) {
-      const cs = getComputedStyle(a);
-      if (cs.position === 'fixed') fixed = true;
-      if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
-      const b = a.getBoundingClientRect();
-      top = Math.max(top, b.top);
-      bottom = Math.min(bottom, b.bottom);
-      left = Math.max(left, b.left);
-      right = Math.min(right, b.right);
-    }
-    const more = document.querySelector('[data-testid="scan-note-more"]')?.getBoundingClientRect();
-    return [...note.querySelectorAll('p')].map((p) => {
+async function sheetLines(page: Page): Promise<Array<{ text: string; shown: boolean; cut: boolean }>> {
+  await settled(page);
+  return page.getByTestId('scan-note').evaluate((sheet) => {
+    const list = sheet.querySelector('.scan-result-list')!;
+    const l = list.getBoundingClientRect();
+    const top = Math.max(0, l.top);
+    const bottom = Math.min(innerHeight, l.bottom);
+    return [...sheet.querySelectorAll('p')].map((p) => {
       const range = document.createRange();
       range.selectNodeContents(p);
-      const lines = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+      const rects = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
       // The letters: a line's box less ~3 px of spacing above and below.
-      return (
-        lines.length > 0 &&
-        lines.every(
-          (r) =>
-            r.top + 3 >= top &&
-            r.bottom - 3 <= bottom &&
-            r.left >= left - 0.5 &&
-            r.right <= right + 0.5 &&
-            !(more && more.top < r.bottom - 3 && more.bottom > r.top + 3 && more.left < r.right && more.right > r.left),
-        )
-      );
+      return {
+        text: p.textContent ?? '',
+        shown: rects.length > 0 && rects.every((r) => r.top + 3 >= top && r.bottom - 3 <= bottom),
+        cut: rects.some((r) => r.left < Math.max(0, l.left) - 0.5 || r.right > Math.min(innerWidth, l.right) + 0.5),
+      };
     });
   });
 }
 
-/** "More ▾" lies over a line of the note that is in its window (it should sit on the padding only). */
-async function moreCoversALine(page: Page): Promise<boolean> {
-  return page.getByTestId('scan-note').evaluate((note) => {
-    const more = document.querySelector('[data-testid="scan-note-more"]')?.getBoundingClientRect();
-    if (!more) return false;
-    const n = note.getBoundingClientRect();
-    const top = n.top + note.clientTop;
-    const bottom = top + note.clientHeight;
-    return [...note.querySelectorAll('p')].some((p) => {
-      const range = document.createRange();
-      range.selectNodeContents(p);
-      return [...range.getClientRects()].some(
-        (r) =>
-          r.width > 0 &&
-          r.bottom - 3 > top &&
-          r.top + 3 < bottom &&
-          more.top < r.bottom - 3 &&
-          more.bottom > r.top + 3 &&
-          more.left < r.right &&
-          more.right > r.left,
-      );
-    });
-  });
+/** Scrolled to its end, the sheet's last line is in view: every line can be read. */
+async function lastLineReachable(page: Page): Promise<boolean> {
+  await page.locator('[data-testid="scan-note"] .scan-result-list').evaluate((el) => (el.scrollTop = el.scrollHeight));
+  const lines = await sheetLines(page);
+  await page.locator('[data-testid="scan-note"] .scan-result-list').evaluate((el) => (el.scrollTop = 0));
+  return lines.at(-1)!.shown;
 }
 
-/** The whole note box is on the screen and not cut by a box around it. */
-async function noteBoxInView(page: Page): Promise<boolean> {
-  return page.getByTestId('scan-note').evaluate((note) => {
-    const n = note.getBoundingClientRect();
-    if (n.height < 40 || n.top < 0 || n.left < 0 || n.bottom > innerHeight || n.right > innerWidth) return false;
-    let fixed = getComputedStyle(note).position === 'fixed';
-    for (let a = note.parentElement; a && !fixed; a = a.parentElement) {
-      const cs = getComputedStyle(a);
-      if (cs.position === 'fixed') fixed = true;
-      if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
-      const b = a.getBoundingClientRect();
-      if (n.top < b.top - 0.5 || n.bottom > b.bottom + 0.5 || n.left < b.left - 0.5 || n.right > b.right + 0.5) return false;
-    }
-    return true;
-  });
+/** The sheet has stopped moving (it slides up, and its height follows a new screen size). */
+async function settled(page: Page): Promise<void> {
+  await page
+    .getByTestId('scan-note')
+    .evaluate((el) => Promise.all((el.closest('.ui-sheet-root') ?? el).getAnimations({ subtree: true }).map((a) => a.finished.catch(() => undefined))));
 }
 
-/** What must stay apart from the note and from each other (and stay tappable). */
+/** The whole sheet is on the screen, with its buttons in view and at least 44 px. */
+async function sheetInView(page: Page): Promise<void> {
+  await settled(page);
+  const s = (await page.getByTestId('scan-note').boundingBox())!;
+  const vp = page.viewportSize()!;
+  expect(s.y).toBeGreaterThanOrEqual(-0.5);
+  expect(s.y + s.height).toBeLessThanOrEqual(vp.height + 0.5);
+  expect(s.x).toBeGreaterThanOrEqual(-0.5);
+  expect(s.x + s.width).toBeLessThanOrEqual(vp.width + 0.5);
+  for (const id of ['result-another', 'scan-note-close']) {
+    const b = (await page.getByTestId(id).boundingBox())!;
+    expect(b.y + b.height, id).toBeLessThanOrEqual(vp.height + 0.5);
+    expect(Math.min(b.width, b.height), id).toBeGreaterThanOrEqual(44);
+  }
+  // No sideways scroll.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+}
+
+/** What must stay apart from each other (and stay tappable) once the sheet is closed. */
 const CONTROLS = {
-  note: '[data-testid="scan-note"]',
   counts: '.scan-counts',
   overview: '[data-testid="mode-overview"]',
   detail: '[data-testid="mode-detail"]',
@@ -282,7 +253,26 @@ const CONTROLS = {
   snap: '[data-testid="snap"]',
 };
 
-test.describe('the result note is readable (review 2026-11-10)', () => {
+/** "Take another" closes the sheet in one tap; then nothing lies over the shutter and the other controls. */
+async function takeAnother(page: Page): Promise<void> {
+  await page.getByTestId('result-another').click();
+  await expect(page.getByTestId('scan-note')).toHaveCount(0);
+  for (const sel of Object.values(CONTROLS))
+    await expect
+      .poll(() =>
+        page
+          .locator(sel)
+          .first()
+          .evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return Boolean(at && (at === el || el.contains(at)));
+          }),
+      )
+      .toBe(true);
+}
+
+test.describe('the result sheet is readable (M9 part 5; was "the result note is readable", review 2026-11-10)', () => {
   // The iPhone 17 Pro in Safari (402×681); WebKit keeps photos (Blobs) in IndexedDB only in a profile on disk.
   test.use({ persistentStorage: true, viewport: { width: 402, height: 681 }, colorScheme: 'light' });
 
@@ -294,62 +284,39 @@ test.describe('the result note is readable (review 2026-11-10)', () => {
     await expect(page.getByTestId('allow-tilt')).toBeVisible({ timeout: 30_000 });
     await page.getByTestId('pick-photo-input').setInputFiles({ name: 'table.jpg', mimeType: 'image/jpeg', buffer: crowded });
     await expect(page.getByTestId('scan-note')).toContainText('Quick scan done', { timeout: 150_000 });
-    // Found…, the touching pieces (two lines), …, Quick scan done (two lines).
-    expect(await page.getByTestId('scan-note').locator('p').count()).toBeGreaterThanOrEqual(3);
+    // Ready, the touching pieces, …, Quick scan done.
+    expect(await page.getByTestId('scan-note').locator('.scan-result-item').count()).toBeGreaterThanOrEqual(3);
   }
 
-  test('a long note: its lines in view, "More ▾" when it doesn’t fit, beside the gauge sideways', async ({ page }) => {
+  test('a long result: its lines in view or a scroll away, the buttons in view, at 402×681, 375×553, 375×500 and sideways', async ({ page }) => {
     test.setTimeout(180_000);
     await crowdedNote(page, 'e2e-note-room');
-    // All of it in view at 402×681 (only its first two or three lines showed). It fits, so the coin
-    // choice stays (check 2026-11-10: only a note that doesn't fit takes its place).
-    expect(await noteLinesInView(page)).not.toContain(false);
-    await expect(page.locator('.coin-pick')).toBeVisible();
+    for (const [width, height] of [
+      [402, 681],
+      [402, 874],
+      [375, 553],
+      [375, 500],
+      [874, 402],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await expect.poll(async () => (await sheetLines(page)).some((l) => l.cut), { message: `${width}×${height}` }).toBe(false);
+      const lines = await sheetLines(page);
+      // The title, what is new and the first lines are in view; the rest scroll inside the sheet.
+      await expect(page.getByTestId('scan-note').locator('.ui-sheet-title')).toBeInViewport({ ratio: 1 });
+      expect(
+        lines.slice(0, 2).map((l) => l.shown),
+        `${width}×${height}`,
+      ).toEqual([true, true]);
+      expect(await lastLineReachable(page), `${width}×${height}`).toBe(true);
+      await sheetInView(page);
+      await page.screenshot({ path: test.info().outputPath(`sheet-${width}x${height}.png`) });
+    }
+    await page.setViewportSize({ width: 402, height: 681 });
+    await takeAnother(page);
     await allApart(page, { ...CONTROLS, tilt: '[data-testid="allow-tilt"]' });
-    await page.screenshot({ path: test.info().outputPath('note-402x681.png') });
-
-    // An iPhone SE in Safari (375×553): with the coin choice it doesn't all fit, so the coin choice makes
-    // room (back once the note is tapped away, at the end) and then all of it is in view.
-    await page.setViewportSize({ width: 375, height: 553 });
-    await expect(page.locator('.coin-pick')).toBeHidden();
-    await expect.poll(async () => (await noteLinesInView(page)).includes(false)).toBe(false);
-    await expect(page.getByTestId('scan-note-more')).toHaveCount(0);
-    // Shorter still (375×500): its first lines are in view, and "More ▾" says there is more and opens all
-    // of it; a tap closes that again and the note stays.
-    await page.setViewportSize({ width: 375, height: 500 });
-    await expect(page.getByTestId('scan-note-more')).toBeVisible();
-    expect((await noteLinesInView(page))[0]).toBe(true);
-    await allApart(page, { ...CONTROLS, tilt: '[data-testid="allow-tilt"]' });
-    await page.getByTestId('scan-note-more').click();
-    const sheet = page.getByTestId('scan-note-sheet');
-    await expect(sheet).toBeVisible();
-    await expect(sheet.locator('p')).toHaveCount(await page.getByTestId('scan-note').locator('p').count());
-    await expect(sheet.locator('p').last()).toBeInViewport({ ratio: 1 });
-    await page.screenshot({ path: test.info().outputPath('note-sheet-375x500.png') });
-    await page.getByTestId('scan-note-close').click();
-    await expect(sheet).toHaveCount(0);
-    await expect(page.getByTestId('scan-note')).toBeVisible();
-
-    // Sideways (874×402): the note is in the free column on the left, not cut off, its first lines in
-    // view, apart from the buttons and from "Allow the tilt sensor". (The panel itself still lies over
-    // the middle there, as it always did.)
-    await page.setViewportSize({ width: 874, height: 402 });
-    await expect.poll(() => noteBoxInView(page)).toBe(true);
-    expect((await noteLinesInView(page)).slice(0, 2)).toEqual([true, true]);
-    // The coin choice makes room sideways too, so the middle panel stays below "Allow the tilt sensor",
-    // which can still be tapped (check 2026-11-10).
-    await expect(page.locator('.coin-pick')).toBeHidden();
-    await page.getByTestId('allow-tilt').click({ trial: true, timeout: 5_000 });
-    const note = (await page.getByTestId('scan-note').boundingBox())!;
-    for (const sel of ['[data-testid="allow-tilt"]', ...Object.values(CONTROLS).slice(1), '[data-testid="camera-close"]'])
-      expect(apart(note, (await page.locator(sel).first().boundingBox())!), sel).toBe(true);
-    await page.screenshot({ path: test.info().outputPath('note-874x402.png') });
-    await page.getByTestId('scan-note').click();
-    await expect(page.getByTestId('scan-note')).toHaveCount(0);
-    await expect(page.locator('.coin-pick')).toBeVisible();
   });
 
-  test('camera paused (as while the photo library is open): "Resume camera" moves up, the note below it', async ({ page }) => {
+  test('camera paused (as while the photo library is open): the sheet reads the same, and "Resume camera" is there once it is closed', async ({ page }) => {
     test.setTimeout(180_000);
     await crowdedNote(page, 'e2e-note-paused');
     // The system mutes the camera; it counts as paused 2.5 s later.
@@ -359,11 +326,14 @@ test.describe('the result note is readable (review 2026-11-10)', () => {
       t.dispatchEvent(new Event('mute'));
     });
     const resume = page.getByRole('button', { name: 'Resume camera' });
-    await expect(resume).toBeVisible({ timeout: 10_000 });
-    expect(await noteLinesInView(page)).not.toContain(false);
-    await allApart(page, { ...CONTROLS, resume: '.live-center button' });
-    await page.screenshot({ path: test.info().outputPath('note-paused-402x681.png') });
-    for (const id of ['mode-overview', 'mode-detail', 'pick-photo', 'show-photo', 'scan-note']) await page.getByTestId(id).click({ trial: true });
+    await expect(resume).toBeAttached({ timeout: 10_000 });
+    expect((await sheetLines(page)).some((l) => l.cut)).toBe(false);
+    await sheetInView(page);
+    await page.screenshot({ path: test.info().outputPath('sheet-paused-402x681.png') });
+    await page.getByTestId('result-another').click();
+    await expect(page.getByTestId('scan-note')).toHaveCount(0);
+    await allApart(page, { ...CONTROLS, resume: '[data-testid="camera-paused"] button' });
+    for (const id of ['mode-overview', 'mode-detail', 'pick-photo', 'show-photo']) await page.getByTestId(id).click({ trial: true });
     await resume.click({ trial: true });
   });
 
@@ -382,7 +352,7 @@ test.describe('the result note is readable (review 2026-11-10)', () => {
   test.describe(() => {
     test.use({ fakeCameraOptions: { width: 4032, height: 3024, fps: 4 } });
 
-    test('with the gauge: smaller only for a note that doesn’t fit while no photo takes itself; on a small phone "More ▾" covers no line', async ({ page }) => {
+    test('with the gauge: the sheet over it, and the gauge as it was once it is closed', async ({ page }) => {
       test.setTimeout(300_000);
       await page.addInitScript(
         (url) => ((window as unknown as { __fakeScene?: string }).__fakeScene = url),
@@ -394,59 +364,43 @@ test.describe('the result note is readable (review 2026-11-10)', () => {
       await gaugeOn(page);
       const note = page.getByTestId('scan-note');
 
-      // Hardly any pieces: no photo takes itself until a tap. Its short note fits beside the full gauge,
-      // so the gauge keeps its height line and the coin choice stays (check 2026-11-10: the gauge must
-      // shrink only for a note that needs the room).
+      // Hardly any pieces: no photo takes itself until a tap.
       await page.getByTestId('pick-photo-input').setInputFiles({ name: 'few.jpg', mimeType: 'image/jpeg', buffer: few });
       await expect(note).toContainText('Hardly any pieces', { timeout: 150_000 });
+      for (const [width, height] of [
+        [402, 681],
+        [375, 553],
+      ] as const) {
+        await page.setViewportSize({ width, height });
+        await expect.poll(async () => (await sheetLines(page)).every((l) => l.shown && !l.cut), { message: `${width}×${height}` }).toBe(true);
+        await sheetInView(page);
+        await page.screenshot({ path: test.info().outputPath(`gauge-sheet-${width}x${height}.png`) });
+      }
+      // Closed: the full gauge (its height line), nothing squeezed for a note any more.
+      await takeAnother(page);
       await expect(page.locator('.gauge-sub')).toBeVisible();
-      await expect(page.locator('.coin-pick')).toBeVisible();
-      expect(await noteLinesInView(page)).not.toContain(false);
-      await allApart(page, { ...CONTROLS, gauge: '.gauge' });
-      await page.screenshot({ path: test.info().outputPath('gauge-full-402x681.png') });
-
-      // An iPhone SE in Safari (375×553): now the note doesn't fit. The gauge is smaller (no height line, a
-      // smaller face), the coin choice makes room and the note gets the room below the gauge (with the
-      // full gauge, a finished puzzle's note showed only its count).
-      await page.setViewportSize({ width: 375, height: 553 });
-      await expect(page.locator('.gauge-sub')).toBeHidden();
-      expect((await page.locator('.gauge svg').boundingBox())!.height).toBeLessThanOrEqual(73);
-      await expect(page.locator('.coin-pick')).toBeHidden();
-      expect(await noteLinesInView(page)).not.toContain(false);
-      await allApart(page, { ...CONTROLS, gauge: '.gauge' });
-      await page.screenshot({ path: test.info().outputPath('gauge-small-375x553.png') });
       await page.setViewportSize({ width: 402, height: 681 });
+      await allApart(page, { ...CONTROLS, gauge: '.gauge' });
 
-      // A good photo: photos take themselves again, the gauge is back to its size and the note below it.
+      // A good photo: the sheet, then photos take themselves again (close-ups next) once it is closed.
       await page.getByTestId('pick-photo-input').setInputFiles({ name: 'table.jpg', mimeType: 'image/jpeg', buffer: crowded });
       await expect(note).toContainText('Found', { timeout: 150_000 });
       await expect(page.getByTestId('table-camera')).toHaveAttribute('data-mode', 'detail');
+      await takeAnother(page);
       await expect(page.locator('.gauge-sub')).toBeVisible();
-      await allApart(page, { ...CONTROLS, gauge: '.gauge', map: '[data-testid="coverage-map"]' });
-
-      // An iPhone SE in Safari (375×553): the note is squeezed to about two lines. "More ▾" says there
-      // is more without covering any line that shows, and keeps clear of the gauge and the buttons.
-      await page.setViewportSize({ width: 375, height: 553 });
-      await expect(page.getByTestId('scan-note-more')).toBeVisible();
-      await expect.poll(() => moreCoversALine(page)).toBe(false);
-      // (The panel itself reaches up to the gauge on this screen, as it did before.)
-      const more = (await page.getByTestId('scan-note-more').boundingBox())!;
-      for (const sel of ['.gauge', '.scan-counts', '[data-testid="mode-overview"]', '[data-testid="mode-detail"]'])
-        expect(apart(more, (await page.locator(sel).first().boundingBox())!), sel).toBe(true);
-      await page.screenshot({ path: test.info().outputPath('gauge-more-375x553.png') });
-      await page.getByTestId('scan-note-more').click({ trial: true });
+      await allApart(page, { ...CONTROLS, gauge: '.gauge', map: '[data-testid="coverage-map-open"]' });
     });
   });
 
-  // The owner's nearly finished puzzle (21 gaps, loose pieces beside it): a six-paragraph note. Only on
-  // this Mac: the owner's photos are never committed (test/fixtures/real/README.md).
+  // The owner's nearly finished puzzle (21 gaps, loose pieces beside it): the longest result. Only on this Mac:
+  // the owner's photos are never committed (test/fixtures/real/README.md).
   const nearlyFinished = new URL('../fixtures/real/IMG_9280.jpeg', import.meta.url);
   for (const camera of ['on', 'refused', 'gauge'] as const) {
     test.describe(() => {
       // The gauge needs pieces in the camera's view: the synthetic table.
       if (camera === 'gauge') test.use({ fakeCameraOptions: { width: 4032, height: 3024, fps: 4 } });
 
-      test(`the nearly finished puzzle, camera ${camera}: the count and what to do next are in view`, async ({ page }) => {
+      test(`the nearly finished puzzle, camera ${camera}: the count, the saved spots and the loose pieces in view, all of it readable`, async ({ page }) => {
         test.skip(!existsSync(nearlyFinished), 'needs the owner’s photo IMG_9280 in test/fixtures/real/');
         test.setTimeout(300_000);
         if (camera === 'refused')
@@ -487,36 +441,40 @@ test.describe('the result note is readable (review 2026-11-10)', () => {
         await page.getByTestId('scan-pieces').click();
         if (camera === 'gauge') await gaugeOn(page);
         else await expect(page.getByTestId(camera === 'on' ? 'allow-tilt' : 'camera-problem')).toBeVisible({ timeout: 30_000 });
+        // From the smallest screen (an iPhone SE in Safari) up to the owner's Home Screen app, and sideways.
+        await page.setViewportSize({ width: 375, height: 553 });
         await page.getByTestId('pick-photo-input').setInputFiles({ name: 'IMG_9280.jpeg', mimeType: 'image/jpeg', buffer: readFileSync(nearlyFinished) });
         const note = page.getByTestId('scan-note');
         await expect(note).toContainText('Finished puzzle', { timeout: 240_000 });
-        const texts = await note.locator('p').allInnerTexts();
-        const shown = await noteLinesInView(page);
-        const act = texts.flatMap((t, i) => (/^Saved|loose piece/.test(t) ? [i] : []));
-        // The count and the grid check, then the saved spots and the loose pieces (they came after the
-        // long list of gaps, out of view; with the gauge, only the count showed).
-        expect(act.length).toBe(2);
-        expect(shown.slice(0, 2)).toEqual([true, true]);
-        expect(act.map((i) => shown[i])).toEqual([true, true]);
-        // What doesn't fit is not cut off without a sign: "More ▾" says so.
-        expect(await note.evaluate((n) => n.scrollHeight <= n.clientHeight + 2 || document.querySelector('[data-testid="scan-note-more"]') !== null)).toBe(
-          true,
-        );
-        await allApart(page, {
-          ...CONTROLS,
-          top: camera === 'gauge' ? '.gauge' : camera === 'on' ? '[data-testid="allow-tilt"]' : '[data-testid="camera-problem"]',
-        });
-        await page.screenshot({ path: test.info().outputPath(`finished-${camera}-402x681.png`) });
-
-        // As tall as the owner's Home Screen app (402×778 between its safe areas): all of it in view.
-        await page.setViewportSize({ width: 402, height: 778 });
-        await expect.poll(async () => (await noteLinesInView(page)).includes(false)).toBe(false);
-        await page.screenshot({ path: test.info().outputPath(`finished-${camera}-402x778.png`) });
-
-        await page.setViewportSize({ width: 874, height: 402 });
-        await expect.poll(() => noteBoxInView(page)).toBe(true);
-        expect((await noteLinesInView(page))[0]).toBe(true);
-        await page.screenshot({ path: test.info().outputPath(`finished-${camera}-874x402.png`) });
+        await expect(note.locator('.ui-sheet-title')).toHaveText('Finished puzzle: 28 × 36');
+        for (const [width, height] of [
+          [375, 553],
+          [402, 681],
+          [402, 874],
+          [874, 402],
+        ] as const) {
+          await page.setViewportSize({ width, height });
+          await expect.poll(async () => (await sheetLines(page)).some((l) => l.cut), { message: `${width}×${height}` }).toBe(false);
+          const lines = await sheetLines(page);
+          const act = lines.filter((l) => /^Saved|loose piece/.test(l.text));
+          // What to do next (the saved spots, the loose pieces) is in view as it opens; the gaps a scroll away.
+          expect(act.length).toBe(2);
+          if (width < 800)
+            expect(
+              act.map((l) => l.shown),
+              `${width}×${height}`,
+            ).toEqual([true, true]);
+          expect(await lastLineReachable(page), `${width}×${height}`).toBe(true);
+          await sheetInView(page);
+          await page.screenshot({ path: test.info().outputPath(`finished-${camera}-${width}x${height}.png`) });
+        }
+        // Sideways the sheet is short: swiped up (the grabber), the saved spots and the loose pieces are in view too.
+        await page.getByTestId('scan-note-grabber').click();
+        await expect(note).toHaveAttribute('data-detent', 'large');
+        await expect.poll(async () => (await sheetLines(page)).filter((l) => /^Saved|loose piece/.test(l.text)).every((l) => l.shown)).toBe(true);
+        await page.screenshot({ path: test.info().outputPath(`finished-${camera}-874x402-large.png`) });
+        await page.setViewportSize({ width: 402, height: 681 });
+        await takeAnother(page);
       });
     });
   }

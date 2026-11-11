@@ -65,6 +65,8 @@ test.describe('scan pieces', () => {
     await expect(page.getByTestId('piece-overlay')).toBeAttached();
     await page.screenshot({ path: test.info().outputPath('scan-after-overview.png') });
 
+    // M9 part 5: the result is a sheet; "Take another" closes it.
+    await page.getByTestId('result-another').click();
     await page.getByTestId('camera-close').click();
     // M9 part 4: the pieces are on the Pieces tab, the measured size on More.
     await openTab(page, 'pieces');

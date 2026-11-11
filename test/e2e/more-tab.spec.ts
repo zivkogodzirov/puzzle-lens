@@ -347,18 +347,25 @@ for (const size of [
       expect(await sideways(page), what).toBeLessThanOrEqual(0);
       // (While the name field has the focus, WebKit keeps it in view instead of scrolling to the end.)
       if (!bottom) return;
-      await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
       const barTop = (await page.getByTestId('puzzle-tabs').boundingBox())!.y;
-      const lastBottom = await page.evaluate(() => {
-        let bottom = 0;
-        for (const el of document.querySelectorAll('main *')) {
-          if ((el as HTMLElement).closest('.tabbar')) continue;
-          const r = el.getBoundingClientRect();
-          if (r.height > 0) bottom = Math.max(bottom, r.bottom);
-        }
-        return bottom;
-      });
-      expect(lastBottom, what).toBeLessThanOrEqual(barTop);
+      // Scrolled to the end, again until the page stops growing (the list's rows can still be arriving when the
+      // first scroll happens: that made this check flaky under load).
+      await expect
+        .poll(
+          async () =>
+            page.evaluate(() => {
+              scrollTo(0, document.documentElement.scrollHeight);
+              let bottom = 0;
+              for (const el of document.querySelectorAll('main *')) {
+                if ((el as HTMLElement).closest('.tabbar')) continue;
+                const r = el.getBoundingClientRect();
+                if (r.height > 0) bottom = Math.max(bottom, r.bottom);
+              }
+              return bottom;
+            }),
+          { message: what, timeout: 10_000 },
+        )
+        .toBeLessThanOrEqual(barTop);
       await page.evaluate(() => scrollTo(0, 0));
     };
     await check('more');

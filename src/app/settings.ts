@@ -37,6 +37,8 @@ export interface Settings {
   scanMode: 'full' | 'quick';
   /** The one-time tip on the outlines' labels ("17·9" means column 17, row 9) was shown (M9 part 3). */
   labelTipShown: boolean;
+  /** The shutter's flash, sound and haptic tick on the scan camera (M9 part 5, design plan §3.4 "Feedback"). */
+  soundsAndTaps: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -49,6 +51,7 @@ export const DEFAULT_SETTINGS: Settings = {
   snapMethod: '',
   scanMode: 'full',
   labelTipShown: false,
+  soundsAndTaps: true,
 };
 
 type SettingSignals = { [K in keyof Settings]: Signal<Settings[K]> };
