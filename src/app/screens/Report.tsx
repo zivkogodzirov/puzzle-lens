@@ -10,6 +10,8 @@ import { logError, logInfo, logWarn } from '../../log/logger';
 import { displayMode } from '../env';
 import { isDeviceCheckResults, missingParts, modeLabel, PART_NAMES, REQUIRED_PARTS } from '../../device/format';
 import type { DeviceCheckResults, DisplayMode, RunPart } from '../../device/types';
+import { Callout } from '../ui/Callout';
+import { Icon } from '../ui/icons';
 
 type Phase =
   | { kind: 'idle' }
@@ -146,7 +148,9 @@ export function ReportScreen() {
             ) : facts.check === null ? (
               <span class="warn">Not run yet</span>
             ) : missing.length === 0 ? (
-              <span class="ok">✓ All steps done · {when(facts.check.ts)}</span>
+              <span class="ok">
+                <Icon name="check" size={16} class="icon-inline" /> All steps done · {when(facts.check.ts)}
+              </span>
             ) : (
               <span class="warn">
                 {REQUIRED_PARTS.length - missing.length} of {REQUIRED_PARTS.length} steps done · {when(facts.check.ts)}
@@ -201,24 +205,20 @@ export function ReportScreen() {
       )}
 
       {phase.kind === 'error' && (
-        <div class="notice notice-bad" data-testid="report-error" role="alert">
-          <strong>The report couldn't be prepared.</strong>
-          <p class="small">{phase.message}</p>
-          <p class="small">Please tap "Prepare report" to try again.{includeFull ? ' If it keeps failing, untick the full-size photo.' : ''}</p>
-        </div>
+        <Callout kind="bad" role="alert" title="The report couldn't be prepared." testId="report-error">
+          <p>{phase.message}</p>
+          <p>Please tap "Prepare report" to try again.{includeFull ? ' If it keeps failing, untick the full-size photo.' : ''}</p>
+        </Callout>
       )}
 
       {phase.kind === 'ready' && (
         <>
-          <div class="notice notice-good" data-testid="report-ready">
-            <strong>Your report is ready</strong>
-            <p class="small">
+          <Callout kind="good" title="Your report is ready" testId="report-ready">
+            <p>
               {phase.report.fileName} · <span data-testid="report-size">{formatBytes(phase.report.file.size)}</span>
             </p>
-            {phase.report.summary.problems.length > 0 && (
-              <p class="small muted">Some details couldn't be collected. That is noted inside the report, so it's fine to send.</p>
-            )}
-          </div>
+            {phase.report.summary.problems.length > 0 && <p>Some details couldn't be collected. That is noted inside the report, so it's fine to send.</p>}
+          </Callout>
 
           <button class="btn btn-primary btn-block" data-testid="share-report" disabled={share === 'sharing'} onClick={onShare}>
             Share report
@@ -230,15 +230,15 @@ export function ReportScreen() {
           )}
 
           {share === 'shared' && (
-            <div class="notice notice-good" data-testid="share-done">
+            <Callout kind="good" testId="share-done">
               Sent. Thank you!
-            </div>
+            </Callout>
           )}
           {share === 'fallback' && (
-            <div class="notice notice-warn" data-testid="share-fallback" role="alert">
+            <Callout kind="warn" role="alert" testId="share-fallback">
               The Share menu didn't open. Tap <strong>Download report</strong> below. The file then appears in the <strong>Files</strong> app, in{' '}
               <strong>Downloads</strong>, and you can share it from there.
-            </div>
+            </Callout>
           )}
 
           <div class="row" style={{ marginTop: '12px' }}>

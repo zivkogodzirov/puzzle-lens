@@ -56,12 +56,90 @@
   --white: #ffffff;
   --black: #000000;
   --paper-ink: #111111;
+  /* M9 part 2: tokens moved from code. The same in both themes. Canvas and SVG code reads them through
+     src/app/tokens.ts (OV = --ov-*, PAPER = --paper-*: test/unit/app-tokens.test.ts keeps the two equal). */
+  --ov-halo: rgba(0, 0, 0, 0.6);
+  --ov-found: #ede7dc;
+  --ov-shape: #cabdff;
+  --ov-placed: #3ccf7a;
+  --ov-bad: #ff9a8f;
+  --ov-scan-line: rgba(225, 230, 235, 0.9);
+  --ov-join: #ffffff;
+  --ov-join-ok: #3ccf7a;
+  --ov-join-halo: rgba(0, 0, 0, 0.55);
+  --ov-label-bg: rgba(0, 0, 0, 0.7);
+  --ov-marker: #3ccf7a;
+  --ov-dim: #000000;
+  --ov-mask-show: #ffffff;
+  --ov-mask-hide: #000000;
+  --ov-hit: rgba(0, 0, 0, 0.001);
+  --cam-scrim: rgba(0, 0, 0, 0.5);
+  /* M9 part 2: the camera chrome's material (design plan §3.1 "Camera"): buttons and notes over the picture. */
+  --cam-material: rgba(18, 16, 14, 0.66);
+  --paper-bg: #ffffff;
+  --paper-black: #000000;
+  --paper-text: #222222;
+  --paper-text-2: #333333;
+  --paper-text-3: #444444;
+  --paper-muted: #555555;
+  --paper-cut: #999999;
+  --paper-card-edge: #8a8a8a;
+  --paper-thumb: #eeeeee;
+  --paper-desk: #dddddd;
+  --paper-shadow: rgba(0, 0, 0, 0.25);
+  --paper-grey-patch: #767676;
   --radius: 14px;
   --tap: 52px;
   --tap-min: 44px;
   --tap-answer: 56px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* M9 part 2: the component kit's tokens (design plan §3.3–3.4; src/app/ui/). Colours first (dark here,
+     light below), then spacing, shape, size, depth, motion and type, which are the same in both themes. */
+  --raised: #28313b;
+  --fill-grey: #28313b;
+  --toast-bg: #323c48;
+  --toast-text: #f4f6f8;
+  --toast-action: #4fb3ff;
+  --scrim: rgba(0, 0, 0, 0.5);
+  --material: color-mix(in srgb, var(--bg) 92%, transparent);
+  --accent-tint: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  --good-tint: color-mix(in srgb, var(--good) 14%, var(--panel));
+  --warn-tint: color-mix(in srgb, var(--warn) 14%, var(--panel));
+  --bad-tint: color-mix(in srgb, var(--bad) 14%, var(--panel));
+  --e1: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --e2: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 10px 30px rgba(0, 0, 0, 0.5);
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --gutter: 16px;
+  --r-badge: 6px;
+  --r-thumb: 10px;
+  --r-control: 14px;
+  --r-card: 20px;
+  --r-sheet: 30px;
+  --r-pill: 999px;
+  --tap-icon: 36px;
+  --navbar-h: 44px;
+  --tabbar-h: 49px;
+  --m-press: 120ms ease-out;
+  --m-state: 220ms ease-out;
+  --m-sheet: 350ms cubic-bezier(0.32, 0.72, 0, 1);
+  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --t-large-title: 700 34px/41px var(--font-family);
+  --t-title-1: 700 28px/34px var(--font-family);
+  --t-title-2: 700 22px/28px var(--font-family);
+  --t-title-3: 600 20px/25px var(--font-family);
+  --t-headline: 600 17px/22px var(--font-family);
+  --t-body: 400 17px/22px var(--font-family);
+  --t-callout: 400 16px/21px var(--font-family);
+  --t-subhead: 400 15px/20px var(--font-family);
+  --t-footnote: 400 13px/18px var(--font-family);
+  --t-badge: 600 12px/16px var(--font-family);
   color-scheme: dark;
 }
 @media (prefers-color-scheme: light) {
@@ -91,6 +169,12 @@
     --flag-clump: #b34700;
     --flag-weak: #8a5200;
     --selected-line: #13181d;
+    --raised: #ffffff;
+    --fill-grey: #e4e8ec;
+    --toast-bg: #222a33;
+    --scrim: rgba(19, 24, 29, 0.3);
+    --e1: 0 1px 2px rgba(19, 24, 29, 0.08), 0 2px 6px rgba(19, 24, 29, 0.05);
+    --e2: 0 10px 30px rgba(19, 24, 29, 0.18);
     color-scheme: light;
   }
 }
@@ -147,46 +231,39 @@ p {
   padding: 14px 16px;
   margin: 10px 0;
 }
-.btn {
-  min-height: var(--tap);
-  padding: 0 18px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--panel-2);
-  color: var(--text);
-  font-size: 17px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  cursor: pointer;
-  text-decoration: none;
-}
-.btn:disabled {
-  opacity: 0.5;
-}
-.btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
-}
-.btn-danger {
-  border-color: var(--bad-ink);
-  color: var(--bad-ink);
-}
-.btn-small {
-  min-height: var(--tap-min);
-  padding: 0 14px;
-  font-size: 15px;
-}
-.btn-block {
-  width: 100%;
-}
-.btn-back {
-  min-width: var(--tap);
-  padding: 0 12px;
-}
+/* Buttons (M9 part 2, design plan §3.5; src/app/ui/Button.tsx lists them). Here, early in the file, where the
+   old .btn rules were, so screen rules further down (.wizard-secondary, .fill-answer > .btn …) still win.
+   .btn grey · .btn-filled (= .btn-primary) · .btn-tinted (= .btn-on) · .btn-plain · .btn-destructive (= .btn-danger)
+   · .btn-good (= .btn-fits) · .btn-small 44 px · .btn-block · .btn-icon (36 px circle in a 44 px hit area). */
+.btn { min-height: var(--tap); padding: 0 var(--s-5); border: 1px solid transparent; border-radius: var(--r-control); background: var(--fill-grey); color: var(--text); font: var(--t-headline); display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2); text-align: center; cursor: pointer; text-decoration: none; transition: transform var(--m-press), background-color var(--m-state), opacity var(--m-state); }
+.btn:disabled, .btn[aria-disabled='true'] { opacity: 0.5; cursor: default; }
+.btn:focus-visible, .btn-icon:focus-visible, .segmented > button:focus-visible, .page-filter-btn:focus-visible, .list-row:focus-visible, .navbar-back:focus-visible, .tabbar-item:focus-visible, .ui-action-btn:focus-visible, .ui-toast-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn-primary, .btn-filled { background: var(--accent); color: var(--on-accent); }
+.btn-tinted, .btn-on { background: var(--accent-tint); color: var(--accent); }
+.btn-plain { background: transparent; color: var(--accent); }
+.btn-danger, .btn-destructive { background: var(--bad-tint); color: var(--bad-ink); }
+.btn-danger.btn-primary, .btn-destructive.btn-filled { background: var(--bad); color: var(--on-bad); }
+.btn-fits, .btn-good { background: var(--good); color: var(--on-good); }
+.btn-small { min-height: var(--tap-min); padding: 0 var(--s-4); font: var(--t-subhead); font-weight: 600; }
+.btn-block { width: 100%; }
+/* The older screens' own "‹ Home" / "‹ Back" buttons: words in the accent colour, like the NavBar's back. */
+.btn-back { min-width: var(--tap-min); padding: 0 var(--s-2); background: transparent; color: var(--accent); font: var(--t-body); }
+.btn-icon { position: relative; isolation: isolate; flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--tap-min); height: var(--tap-min); min-width: var(--tap-min); min-height: var(--tap-min); padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text); font: var(--t-headline); cursor: pointer; transition: transform var(--m-press); }
+.btn-icon::before { content: ''; position: absolute; z-index: -1; inset: calc((var(--tap-min) - var(--tap-icon)) / 2); border-radius: 50%; background: var(--fill-grey); }
+.btn-icon.btn-tinted { background: transparent; color: var(--accent); }
+.btn-icon.btn-tinted::before { background: var(--accent-tint); }
+.btn-icon svg { width: 20px; height: 20px; }
+@media (prefers-reduced-motion: no-preference) { .btn:active:not(:disabled), .btn-icon:active:not(:disabled) { transform: scale(0.97); } }
+
+/* Segmented control (M9 part 2, src/app/ui/Segmented.tsx; part 1's page filter, for every page): a grey track;
+   the selected choice raised (surface, a 1 px hairline at >= 3:1, a soft shadow, semibold; decision 17). 44 px. */
+.segmented, .page-filter { display: flex; gap: 2px; padding: 2px; margin: 6px 0 10px; border: 1px solid var(--border); border-radius: var(--r-thumb); background: var(--panel-2); }
+.segmented > button, .page-filter-btn { flex: 1 1 0; min-width: 0; min-height: var(--tap-min); padding: 4px 6px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text); font: var(--t-subhead); font-weight: 500; line-height: 1.2; overflow-wrap: anywhere; cursor: pointer; transition: background-color var(--m-state); }
+.segmented > button[aria-pressed='true'], .page-filter-btn[aria-pressed='true'] { background: var(--raised); border-color: var(--muted); box-shadow: var(--e1); font-weight: 600; }
+.page-filter-btn, .segmented-nowrap > button { flex: 1 1 auto; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.page-filter-count, .segmented-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+.page-filter-btn[aria-pressed='true'] .page-filter-count, .segmented > button[aria-pressed='true'] .segmented-count { color: var(--text); }
+
 .tiles {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -313,26 +390,6 @@ input[type='number'] {
   font-size: 17px;
   padding: 0 12px;
 }
-.segmented {
-  display: flex;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-}
-.segmented button {
-  flex: 1;
-  min-height: 44px;
-  border: 0;
-  background: var(--panel-2);
-  color: var(--text);
-  font-size: 15px;
-}
-.segmented button[aria-pressed='true'] {
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 700;
-}
-
 /* ---------- Live screen ---------- */
 .live {
   position: fixed;
@@ -1247,10 +1304,8 @@ pre.logbox {
 /* The 🧪 test steps button in the top bar (design plan §2.8: a small button in the navigation bar instead
    of the edge tab, which now shows only where no top bar is in view). 44 px, with the red "new steps" dot. */
 .topbar h1 { min-width: 0; overflow-wrap: anywhere; }
-.test-btn { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; min-width: 44px; padding: 0; border: 1px solid var(--border); border-radius: 22px; background: var(--panel); color: var(--text); font-size: 20px; line-height: 1; touch-action: manipulation; }
-.test-btn-camera { width: 44px; padding: 0; border-color: rgba(255, 255, 255, 0.35); background: rgba(0, 0, 0, 0.45); color: var(--white); }
-.test-btn-dot { position: absolute; top: 1px; right: 1px; width: 11px; height: 11px; border-radius: 50%; background: var(--bad); border: 2px solid var(--bg); }
-.test-btn-camera .test-btn-dot { border-color: var(--black); }
+/* M9 part 2: the button itself is a .btn-icon (36 px circle in 44 px), see "M9 part 2: camera screens". */
+.test-btn-dot { position: absolute; top: 2px; right: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--bad); border: 2px solid var(--bg); }
 @media print { .test-btn { display: none !important; } }
 /* The camera screens' top row (‹ Home or ‹ Back, HUD, 🧪) stays tappable above the full-screen "Start camera"
    box, which came later in the page and covered it until the camera was on. */
@@ -1265,13 +1320,6 @@ button, a, input, select, textarea, label, summary { touch-action: manipulation;
 .screen, .banner, .test-sheet { padding-left: calc(var(--safe-left) + 16px); padding-right: calc(var(--safe-right) + 16px); }
 /* The heading gets focus after a screen change (for VoiceOver); no ring for touch. */
 h1[tabindex='-1']:focus { outline: none; }
-/* Page filters (the pieces list): a segmented control, the selected one raised with a hairline and bold text. */
-.page-filter { display: flex; gap: 2px; padding: 2px; margin: 6px 0 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
-.page-filter-btn { flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text); font: inherit; font-size: 15px; font-weight: 500; white-space: nowrap; cursor: pointer; }
-.page-filter-btn[aria-pressed='true'] { background: var(--border); border-color: var(--muted); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); font-weight: 700; }
-@media (prefers-color-scheme: light) { .page-filter-btn[aria-pressed='true'] { background: var(--panel); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14); } }
-.page-filter-count { color: var(--muted); font-variant-numeric: tabular-nums; }
-.page-filter-btn[aria-pressed='true'] .page-filter-count { color: var(--text); }
 /* Set-up done: one line instead of the checklist. */
 .setup-finished { margin: 14px 0 4px; }
 /* The puzzle page's action bar, fixed above the Home bar; the page leaves room for it. */
@@ -1298,6 +1346,207 @@ h1[tabindex='-1']:focus { outline: none; }
 .piece-spots > .row:has(> .spot-thumb) .spot-answer { margin-left: -82px; }
 /* Words on the dark photo views: the camera's light text (check 2026-11-10: 2.9–3.6:1 in light mode). */
 .photo-result .muted { color: var(--cam-text); }
+
+/* M9 part 2: components */
+/* The kit in src/app/ui/ (each file says how to use it; all of them in every state at #/ui, Tester mode).
+   Buttons and the segmented control are near the top of this file, where the old .btn rules were. */
+.ui-modal-open { overflow: hidden; }
+/* NavBar: sticky on a see-through material, out to the screen's edges and under the status bar; the hairline
+   shows once the page scrolls. The title sits in the middle (between back and the trailing buttons when long). */
+.navbar { position: sticky; top: 0; z-index: 30; display: block; margin: calc(-1 * (var(--safe-top) + 12px)) calc(-1 * (var(--safe-right) + 16px)) var(--s-3) calc(-1 * (var(--safe-left) + 16px)); padding: var(--safe-top) calc(var(--safe-right) + var(--gutter)) 0 calc(var(--safe-left) + var(--s-2)); background: var(--material); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); border-bottom: 0.5px solid transparent; transition: border-color var(--m-state); }
+.navbar.is-scrolled { border-bottom-color: var(--border); }
+.navbar-row { display: grid; grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr); align-items: center; gap: var(--s-1); min-height: var(--navbar-h); }
+.navbar-leading { display: flex; align-items: center; justify-self: start; }
+.navbar-trailing { display: flex; align-items: center; justify-content: flex-end; gap: var(--s-1); justify-self: end; }
+.navbar .navbar-title { margin: 0; padding: 2px 0; font: var(--t-headline); text-align: center; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.navbar .navbar-title-small { opacity: 0; transition: opacity var(--m-state); }
+.navbar.is-collapsed .navbar-title-small { opacity: 1; }
+.navbar-back { display: inline-flex; align-items: center; gap: 4px; min-height: var(--tap-min); min-width: var(--tap-min); padding: 0 var(--s-2) 0 2px; border: 0; background: transparent; color: var(--accent); font: var(--t-body); cursor: pointer; transition: opacity var(--m-press); }
+.navbar-back:active { opacity: 0.5; }
+.navbar-back svg { flex: none; width: 12px; height: 20px; }
+.navbar-back-label { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.navbar-btn { min-height: var(--tap-min); min-width: var(--tap-min); padding: 0 var(--s-2); border: 0; background: transparent; color: var(--accent); font: var(--t-body); cursor: pointer; }
+.large-title { margin: var(--s-1) 0 var(--s-3); font: var(--t-large-title); overflow-wrap: anywhere; }
+/* Inset grouped list: rows of 52 px on a rounded card; separators start after the icon tile. */
+.list-section { margin: var(--s-6) 0; }
+.list-header { margin: 0 var(--s-4) 6px; font: var(--t-footnote); text-transform: uppercase; letter-spacing: 0.02em; color: var(--muted); }
+.list-inset { margin: 0; padding: 0; list-style: none; border-radius: var(--r-control); background: var(--panel); box-shadow: var(--e1); overflow: hidden; }
+.list-inset > li { margin: 0; }
+.list-row { position: relative; display: flex; align-items: center; gap: var(--s-3); width: 100%; min-height: var(--tap); margin: 0; padding: var(--s-2) var(--s-4); border: 0; border-radius: 0; background: transparent; color: var(--text); font: var(--t-body); text-align: left; text-decoration: none; transition: background-color var(--m-press); }
+.list-row.is-action { cursor: pointer; }
+.list-row.is-action:active:not(:disabled) { background: var(--fill-grey); }
+.list-row:disabled { opacity: 0.5; }
+.list-inset > li + li > .list-row::before { content: ''; position: absolute; top: 0; right: 0; left: var(--s-4); border-top: 0.5px solid var(--border); }
+.list-inset > li + li > .list-row.has-icon::before { left: calc(var(--s-4) + 30px + var(--s-3)); }
+.list-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; background: var(--fill-grey); color: var(--text); font-size: 17px; line-height: 1; }
+.list-icon svg { width: 18px; height: 18px; }
+.list-icon-accent { background: var(--accent); color: var(--on-accent); }
+.list-icon-good { background: var(--good); color: var(--on-good); }
+.list-icon-warn { background: var(--warn); color: var(--on-warn); }
+.list-icon-bad { background: var(--bad); color: var(--on-bad); }
+.list-title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.list-subtitle { display: block; font: var(--t-subhead); color: var(--muted); }
+.list-value { flex: none; max-width: 45%; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.list-chevron { flex: none; width: 8px; height: 14px; color: var(--muted); }
+.list-row-destructive { color: var(--bad-ink); }
+.list-footer { margin: 6px var(--s-4) 0; font: var(--t-subhead); color: var(--muted); }
+/* Callout: 14 % of its colour over the surface, an icon tile, 15 px words, at most one button, no border. */
+.callout { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); margin: var(--s-3) 0; padding: var(--s-3) var(--s-4) var(--s-3) var(--s-3); border-radius: var(--r-control); background: var(--accent-tint); color: var(--text); font: var(--t-subhead); }
+.callout-good { background: var(--good-tint); }
+.callout-warn { background: var(--warn-tint); }
+.callout-bad { background: var(--bad-tint); }
+.callout-icon { flex: none; align-self: flex-start; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: var(--on-accent); font-size: 18px; font-weight: 700; line-height: 1; }
+.callout-icon svg { width: 20px; height: 20px; }
+.callout-good .callout-icon { background: var(--good); color: var(--on-good); }
+.callout-warn .callout-icon { background: var(--warn); color: var(--on-warn); }
+.callout-bad .callout-icon { background: var(--bad); color: var(--on-bad); }
+.callout-body { flex: 1 1 12em; min-width: 0; }
+.callout-title { display: block; font-weight: 600; }
+.callout-text p { margin: 2px 0 0; }
+.callout-action { flex: none; margin-left: auto; background: var(--panel); color: var(--accent); }
+/* Bottom sheet and action sheet: over a dimmed page; slide up (350 ms), or just appear under Reduce Motion. */
+.ui-sheet-root { position: fixed; inset: 0; z-index: 80; display: flex; flex-direction: column; justify-content: flex-end; }
+.ui-scrim { position: absolute; inset: 0; background: var(--scrim); animation: ui-fade-in var(--m-sheet) backwards; }
+.ui-sheet-root.is-closing { pointer-events: none; }
+.ui-sheet-root.is-closing .ui-scrim { animation: ui-fade-out var(--m-sheet) forwards; }
+.ui-sheet { position: relative; display: flex; flex-direction: column; width: 100%; max-width: 720px; margin: 0 auto; height: 60vh; height: 60dvh; padding: 0 calc(var(--safe-right) + var(--s-4)) 0 calc(var(--safe-left) + var(--s-4)); border-radius: var(--r-sheet) var(--r-sheet) 0 0; background: var(--panel); color: var(--text); box-shadow: var(--e2); outline: none; animation: ui-sheet-in var(--m-sheet) backwards; transition: height var(--m-sheet), transform var(--m-sheet); }
+.ui-sheet-large { height: calc(100vh - var(--safe-top) - 10px); height: calc(100dvh - var(--safe-top) - 10px); }
+.ui-sheet.is-dragging { transition: height var(--m-sheet); animation: none; }
+.ui-sheet-root.is-closing .ui-sheet { animation: ui-sheet-out var(--m-sheet) forwards; }
+.ui-sheet-head { position: relative; flex: none; display: flex; align-items: center; gap: var(--s-2); min-height: 64px; padding-top: 14px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ui-sheet-grabber { position: absolute; top: 0; left: 50%; width: 96px; height: var(--tap-min); margin-left: -48px; padding: 0; border: 0; background: transparent; cursor: grab; }
+.ui-sheet-grabber::before { content: ''; position: absolute; top: 5px; left: 30px; width: 36px; height: 5px; border-radius: 3px; background: var(--muted); }
+.ui-sheet-title { flex: 1; min-width: 0; margin: 0; font: var(--t-title-3); overflow-wrap: anywhere; }
+.ui-sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: calc(var(--safe-bottom) + var(--s-4)); }
+.ui-action { position: relative; display: flex; flex-direction: column; gap: var(--s-2); width: 100%; max-width: 480px; margin: 0 auto; padding: 0 calc(var(--safe-right) + var(--s-2)) calc(var(--safe-bottom) + var(--s-2)) calc(var(--safe-left) + var(--s-2)); outline: none; animation: ui-sheet-in var(--m-sheet) backwards; }
+.ui-sheet-root.is-closing .ui-action { animation: ui-sheet-out var(--m-sheet) forwards; }
+.ui-action-group { overflow: hidden; border-radius: var(--r-control); background: var(--raised); box-shadow: var(--e2); }
+.ui-action-head { padding: var(--s-3) var(--s-4); text-align: center; color: var(--muted); }
+.ui-action-title { margin: 0; font: var(--t-footnote); font-weight: 600; }
+.ui-action-message { margin: 2px 0 0; font: var(--t-subhead); }
+.ui-action-btn { display: block; width: 100%; min-height: var(--tap-answer); padding: 0 var(--s-4); border: 0; border-top: 0.5px solid var(--border); background: transparent; color: var(--accent); font: 400 20px/25px var(--font-family); cursor: pointer; }
+.ui-action-group > .ui-action-btn:first-child { border-top: 0; }
+.ui-action-btn:active { background: var(--fill-grey); }
+.ui-action-btn.is-destructive { color: var(--bad-ink); }
+.ui-action-cancel { font-weight: 600; }
+@keyframes ui-sheet-in { from { transform: translateY(100%); } }
+@keyframes ui-sheet-out { to { transform: translateY(100%); } }
+@keyframes ui-fade-in { from { opacity: 0; } }
+@keyframes ui-fade-out { to { opacity: 0; } }
+/* Toast: a capsule above the action bar / tab bar and the Home bar; one action; above sheets, below 🧪. */
+.ui-toast-wrap { position: fixed; left: 0; right: 0; bottom: var(--toast-bottom, calc(var(--safe-bottom) + var(--action-bar-h) + var(--s-3))); z-index: 85; display: flex; justify-content: center; padding: 0 calc(var(--safe-right) + var(--s-4)) 0 calc(var(--safe-left) + var(--s-4)); pointer-events: none; }
+.ui-toast { display: flex; align-items: center; gap: var(--s-2); max-width: min(100%, 480px); min-height: 48px; padding: 2px 4px 2px 18px; border-radius: var(--r-pill); background: var(--toast-bg); color: var(--toast-text); font: var(--t-subhead); box-shadow: var(--e2); pointer-events: auto; animation: ui-toast-in var(--m-state) backwards; }
+.ui-toast-text { flex: 1 1 auto; min-width: 0; padding: 6px 0; }
+.ui-toast-action { flex: none; min-width: var(--tap-min); min-height: var(--tap-min); padding: 0 var(--s-3); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--toast-action); font: var(--t-headline); cursor: pointer; }
+@keyframes ui-toast-in { from { opacity: 0; transform: translateY(8px); } }
+/* Tab bar: 4 items (24 px icon over a 13 px label), accent when selected, a red badge; pinned with .tabbar-fixed. */
+.tabbar { display: flex; padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left); border-top: 0.5px solid var(--border); background: var(--material); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); }
+.tabbar-fixed { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; }
+.app:has(.tabbar-fixed) { --action-bar-h: var(--tabbar-h); }
+.app:has(.tabbar-fixed) .screen { padding-bottom: calc(var(--safe-bottom) + var(--action-bar-h) + 24px); }
+.tabbar-item { position: relative; flex: 1 1 0; min-width: 0; min-height: var(--tabbar-h); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 2px 3px; border: 0; background: transparent; color: var(--muted); font: var(--t-footnote); font-weight: 500; cursor: pointer; }
+.tabbar-item[aria-current='page'] { color: var(--accent); font-weight: 600; }
+.tabbar-icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; font-size: 20px; line-height: 1; }
+.tabbar-icon svg { width: 24px; height: 24px; }
+.tabbar-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabbar-badge { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--bad); color: var(--on-bad); font: var(--t-badge); line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+.tabbar-badge.is-dot { min-width: 10px; width: 10px; height: 10px; padding: 0; top: 4px; left: calc(50% + 10px); }
+/* The components gallery (#/ui). */
+.gallery-section { margin: var(--s-8) 0; }
+.gallery-section > h2 { margin: 0 0 var(--s-3); font: var(--t-title-2); }
+.gallery-row { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; margin: var(--s-2) 0; }
+.gallery-caption { margin: var(--s-1) 0 var(--s-2); font: var(--t-subhead); color: var(--muted); }
+.gallery-swatch { display: inline-flex; align-items: flex-end; justify-content: center; min-width: 56px; padding: var(--s-1); border-radius: var(--r-thumb); background: var(--panel); box-shadow: var(--e1); font: var(--t-footnote); color: var(--muted); }
+.gallery-space { display: block; height: 12px; background: var(--accent); border-radius: 2px; }
+.gallery-type > * { display: block; margin: 2px 0; }
+.gallery-frame { position: relative; overflow: hidden; border-radius: var(--r-control); background: var(--bg); box-shadow: var(--e1); }
+
+/* M9 part 2: camera screens */
+/* Camera-style icon buttons (design plan §3.5 camera chrome; IconButton class="btn-cam"): a white icon on the
+   camera material, a 36 px circle in a 44 px hit area, the same in both themes (it is always over the dark
+   picture). Pressed (the performance display, the light): a white circle with a black icon. No backdrop
+   blur: inside the button's isolated layer it would have nothing to blur, and it would cost on every frame. */
+.btn-icon.btn-cam { color: var(--white); }
+.btn-icon.btn-cam::before { background: var(--cam-material); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.28); }
+.btn-icon.btn-cam[aria-pressed='true'] { color: var(--black); }
+.btn-icon.btn-cam[aria-pressed='true']::before { background: var(--white); }
+.btn-cam .btn-icon-glyph, .test-btn .btn-icon-glyph { display: inline-flex; }
+.test-btn { touch-action: manipulation; }
+.btn-cam .test-btn-dot { border-color: var(--black); }
+/* The zoom shown in the scan camera's top row (not a button): words in the same 36 px circle. */
+.cam-zoom { flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--tap-min); height: var(--tap-min); }
+.cam-zoom > span { display: inline-flex; align-items: center; justify-content: center; width: var(--tap-icon); height: var(--tap-icon); border-radius: 50%; background: var(--cam-material); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.28); color: var(--white); font: var(--t-badge); font-size: 13px; }
+/* The edge tab's and the steps sheet's flask. */
+.test-tab .icon { flex: none; }
+.test-sheet-title { display: inline-flex; align-items: center; gap: var(--s-2); }
+/* Icons inside words on the camera: on the text's line. */
+.inline-icon { vertical-align: -0.15em; }
+.chip.ok { display: inline-flex; align-items: center; gap: var(--s-1); }
+.pick-photo { gap: var(--s-2); }
+.scan-note-more { display: inline-flex; align-items: center; gap: 2px; }
+/* The live view's piece box: the answer buttons with their icons; Fits filled green (.btn-good). */
+.live-table-info .btn-fits, .live-table-info [data-testid='live-not'] { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.live-table-info .btn-fits { border-color: transparent; }
+/* The note after an answer, with Undo (M9 part 1, 10 s): a capsule like the toast (round 1), on the camera
+   material, centred above the piece box. */
+.live-table-bottom .live-note { display: flex; align-items: center; gap: var(--s-2); width: fit-content; max-width: 100%; min-height: 48px; margin: 0 auto var(--s-2); padding: 2px 4px 2px 18px; border: 0; border-radius: var(--r-pill); background: var(--cam-material); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); color: var(--white); font: var(--t-subhead); }
+.live-table-bottom .live-note:not(:has(.live-note-undo)) { padding-right: 18px; }
+.live-note-text { flex: 1 1 auto; min-width: 0; padding: 6px 0; }
+.live-note .live-note-undo { flex: none; min-width: var(--tap-min); min-height: var(--tap-min); padding: 0 var(--s-3); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--white); font: var(--t-headline); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; pointer-events: auto; }
+.live-note .live-note-undo:focus-visible { outline: 2px solid var(--white); outline-offset: 2px; }
+/* M9 part 2: pages */
+/* Home, Settings, Help, Device check, Send report, Activity log, the set-up wizard and its marker sheets, tray
+   labels, Accuracy and Progress on the kit (round 2). An icon inside a sentence sits on the text's baseline. */
+.icon-inline { display: inline-block; flex: none; vertical-align: -0.2em; }
+/* A link styled as a callout's button, under its words (Home's "Full setup guide", Device check's "Send report"). */
+.callout-link { margin-top: var(--s-2); }
+/* Home: the puzzles as list rows with a 48 px box picture; Import a backup as a plain button under them. */
+.home-puzzles .list-icon { width: 48px; height: 48px; border-radius: 10px; overflow: hidden; }
+.home-puzzles .list-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.home-puzzles .list-icon svg { width: 24px; height: 24px; }
+.home-puzzles .list-inset > li + li > .list-row.has-icon::before { left: calc(var(--s-4) + 48px + var(--s-3)); }
+.home-puzzles .puzzle-title { font-size: inherit; }
+.puzzle-row-status { display: block; }
+.home-import { margin-top: var(--s-2); }
+.home-version, .settings-version { margin-top: var(--s-6); }
+/* Settings: a segmented control between its section's header and footer; a check after "Yes". */
+.settings-control { margin: 0; }
+.settings-done { color: var(--good-ink); }
+.settings-action { color: var(--accent); }
+/* Help: the index scrolls a step's card to just under the navigation bar. */
+.help-step { scroll-margin-top: calc(var(--safe-top) + var(--navbar-h) + var(--s-3)); }
+/* Device check: done (check) or not yet (circle) before each step. */
+.part-mark { vertical-align: -0.25em; color: var(--muted); }
+.part-mark.is-done { color: var(--good-ink); }
+/* M9 part 2: puzzle page */
+/* Icons beside words: in the line of text (inline-icon), before a heading (section-icon), in buttons (a fixed size). */
+.inline-icon { display: inline-block; vertical-align: -0.2em; }
+.section-title, .panel-head h3 { display: flex; align-items: center; gap: var(--s-2); }
+.section-icon { flex: none; color: var(--accent); }
+.btn > .icon { flex: none; }
+.action-bar-icon { display: inline-flex; height: 22px; align-items: center; }
+.action-bar-icon .icon { width: 22px; height: 22px; }
+.setup-mark .icon { width: 18px; height: 18px; }
+/* Two or more buttons inside a callout (the kit's own action is one button). */
+.callout-buttons { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-2); }
+.callout .callout-body > p { margin: 2px 0 0; }
+.pending-panel > .pending-row { flex: 1 0 100%; }
+/* Sort into trays: a list row that opens its panel; its chevron turns when open. */
+.list-disclosure { flex: none; color: var(--muted); transition: transform var(--m-state); }
+.list-row[aria-expanded='true'] .list-disclosure { transform: rotate(180deg); }
+.list-row[aria-expanded='true'] { color: var(--accent); }
+/* The new-batch sheet's buttons, one under the other. */
+.sheet-buttons { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-4); }
+/* While a toast shows, a piece panel brought into view keeps its ✓ Fits row above it too (Puzzle.tsx SPOTS_SCROLL_MARGIN). */
+.app:has(.ui-toast) { --toast-room: 72px; }
+/* A panel opened from the action bar: its heading below the sticky NavBar when brought into view. */
+.panel-head { scroll-margin-top: calc(var(--safe-top) + var(--navbar-h) + 12px); }
+[data-testid='contrast-ok'] .icon { color: var(--good-ink); }
+.match-ok .icon { color: var(--good-ink); }
+
+/* M9 part 2: fixes from the independent check (2026-11-11) */
+/* With a top bar, the update banner scrolls away with the page instead of sticking over the bar (it hid the back button). */
+.app:has(.navbar) .banner { position: relative; }
 
 /* ---------- Reduce Motion (M9 part 1) ---------- */
 /* iPhone Settings > Accessibility > Motion > Reduce Motion: nothing moves or slides. The spinner only fades in

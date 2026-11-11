@@ -4,6 +4,17 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M9 (part 2): one look across the app (2026-11-11; tested on the Mac, not yet on your iPhone)
+- **Design stage 2 of 6 ("foundation")**, in two rounds: first the building blocks and the icon set (2 builders), then every screen switched over (3 builders: the plain pages, the puzzle page, the camera screens), merged and tested together.
+- **Building blocks** (src/app/ui): an iPhone-style top bar whose back button goes to the parent screen (Progress → your puzzle, Settings → Home), buttons in one family (filled, tinted, grey, plain, destructive; ✓ Fits is solid green), segmented controls, grouped lists, tinted message boxes with an icon, a bottom sheet, an action sheet for big deletions, a toast with Undo (8 s) above the bottom bar, and a tab bar for stage 4. A sample page shows them all (Settings → Components, Tester mode only).
+- **42 line icons** (Lucide, ISC licence, inlined so the app works offline) replace the emoji; buttons with only an icon have names for VoiceOver.
+- **Home:** a big title, your puzzles as a list with their box pictures, one "New puzzle" button, the testing tools in a "Diagnostics" group (Tester mode).
+- **Settings:** grouped sections; "Erase all data" asks in a sheet (and now says it deletes your puzzles too, which it always did).
+- **The puzzle page:** the secondary actions as a list (Show my table, Sort into trays, Progress, Accuracy); Delete this puzzle, Delete scanned pieces and "Swap the scans" ask in a sheet; Start a new batch explains itself in a sheet; the ✓ Fits note is now an Undo message at the bottom (after an answer in the live view, it shows when the live view closes; anything opening on top of the page, like the live view or a delete sheet, closes it, so it never covers that layer's buttons).
+- **Camera screens:** round icon buttons in the top rows (back, light, the speed display, the test steps); the live view's Undo note looks like the other Undo messages. The camera layout itself is stage 5.
+- **Colours:** the last colours written into the code are named colours now; a test stops raw colours coming back. Nothing changed colour.
+- **Fixed on the way:** a piece's panel scrolled partly under the new top bar.
+
 ### M9 (part 1): easier to read and use (2026-11-10; tested on the Mac, not yet on your iPhone)
 - **The first of 6 design stages** from the app review ("readable now"). Built by 4 builders working in parallel, each on its own part, then merged and tested together.
 - **Colours that read in light mode.** 31 text styles were too faint. Every colour is now a named colour with a light and a dark value, and a test measures every pair (text at least 4.5:1, lines and dots at least 3:1). For example: links 2.1 → 5.7, "likely" 1.4 → 6.4, the selected piece's outline 1.1 → 16.5. Dark mode looks as before, except "shape read", which is now violet instead of blue in both.

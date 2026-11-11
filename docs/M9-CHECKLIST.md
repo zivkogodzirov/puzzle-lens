@@ -28,3 +28,20 @@ The design work follows the app review's plan, in 6 stages, each checked on your
 6. Leave a puzzle page open past your Auto-Lock time: the screen stays on.
 
 **Only your iPhone can tell:** the status bar in both modes, whether the app stays upright, whether pinch-zoom causes accidental zooms, whether the screen stays on, and whether the live view stays smooth with the dark edges.
+
+## Part 2: foundation (one look across the app)
+
+**New:**
+- One set of building blocks used everywhere: an iPhone-style top bar (**‹ back** goes to the screen you came from, not always Home), lists grouped like iPhone Settings, coloured message boxes with an icon, a sheet that slides up from the bottom, an iPhone-style confirmation for big deletions (delete a puzzle, delete scanned pieces, erase everything), and a dark **Undo** message above the bottom bar after ✓ Fits and Joins answers.
+- One set of 42 matching line icons (Lucide, built into the app so it works offline) replaces the emoji.
+- Home: a big title, your puzzles as a list with their box pictures, one **New puzzle** button, the testing tools in a "Diagnostics" group.
+- ✓ Fits is a solid green button; Delete buttons are red words on a light red background.
+- Every colour in the code is now a named colour with a light and dark value (a test stops raw colours from coming back).
+
+**Why:** the review found the screens looked like a test build: every screen built its own boxes and buttons, 23 emoji did the job of icons, and "‹ Home" was the only way back.
+
+1. Look at Home, Settings, a puzzle page, Progress and the camera screens in light and dark mode. Does it feel like one app?
+2. Tap ✓ Fits on a piece, then **Undo** in the dark message at the bottom.
+3. Try the delete confirmations (Delete scanned pieces…, Delete this puzzle…, Erase all data) and tap **Cancel** each time.
+4. With Tester mode on: Settings → Components (for testing) shows every building block.
+

@@ -9,6 +9,8 @@ import { loadPatches, tableLight } from '../../project/groups';
 import { getBlob } from '../../project/store';
 import type { PieceRow, Project } from '../../project/types';
 import { logWarn } from '../../log/logger';
+import { Icon } from '../ui/icons';
+import { Callout } from '../ui/Callout';
 
 const CELL = 8;
 
@@ -79,26 +81,25 @@ export function TableContrast({ project, pieces, boxUrl }: { project: Project; p
   if (res.share < 0.005)
     return (
       <p class="small muted" data-testid="contrast-ok">
-        Table contrast ✓ Your table’s colour stands out from the whole picture.
+        Table contrast <Icon name="check" size={18} class="inline-icon" label="good" /> Your table’s colour stands out from the whole picture.
       </p>
     );
   if (res.share < CONTRAST.warnShare)
     return (
       <div class="small muted" data-testid="contrast-ok">
         <p>
-          Table contrast ✓ Only {pc < 1 ? 'under 1' : `about ${pc}`} % of the picture is close to your table’s colour: pieces from there are a bit harder to
-          find. {toggle}
+          Table contrast <Icon name="check" size={18} class="inline-icon" label="good" /> Only {pc < 1 ? 'under 1' : `about ${pc}`} % of the picture is close to
+          your table’s colour: pieces from there are a bit harder to find. {toggle}
         </p>
         {map}
       </div>
     );
   return (
-    <div class="notice notice-warn small" data-testid="contrast-warn">
+    <Callout kind="warn" icon={<Icon name="eye" />} title="Table contrast" testId="contrast-warn">
       <p>
-        <strong>Table contrast:</strong> about {pc} % of the picture is close to your table’s colour. Pieces from there stand out little, so a scan may miss
-        them: check they’re found. {toggle}
+        About {pc} % of the picture is close to your table’s colour. Pieces from there stand out little, so a scan may miss them: check they’re found. {toggle}
       </p>
       {map}
-    </div>
+    </Callout>
   );
 }

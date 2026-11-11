@@ -17,6 +17,7 @@ import { puzzleProgress } from '../../project/progress';
 import type { PieceRow, Project } from '../../project/types';
 import { borderCounts, boxVersion, pieceGroup, useBlobUrl } from './Puzzle';
 import { logError } from '../../log/logger';
+import { Icon } from '../ui/icons';
 
 const pc = (a: number, b: number) => (b ? Math.round((100 * a) / b) : 0);
 
@@ -69,7 +70,7 @@ export function ProgressScreen() {
   if (data === undefined)
     return (
       <main class="screen">
-        <TopBar title="Progress" />
+        <TopBar title="Progress" back={{ label: 'Puzzle', route: 'puzzle', arg: id }} />
         <p class="muted">Loading…</p>
       </main>
     );
@@ -80,16 +81,12 @@ export function ProgressScreen() {
         <p class="muted">This puzzle is not on this iPhone.</p>
       </main>
     );
-  const back = (
-    <a class="btn btn-small" href={`#/puzzle/${encodeURIComponent(project.id)}`}>
-      ‹ Back to the puzzle
-    </a>
-  );
+  // Back to the puzzle page, under the puzzle's name (its own title).
+  const back = { label: project.name, route: 'puzzle' as const, arg: project.id };
   if (!project.grid || !view)
     return (
       <main class="screen" data-testid="progress-page">
-        <TopBar title="Progress" />
-        {back}
+        <TopBar title="Progress" back={back} />
         <p class="muted">Progress shows once the puzzle has its grid (set-up).</p>
       </main>
     );
@@ -110,8 +107,7 @@ export function ProgressScreen() {
   const left = prog.cells - prog.done;
   return (
     <main class="screen" data-testid="progress-page">
-      <TopBar title="Progress" />
-      {back}
+      <TopBar title="Progress" back={back} />
       <h2>{project.name}</h2>
       <div class="card" data-testid="progress-done">
         <p class="progress-big">
@@ -196,7 +192,9 @@ export function ProgressScreen() {
       </table>
       <p data-testid="progress-left">
         {left === 0 ? (
-          <strong>The puzzle is finished. 🎉</strong>
+          <strong>
+            The puzzle is finished. <Icon name="party-popper" size={20} class="icon-inline" label="Hooray" />
+          </strong>
         ) : (
           <>
             <strong>{left}</strong> {left === 1 ? 'spot' : 'spots'} still empty:{' '}
@@ -248,9 +246,9 @@ export function ProgressScreen() {
               </>
             )}
           </p>
-          {/* A small button like "‹ Back to the puzzle", not a bare text link (2026-11-10 app review). */}
+          {/* A small button, not a bare text link (2026-11-10 app review). */}
           <a class="btn btn-small" href={`#/accuracy/${encodeURIComponent(project.id)}`} data-testid="progress-accuracy-details">
-            Details
+            <Icon name="bar-chart" size={20} /> Details
           </a>
         </>
       )}

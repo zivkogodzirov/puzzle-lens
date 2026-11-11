@@ -11,6 +11,7 @@ import type { Project } from '../../project/types';
 import { readerWorker } from '../workers';
 import { logError, logInfo } from '../../log/logger';
 import { errorWords, plural } from '../words';
+import { Icon } from '../ui/icons';
 
 export function BoxFitNotice({ project, shown, onProject }: { project: Project; shown: Map<string, SpotChoice>; onProject: (p: Project) => void }) {
   const [busy, setBusy] = useState(false);
@@ -68,21 +69,31 @@ export function BoxFitNotice({ project, shown, onProject }: { project: Project; 
       .catch((err) => logError('place', 'Could not save the answer', err));
   };
   return (
-    <div class="notice notice-warn small" data-testid="box-fit">
-      <p>
-        <strong>Box picture check:</strong> your pieces show that the box picture is about {pc} % {a < 1 ? 'bigger' : 'smaller'} than the real puzzle (it shows{' '}
-        {a < 1 ? 'a little more' : 'a little less'} of the scene), so spots near its edges are off by up to {Math.round(fit!.edgeShift * 100) / 100} of a piece.
-        Measured from {plural(Math.min(fit!.x.n, fit!.y.n), 'piece')} the app is sure about.
-      </p>
-      <div class="row" style={{ gap: '8px', flexWrap: 'wrap' }}>
-        <button class="btn btn-small btn-primary" data-testid="box-fit-apply" disabled={busy} onClick={() => void apply()}>
-          {busy ? 'Correcting…' : 'Correct the box picture'}
-        </button>
-        <button class="btn btn-small" data-testid="box-fit-dismiss" disabled={busy} onClick={dismiss}>
-          Not now
-        </button>
+    <div class="callout callout-warn" data-testid="box-fit">
+      <span class="callout-icon" aria-hidden="true">
+        <Icon name="image" />
+      </span>
+      <div class="callout-body">
+        <strong class="callout-title">Box picture check</strong>
+        <p>
+          Your pieces show that the box picture is about {pc} % {a < 1 ? 'bigger' : 'smaller'} than the real puzzle (it shows{' '}
+          {a < 1 ? 'a little more' : 'a little less'} of the scene), so spots near its edges are off by up to {Math.round(fit!.edgeShift * 100) / 100} of a
+          piece. Measured from {plural(Math.min(fit!.x.n, fit!.y.n), 'piece')} the app is sure about.
+        </p>
+        <div class="callout-buttons">
+          <button class="btn btn-small btn-filled" data-testid="box-fit-apply" disabled={busy} onClick={() => void apply()}>
+            {busy ? 'Correcting…' : 'Correct the box picture'}
+          </button>
+          <button class="btn btn-small" data-testid="box-fit-dismiss" disabled={busy} onClick={dismiss}>
+            Not now
+          </button>
+        </div>
+        {error && (
+          <p role="alert" data-testid="box-fit-error">
+            The box picture couldn’t be corrected: {error}
+          </p>
+        )}
       </div>
-      {error && <p data-testid="box-fit-error">The box picture couldn’t be corrected: {error}</p>}
     </div>
   );
 }

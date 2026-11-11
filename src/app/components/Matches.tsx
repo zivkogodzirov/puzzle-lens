@@ -11,6 +11,8 @@ import { blockSuggestions, confirmedPairs, pairKey, pairSuggestions, PAIRS } fro
 import type { PairAnswerView } from '../../project/pairAnswers';
 import type { PieceRow, Project } from '../../project/types';
 import { useBlobUrl } from '../screens/Puzzle';
+import { Icon } from '../ui/icons';
+import { toast } from '../ui/toast';
 
 /** Pairs listed at most (the rest are counted). */
 const SHOW_MAX = 12;
@@ -104,9 +106,9 @@ function PairCard({
           <p>
             <strong>These two join</strong> ({DIR_WORDS[s.dir]}, as on the box) · <span class="nw">{pct(s.p)} %</span>
             {confirmed && (
-              <span class="match-ok" title="Part of a square of 4 pieces that all join" data-testid="match-confirmed">
+              <span class="match-ok nw" title="Part of a square of 4 pieces that all join" data-testid="match-confirmed">
                 {' '}
-                ✓ square
+                <Icon name="check" size={16} class="inline-icon" /> square
               </span>
             )}
           </p>
@@ -120,13 +122,13 @@ function PairCard({
       </div>
       <div class="row match-buttons">
         <button class="btn btn-small" data-testid="match-find" onClick={() => onFind([s.a, s.b])}>
-          📷 Point them out
+          <Icon name="scan-eye" size={20} /> Point them out
         </button>
-        <button class="btn btn-small btn-fits" data-testid="match-fits" onClick={() => onAnswer(s, true)}>
-          ✓ They fit
+        <button class="btn btn-small btn-fits btn-good" data-testid="match-fits" onClick={() => onAnswer(s, true)}>
+          <Icon name="check" size={20} /> They fit
         </button>
         <button class="btn btn-small" data-testid="match-not" onClick={() => onAnswer(s, false)}>
-          ✗ Don't fit
+          <Icon name="x" size={20} /> Don't fit
         </button>
       </div>
     </div>
@@ -174,7 +176,10 @@ function BlockCard({
         )}
         <div class="grow small">
           <p>
-            <strong>A square of 4 ✓</strong> · <span class="nw">{pct(b.p)} %</span>
+            <strong>
+              A square of 4 <Icon name="check" size={16} class="inline-icon" label="all four pairs agree" />
+            </strong>{' '}
+            · <span class="nw">{pct(b.p)} %</span>
           </p>
           <p class="muted">
             All four pairs agree: columns {b.col + 1}–{b.col + 2}, rows {b.row + 1}–{b.row + 2}.
@@ -183,10 +188,10 @@ function BlockCard({
       </div>
       <div class="row match-buttons">
         <button class="btn btn-small" data-testid="match-find" onClick={() => onFind([...b.ids])}>
-          📷 Point them out
+          <Icon name="scan-eye" size={20} /> Point them out
         </button>
-        <button class="btn btn-small btn-fits" data-testid="match-block-fits" onClick={() => onAnswerAll(b)}>
-          ✓ All 4 fit
+        <button class="btn btn-small btn-fits btn-good" data-testid="match-block-fits" onClick={() => onAnswerAll(b)}>
+          <Icon name="check" size={20} /> All 4 fit
         </button>
       </div>
       <p class="muted small">If one of them doesn't fit, answer its pair below.</p>
@@ -216,16 +221,17 @@ export function MatchesPanel({
   onUndo: (keys: string[]) => Promise<void>;
 }) {
   const byId = useMemo(() => new Map(pieces.map((p) => [p.id, p])), [pieces]);
-  const [note, setNote] = useState<{ text: string; keys: string[] } | null>(null);
   const [joinedOpen, setJoinedOpen] = useState(false);
   const { pairs, blocks, confirmed, next } = list;
+  // Each answer: a toast with Undo (M9 part 2; was a note with Undo and OK in the panel).
   const answer = (ss: PairSuggestion[], fits: boolean, conf: boolean) =>
-    void onAnswer(ss, fits, conf).then(() =>
-      setNote({
-        text: fits ? (ss.length > 1 ? '✓ Noted: the 4 pieces are joined.' : '✓ Noted: joined.') : '✗ Noted: that pair isn’t suggested again.',
-        keys: ss.map((s) => pairKey(s.a, s.b, s.dir)),
-      }),
-    );
+    void onAnswer(ss, fits, conf).then(() => {
+      const keys = ss.map((s) => pairKey(s.a, s.b, s.dir));
+      toast({
+        text: fits ? (ss.length > 1 ? 'Noted: the 4 pieces are joined.' : 'Noted: joined.') : 'Noted: that pair isn’t suggested again.',
+        action: { label: 'Undo', run: () => void onUndo(keys) },
+      });
+    });
   const blockPairs = (b: BlockSuggestion): PairSuggestion[] => {
     const [tl, tr, bl, br] = b.ids;
     const all = [...pairs];
@@ -238,19 +244,8 @@ export function MatchesPanel({
     <div class="matches" data-testid="matches">
       <p class="muted small">
         From where each piece goes on the box picture: two pieces whose spots are next to each other probably join. The shapes only rule out pairs that can't
-        fit. ✓ square = four pieces whose pairs all agree.
+        fit. <Icon name="check" size={16} class="inline-icon" /> square = four pieces whose pairs all agree.
       </p>
-      {note && (
-        <div class="notice notice-good row" role="status" data-testid="match-note" style={{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span class="grow">{note.text}</span>
-          <button class="btn btn-small" data-testid="match-undo" onClick={() => void onUndo(note.keys).then(() => setNote(null))}>
-            Undo
-          </button>
-          <button class="btn btn-small" onClick={() => setNote(null)}>
-            OK
-          </button>
-        </div>
-      )}
       {!next && (
         <p class="small" data-testid="match-none">
           No likely pairs yet. Pairs show up when two pieces' spots on the box picture are next to each other: scan more pieces (or a close-up of pieces whose
@@ -319,7 +314,7 @@ export function MatchesPanel({
       {joined.length > 0 && (
         <p class="small">
           <button class="link-btn" data-testid="match-joined" aria-expanded={joinedOpen} onClick={() => setJoinedOpen(!joinedOpen)}>
-            ✓ {joined.length} pair{joined.length === 1 ? '' : 's'} joined
+            <Icon name="check" size={18} class="inline-icon" /> {joined.length} pair{joined.length === 1 ? '' : 's'} joined
           </button>
         </p>
       )}

@@ -5,6 +5,7 @@
 import { useEffect } from 'preact/hooks';
 import { useRegisterSW } from 'virtual:pwa-register/preact';
 import { logInfo, logWarn } from '../../log/logger';
+import { Icon } from '../ui/icons';
 
 export function UpdateBanner() {
   const {
@@ -46,7 +47,9 @@ export function UpdateBanner() {
   if (offlineReady) {
     return (
       <div class="banner" role="status">
-        Ready to work offline ✓
+        <span>
+          Ready to work offline <Icon name="check" size={18} class="icon-inline" />
+        </span>
       </div>
     );
   }

@@ -30,6 +30,8 @@ import {
 } from '../../device/format';
 import type { CheckEntry, DeviceCheckResults, DisplayMode, RunPart } from '../../device/types';
 import type { CvBenchResult } from '../../shared/types';
+import { Callout } from '../ui/Callout';
+import { Icon } from '../ui/icons';
 
 function when(ts: number | undefined): string {
   if (!ts) return '';
@@ -122,9 +124,9 @@ function Results({ results, running }: { results: DeviceCheckResults; running: b
         {running ? 'Checking now' : `Checked ${when(results.ts)}`} in the <strong>{modeLabel(results.mode)}</strong> · version {results.appVersion}
       </p>
       {!running && results.checks.length > 0 && (
-        <p class={`notice notice-${verdict.tone} small`} data-testid="device-check-verdict" data-tone={verdict.tone}>
-          {verdict.text}
-        </p>
+        <div data-testid="device-check-verdict" data-tone={verdict.tone}>
+          <Callout kind={verdict.tone}>{verdict.text}</Callout>
+        </div>
       )}
       {results.checks.length > 0 && (
         <p class="small" data-testid="device-check-summary">
@@ -180,21 +182,18 @@ function StepsCard({ mode, results, busy }: { mode: DisplayMode; results: Device
   const allDone = doneCount === REQUIRED_PARTS.length;
   const other: DisplayMode = mode === 'standalone' ? 'browser' : 'standalone';
   const headline = allDone
-    ? 'All done ✓ — now send a report'
+    ? 'All done — now send a report'
     : doneCount === 0
       ? `Not checked yet in the ${modeLabel(mode)}`
       : `${doneCount} of ${REQUIRED_PARTS.length} steps done in the ${modeLabel(mode)}`;
   return (
-    <div class={`notice ${allDone ? 'notice-good' : 'notice-warn'}`} data-testid="device-check-reminder">
-      <strong data-testid={`device-checked-${mode}`}>{headline}</strong>
+    <Callout kind={allDone ? 'good' : 'warn'} title={<span data-testid={`device-checked-${mode}`}>{headline}</span>} testId="device-check-reminder">
       <ul class="part-list small">
         {ALL_PARTS.map((p, i) => {
           const done = partDone(results, p);
           return (
             <li key={p} data-testid={`device-part-${p}`} data-done={done ? 'true' : 'false'}>
-              <span class={done ? 'ok' : 'muted'} aria-label={done ? 'Done' : 'Not done yet'}>
-                {done ? '✓' : '○'}
-              </span>{' '}
+              <Icon name={done ? 'check' : 'circle'} size={18} class={`part-mark${done ? ' is-done' : ''}`} label={done ? 'Done' : 'Not done yet'} />{' '}
               {i + 1}. {PART_NAMES[p]}
               {done && results?.parts[p] ? <span class="muted"> · {when(results.parts[p])}</span> : null}
             </li>
@@ -202,7 +201,7 @@ function StepsCard({ mode, results, busy }: { mode: DisplayMode; results: Device
         })}
       </ul>
       {allDone && !busy && (
-        <a class="btn btn-primary btn-small" href="#/report" data-testid="device-all-done">
+        <a class="btn btn-small callout-action callout-link" href="#/report" data-testid="device-all-done">
           Send report
         </a>
       )}
@@ -210,7 +209,7 @@ function StepsCard({ mode, results, busy }: { mode: DisplayMode; results: Device
         Also run this in the <strong>{modeLabel(other)}</strong> and send a report from there too. The two keep separate data, so this screen can't see
         that run.
       </p>
-    </div>
+    </Callout>
   );
 }
 
@@ -235,9 +234,9 @@ export function DeviceCheckScreen() {
   const mode: DisplayMode = isStandalone.value ? 'standalone' : 'browser';
   const progressLine = (part: typeof running) =>
     running === part && (
-      <p class="notice small" role="status" data-testid="device-check-progress">
-        ⏳ {progress || 'Working…'}
-      </p>
+      <Callout kind="info" icon={<Icon name="hourglass" />} role="status" testId="device-check-progress">
+        {progress || 'Working…'}
+      </Callout>
     );
 
   return (
@@ -246,17 +245,14 @@ export function DeviceCheckScreen() {
       <p class="muted">This finds out what your iPhone can do for Puzzle Lens. Nothing leaves your phone unless you send a report.</p>
 
       {deviceCheck.notice.value && (
-        <div class="notice notice-good" role="status">
-          <p style={{ marginTop: 0 }}>{deviceCheck.notice.value}</p>
-          <button class="btn btn-small" onClick={dismissNotice}>
-            OK
-          </button>
-        </div>
+        <Callout kind="good" role="status" action={{ label: 'OK', onClick: dismissNotice }}>
+          {deviceCheck.notice.value}
+        </Callout>
       )}
 
       <StepsCard mode={mode} results={results && results.mode === mode ? results : null} busy={busy} />
 
-      {deviceCheck.lastError.value && <div class="notice notice-bad small">{deviceCheck.lastError.value}</div>}
+      {deviceCheck.lastError.value && <Callout kind="bad">{deviceCheck.lastError.value}</Callout>}
 
       <h2>1. Automatic checks</h2>
       <p class="small muted">About half a minute. No camera needed.</p>
@@ -287,7 +283,7 @@ export function DeviceCheckScreen() {
         muted
         autoPlay
         data-testid="device-camera-preview"
-        style={{ display: running === 'camera' ? 'block' : 'none', width: '100%', maxHeight: '240px', objectFit: 'contain', background: '#000', borderRadius: '12px', marginTop: '10px' }}
+        style={{ display: running === 'camera' ? 'block' : 'none', width: '100%', maxHeight: '240px', objectFit: 'contain', background: 'var(--black)', borderRadius: '12px', marginTop: '10px' }}
       />
       {progressLine('camera')}
 
@@ -342,15 +338,15 @@ export function DeviceCheckScreen() {
         muted
         autoPlay
         data-testid="photo-probe-preview"
-        style={{ display: running === 'photoProbe' ? 'block' : 'none', width: '100%', maxHeight: '240px', objectFit: 'contain', background: '#000', borderRadius: '12px', marginTop: '10px' }}
+        style={{ display: running === 'photoProbe' ? 'block' : 'none', width: '100%', maxHeight: '240px', objectFit: 'contain', background: 'var(--black)', borderRadius: '12px', marginTop: '10px' }}
       />
       {progressLine('photoProbe')}
 
       <h2>5. Memory test (optional)</h2>
-      <div class="notice notice-warn small">
+      <Callout kind="warn">
         This fills up memory on purpose until the iPhone says stop. <strong>Puzzle Lens may close or reload by itself</strong> — that's expected, and it's how
         the test measures. If it happens, open Puzzle Lens again and come back to Device check: the result will be waiting.
-      </div>
+      </Callout>
       {!confirmMemory ? (
         <button class="btn btn-block" data-testid="memory-test" disabled={busy} onClick={() => setConfirmMemory(true)}>
           Run memory test…

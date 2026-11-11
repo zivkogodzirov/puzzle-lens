@@ -1,6 +1,6 @@
 /**
  * Outlines drawn over photos and the camera picture (M9 part 1, design review §3.1 "Overlays on
- * photos and video"). The owner's table is cream: a pale outline alone vanishes on it, so every
+ * photos and video"). The colours are tokens (--ov-* in styles.css, OV in tokens.ts). The owner's table is cream: a pale outline alone vanishes on it, so every
  * piece outline sits on a dark halo, 0.6 black at 2.4 × the line's width (the halo is 4.9–5.4:1
  * against the owner's table, measured on two of the owner's photos).
  *
@@ -12,16 +12,17 @@
  * The yellow #ffd84a (4.8:1), orange #ff9f2e (3.3:1) and the scan's pale grey (5.3–5.6:1) stay.
  */
 import type { PieceState } from '../project/progress';
+import { OV } from './tokens';
 
 /** The halo under every outline. */
-export const HALO = 'rgba(0, 0, 0, 0.6)';
+export const HALO = OV.halo;
 /** Its width, times the line's. */
 export const HALO_SCALE = 2.4;
 
-/** Outline colours by piece state, on photos and the live picture (the page's own dots use STATE_COLOUR). */
-export const OVERLAY_STATE: Record<PieceState, string> = { found: '#ede7dc', shape: '#cabdff', placed: '#3ccf7a' };
+/** Outline colours by piece state, on photos and the live picture (the page's own dots use the CSS classes state-found / state-shape / state-placed). */
+export const OVERLAY_STATE: Record<PieceState, string> = { found: OV.found, shape: OV.shape, placed: OV.placed };
 /** Not where it was / not a piece. */
-export const OVERLAY_BAD = '#ff9a8f';
+export const OVERLAY_BAD = OV.bad;
 
 /**
  * Strokes the halo of the context's current path (canvas), for a line `width` wide drawn next; solid,

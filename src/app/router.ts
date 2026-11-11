@@ -8,7 +8,7 @@
 import { signal } from '@preact/signals';
 
 export type Route =
-  'home' | 'live' | 'device' | 'settings' | 'report' | 'help' | 'log' | 'new' | 'puzzle' | 'markers' | 'scan' | 'trays' | 'accuracy' | 'progress';
+  'home' | 'live' | 'device' | 'settings' | 'report' | 'help' | 'log' | 'new' | 'puzzle' | 'markers' | 'scan' | 'trays' | 'accuracy' | 'progress' | 'ui';
 
 export const ROUTES: Route[] = [
   'home',
@@ -25,6 +25,7 @@ export const ROUTES: Route[] = [
   'trays',
   'accuracy',
   'progress',
+  'ui',
 ];
 
 export function parseHash(hash: string): Route {

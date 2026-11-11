@@ -318,12 +318,12 @@ test('the action bar: main actions at once, never over the last lines or the ✓
   await page.getByTestId('group-all').click();
   await expect(page.getByTestId('group-all')).toHaveAttribute('aria-pressed', 'true');
 
-  // ✓ Fits: the Undo note, in view, is not under the bar.
+  // ✓ Fits: the Undo toast (M9 part 2; was a note in the page) is in view at once, and not under the bar.
   await page.locator('[data-testid="catalog"] .thumb-btn').first().click();
   await page.getByTestId('spot-fits').click();
-  const note = page.getByTestId('placed-note');
-  await expect(note).toBeVisible();
-  await note.scrollIntoViewIfNeeded();
+  const note = page.getByTestId('toast');
+  await expect(note).toContainText('In the puzzle at column');
+  await expect(note).toBeInViewport({ ratio: 1 });
   const nb = (await note.boundingBox())!;
   expect(nb.y + nb.height).toBeLessThanOrEqual((await page.getByTestId('action-bar').boundingBox())!.y);
   await page.screenshot({ path: test.info().outputPath('action-bar.png') });

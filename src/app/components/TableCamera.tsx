@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { TestButton } from './TestSteps';
+import { IconButton } from '../ui/Button';
+import { Icon } from '../ui/icons';
 import { errorWords } from '../words';
 import { cameraError, cameraInfo, cameraState, cameraStream, setZoom, startCamera, stopCamera } from '../../camera/camera';
 import { latestFrame, pumpError, pumpMode, startPump, stopPump } from '../../camera/framePump';
@@ -264,12 +266,12 @@ export function TableCamera(props: {
       {live && <MarkerOverlay video={videoEl} />}
       {live && pieces && pieces.length > 0 && <PieceOverlay video={videoEl} pieces={pieces} />}
       <div class="live-top">
-        <button class="chip" onClick={onClose} data-testid="camera-close">
-          ‹ Back
-        </button>
+        <IconButton label="Back" class="btn-cam" testId="camera-close" onClick={onClose}>
+          <Icon name="chevron-left" />
+        </IconButton>
         <span class="title">{mode === 'setup' ? 'Marker photo' : mode === 'overview' ? 'Overview photo' : 'Close-ups'}</span>
-        <span class="chip" aria-label="Zoom">
-          {zoom >= 1.5 ? '2×' : '1×'}
+        <span class="cam-zoom" role="img" aria-label={zoom >= 1.5 ? 'Zoom 2×' : 'Zoom 1×'} data-testid="camera-zoom">
+          <span aria-hidden="true">{zoom >= 1.5 ? '2×' : '1×'}</span>
         </span>
         <TestButton variant="camera" />
       </div>
@@ -309,7 +311,7 @@ export function TableCamera(props: {
           {state === 'starting' ? (
             <p>Starting the camera…</p>
           ) : (
-            <button class="btn btn-primary" data-testid="start-camera" onClick={() => void startCamera()}>
+            <button class="btn btn-filled" data-testid="start-camera" onClick={() => void startCamera()}>
               {state === 'paused' ? 'Resume camera' : 'Start camera'}
             </button>
           )}

@@ -7,27 +7,31 @@ import { importBackup } from '../../project/backup';
 import type { Project } from '../../project/types';
 import { logError, logInfo } from '../../log/logger';
 import { boxVersion, errorWords, setupStatus, useBlobUrl } from './Puzzle';
-import { TestButton } from '../components/TestSteps';
 import { settings } from '../settings';
 import { plural } from '../words';
+import { NavBar } from '../ui/NavBar';
+import { Button } from '../ui/Button';
+import { Callout } from '../ui/Callout';
+import { ListRow, ListSection } from '../ui/List';
+import { Icon } from '../ui/icons';
 
-function PuzzleCard({ p }: { p: Project }) {
+/** One puzzle as a list row: its box picture (or a puzzle icon), name, pieces and grid, set-up status; opens the puzzle. */
+function PuzzleRow({ p }: { p: Project }) {
   const thumb = useBlobUrl(p.box?.rectifiedBlobId, boxVersion(p.box));
   return (
-    <a class="puzzle-card" href={`#/puzzle/${encodeURIComponent(p.id)}`} data-testid="puzzle-card">
-      <span class="puzzle-thumb">{thumb ? <img src={thumb} alt="" /> : <span aria-hidden="true">🧩</span>}</span>
-      <span class="puzzle-info">
-        <strong class="puzzle-title">{p.name}</strong>
-        <span class="small muted">
+    <ListRow
+      icon={thumb ? <img src={thumb} alt="" /> : <Icon name="puzzle" />}
+      title={<strong class="puzzle-title">{p.name}</strong>}
+      subtitle={
+        <>
           {p.pieceCount ? plural(p.pieceCount, 'piece') : 'Piece count not set'}
           {p.grid ? ` · ${p.grid.cols} × ${p.grid.rows}` : ''}
-        </span>
-        <span class="small muted">{setupStatus(p)}</span>
-      </span>
-      <span class="puzzle-chevron" aria-hidden="true">
-        ›
-      </span>
-    </a>
+          <span class="puzzle-row-status">{setupStatus(p)}</span>
+        </>
+      }
+      href={`#/puzzle/${encodeURIComponent(p.id)}`}
+      testId="puzzle-card"
+    />
   );
 }
 
@@ -76,28 +80,33 @@ function YourPuzzles() {
 
   return (
     <section data-testid="your-puzzles">
-      <h2>Your puzzles</h2>
-      <button class="btn btn-primary btn-block" data-testid="new-puzzle" onClick={() => go('new')}>
-        <span aria-hidden="true">＋</span> New puzzle
-      </button>
+      <Button variant="filled" block testId="new-puzzle" onClick={() => go('new')}>
+        <Icon name="plus" size={20} /> New puzzle
+      </Button>
       {projects === null && <p class="muted small">Loading…</p>}
       {projects?.length === 0 && <p class="muted small">No puzzles yet. Tap "New puzzle" to start your first one.</p>}
-      <div class="puzzle-list">
-        {projects?.map((p) => (
-          <PuzzleCard key={p.id} p={p} />
-        ))}
-      </div>
-      {note && (
-        <div class="notice notice-good" data-testid="import-done">
-          {note}
+      {projects && projects.length > 0 && (
+        <div class="home-puzzles">
+          <ListSection header="Your puzzles">
+            {projects.map((p) => (
+              <PuzzleRow key={p.id} p={p} />
+            ))}
+          </ListSection>
         </div>
+      )}
+      {note && (
+        <Callout kind="good" testId="import-done">
+          {note}
+        </Callout>
       )}
       {error && (
-        <div class="notice notice-bad" role="alert" data-testid="import-error">
+        <Callout kind="bad" role="alert" testId="import-error">
           {error}
-        </div>
+        </Callout>
       )}
-      <label class={`btn btn-small file-btn${importing ? ' is-busy' : ''}`} data-testid="import-backup">
+      {/* A label, so a tap anywhere on it opens the file picker (the input inside is hidden). */}
+      <label class={`btn btn-plain btn-small file-btn home-import${importing ? ' is-busy' : ''}`} data-testid="import-backup">
+        <Icon name="download" size={20} />
         {importing ? 'Importing…' : 'Import a backup'}
         <input ref={input} class="hidden-input" type="file" data-testid="import-file" disabled={importing} onChange={() => void onImport()} />
       </label>
@@ -112,21 +121,18 @@ export function HomeScreen() {
   const tester = settings.testerMode.value;
   return (
     <main class="screen">
-      <div class="topbar">
-        <h1>Puzzle Lens</h1>
-        <TestButton />
-      </div>
+      <NavBar title="Puzzle Lens" large back={false} />
 
       {!isStandalone.value && (
-        <div class="notice notice-warn" data-testid="install-banner">
-          <strong>Install first, then start your puzzle there.</strong>
-          <p class="small">
+        <Callout kind="warn" icon={<Icon name="share" />} title="Install first, then start your puzzle there." testId="install-banner">
+          <p>
             You're in a Safari tab. Puzzle data saved here is <em>not</em> shared with the Home Screen app, and Safari may delete it after 7 days without a
             visit.
           </p>
           <ol class="steps small">
             <li>
-              Tap the <strong>Share</strong> button (square with an arrow). If you don't see it, tap <strong>⋯</strong> first.
+              Tap the <strong>Share</strong> button (square with an arrow). If you don't see it, tap{' '}
+              <Icon name="more-horizontal" size={18} class="icon-inline" label="⋯ (More)" /> first.
             </li>
             <li>
               Scroll down (tap <strong>View More</strong> if you see it) and tap <strong>Add to Home Screen</strong>. If there's an{' '}
@@ -136,96 +142,67 @@ export function HomeScreen() {
               Open <strong>Puzzle Lens</strong> from your Home Screen.
             </li>
           </ol>
-          <a class="btn btn-small" href="#/help">
+          <a class="btn btn-small callout-action callout-link" href="#/help">
             Full setup guide
           </a>
-        </div>
+        </Callout>
       )}
 
       {memoryResultWaiting ? (
-        <div class="notice notice-good" data-testid="memory-result-waiting">
-          <p style={{ marginTop: 0 }}>The memory test finished — open Device check to see the result.</p>
-          <a class="btn btn-small" href="#/device">
+        <Callout kind="good" testId="memory-result-waiting">
+          <p>The memory test finished — open Device check to see the result.</p>
+          <a class="btn btn-small callout-action callout-link" href="#/device">
             Open Device check
           </a>
-        </div>
+        </Callout>
       ) : (
         previousEndedUnexpectedly.value && (
-          <div class="notice notice-bad" data-testid="crash-notice">
+          <Callout kind="bad" testId="crash-notice">
             The last visit may have ended unexpectedly: iOS may have closed the app, for example if it used too much memory. This is noted in the log and goes
             into the next report automatically.
-          </div>
+          </Callout>
         )
       )}
 
       <YourPuzzles />
 
-      <h2>Tools</h2>
-      <div class="tiles">
-        {/* The testing tools: only in Tester mode (Settings). */}
-        {tester && (
-          <>
-            <a class="tile tile-wide" href="#/live" data-testid="tool-live">
-              <span class="tile-icon" aria-hidden="true">
-                📷
-              </span>
-              <span>
-                Live camera
-                <div class="tile-sub">Camera, Snap and the speed display</div>
-              </span>
-            </a>
-            <a class="tile" href="#/device" data-testid="tool-device">
-              <span class="tile-icon" aria-hidden="true">
-                🩺
-              </span>
-              <span>
-                Device check
-                <div class="tile-sub">What your iPhone can do</div>
-              </span>
-            </a>
-            <a class="tile" href="#/report" data-testid="tool-report">
-              <span class="tile-icon" aria-hidden="true">
-                📦
-              </span>
-              <span>
-                Send report
-                <div class="tile-sub">For when something goes wrong</div>
-              </span>
-            </a>
-          </>
-        )}
-        <a class="tile" href="#/help">
-          <span class="tile-icon" aria-hidden="true">
-            🧭
-          </span>
-          <span>
-            Setup guide
-            <div class="tile-sub">Step by step</div>
-          </span>
-        </a>
-        <a class="tile" href="#/settings">
-          <span class="tile-icon" aria-hidden="true">
-            ⚙️
-          </span>
-          <span>
-            Settings
-            <div class="tile-sub">Units, camera, data</div>
-          </span>
-        </a>
-      </div>
+      {/* The testing tools: only in Tester mode (Settings). */}
+      {tester && (
+        <ListSection header="Diagnostics" footer="Shown while Tester mode is on (Settings)." testId="home-diagnostics">
+          <ListRow
+            icon={<Icon name="camera" />}
+            tone="accent"
+            title="Live camera"
+            subtitle="Camera, Snap and the speed display"
+            href="#/live"
+            testId="tool-live"
+          />
+          <ListRow
+            icon={<Icon name="stethoscope" />}
+            tone="good"
+            title="Device check"
+            subtitle="What your iPhone can do"
+            href="#/device"
+            testId="tool-device"
+          />
+          <ListRow
+            icon={<Icon name="send" />}
+            tone="accent"
+            title="Send report"
+            subtitle="For when something goes wrong"
+            href="#/report"
+            testId="tool-report"
+          />
+          <ListRow icon={<Icon name="info" />} title="Activity log" subtitle="What the app did, and its errors" href="#/log" testId="tool-log" />
+        </ListSection>
+      )}
 
-      <p class="muted small" style={{ marginTop: '24px' }}>
-        Version {APP_VERSION}
-        {tester && (
-          <>
-            {' '}
-            ·{' '}
-            <a href="#/log" style={{ color: 'inherit' }} data-testid="tool-log">
-              Activity log
-            </a>
-          </>
-        )}
-      </p>
+      <ListSection>
+        <ListRow icon={<Icon name="compass" />} tone="accent" title="Setup guide" subtitle="Step by step" href="#/help" testId="tool-help" />
+        <ListRow icon={<Icon name="settings" />} title="Settings" subtitle="Units, camera, data" href="#/settings" testId="tool-settings" />
+      </ListSection>
+
+      <p class="muted small home-version">Version {APP_VERSION}</p>
     </main>
   );
 }

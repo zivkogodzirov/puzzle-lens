@@ -2,15 +2,14 @@
  * Each piece's state for the table view and the progress line (PLAN §5 "Overlay state colours"):
  * found (grey), shape read (violet), its spot on the box known (green); and, for a piece whose known
  * spot is on the picture's edge, which side of the frame it belongs to (brief §7 "Border").
- * STATE_COLOUR is for drawing on photos and the live camera (dark around them in both themes); dots on the
- * page itself use the CSS classes state-found / state-shape / state-placed, which follow light and dark mode.
+ * The colours are tokens: on photos and the live camera OVERLAY_STATE (src/app/overlay.ts, from --ov-found /
+ * --ov-shape / --ov-placed); dots on the page itself use the CSS classes state-found / state-shape /
+ * state-placed, which follow light and dark mode. (STATE_COLOUR, no longer drawn anywhere, went in M9 part 2.)
  */
 import type { SpotChoice } from '../cv/openSpots';
 import type { PieceRow } from './types';
 
 export type PieceState = 'found' | 'shape' | 'placed';
-
-export const STATE_COLOUR: Record<PieceState, string> = { found: '#9aa7b4', shape: '#b4a5ff', placed: '#3ccf7a' };
 
 /** The spot is known: the piece fits a spot and it is Strong or Likely. */
 export function spotKnown(choice: SpotChoice | null | undefined): boolean {

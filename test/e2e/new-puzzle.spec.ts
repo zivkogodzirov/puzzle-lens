@@ -228,8 +228,10 @@ test('new puzzle: steps 0–4, resume after reload, puzzle screen, backup export
   expect(manifest.blobs.map((b: { kind: string }) => b.kind).sort()).toEqual(['box-photo', 'box-rectified']);
 
   // Delete it.
+  // Asked in an action sheet (M9 part 2).
   await page.getByTestId('delete-puzzle').click();
-  await page.getByTestId('delete-confirm').click();
+  await expect(page.getByTestId('confirm-sheet')).toContainText('Delete “Lighthouse”?');
+  await page.getByTestId('confirm-sheet-ok').click();
   await expect(page.getByTestId('your-puzzles')).toContainText('No puzzles yet');
   expect(await readSetting(page, `printScale:${projectId}`)).toBeNull();
 

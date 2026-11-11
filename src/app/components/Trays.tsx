@@ -16,6 +16,9 @@ import { snapsOfBatch } from '../../project/batches';
 import type { PieceRow, Project, SnapRow } from '../../project/types';
 import { logError, logInfo } from '../../log/logger';
 import { HALO, HALO_SCALE } from '../overlay';
+import { OV } from '../tokens';
+import { Icon } from '../ui/icons';
+import { Callout } from '../ui/Callout';
 
 /** Pieces whose colours the groups need (src/project/groups.ts makeGroups): those on the table. */
 const isOnTable = (p: PieceRow) => p.status === 'table';
@@ -106,7 +109,7 @@ export function TraysPanel({
         groups.groups.map((x) => x.lab),
       );
       logInfo('trays', `${n} pieces went into tray ${g.letter}`);
-      setNote(`${n} ${n === 1 ? 'piece' : 'pieces'} in tray ${g.letter} ✓`);
+      setNote(`${n} ${n === 1 ? 'piece' : 'pieces'} in tray ${g.letter}.`);
       onSelect(null);
       onChanged();
     } catch (err) {
@@ -177,9 +180,9 @@ export function TraysPanel({
         </p>
       )}
       {note && (
-        <div class="notice notice-good small" role="status" data-testid="tray-note">
+        <Callout kind="good" icon={<Icon name="check" />} role="status" testId="tray-note">
           {note}
-        </div>
+        </Callout>
       )}
       {g && (
         <div class="tray-detail" data-testid="tray-detail">
@@ -191,7 +194,7 @@ export function TraysPanel({
             <button class="btn" data-testid="tray-photo" disabled={!members.length} onClick={() => setPhoto(true)}>
               Show on my table photo
             </button>
-            <button class="btn btn-primary" data-testid="tray-move" disabled={busy || !members.length} onClick={() => void move()}>
+            <button class="btn btn-filled" data-testid="tray-move" disabled={busy || !members.length} onClick={() => void move()}>
               These {members.length} went into tray {g.letter}
             </button>
           </div>
@@ -212,7 +215,7 @@ export function TraysPanel({
         </div>
       )}
       <button class="btn btn-block" data-testid="print-tray-labels" disabled={!groups} onClick={() => go('trays', project.id)}>
-        🖨 Print tray labels
+        <Icon name="printer" size={20} /> Print tray labels
       </button>
       {photo && g && <TablePhoto projectId={project.id} pieces={members} colour={g.hex} title={`Group ${g.letter}`} onClose={() => setPhoto(false)} />}
     </div>
@@ -398,15 +401,15 @@ export function TablePhoto({
           {mode === 'lit' && (
             <defs>
               <mask id="lit">
-                <rect x={0} y={0} width={v.snap.width} height={v.snap.height} fill="#fff" />
+                <rect x={0} y={0} width={v.snap.width} height={v.snap.height} fill={OV.maskShow} />
                 {v.outlines.map((o) => (
-                  <polygon key={o.id} points={pts(o.pts)} fill="#000" stroke="#000" stroke-width={v.view[2] / 60} />
+                  <polygon key={o.id} points={pts(o.pts)} fill={OV.maskHide} stroke={OV.maskHide} stroke-width={v.view[2] / 60} />
                 ))}
               </mask>
             </defs>
           )}
           <image href={v.url} x={0} y={0} width={v.snap.width} height={v.snap.height} onClick={(e) => onPhotoTap(e as unknown as MouseEvent)} />
-          {mode === 'lit' && <rect x={0} y={0} width={v.snap.width} height={v.snap.height} fill="#000" fill-opacity="0.6" mask="url(#lit)" />}
+          {mode === 'lit' && <rect x={0} y={0} width={v.snap.width} height={v.snap.height} fill={OV.dim} fill-opacity="0.6" mask="url(#lit)" />}
           {/* Every outline on a dark halo, all halos first (M9 part 1: pale lines vanish on a cream table). */}
           {v.outlines.map((o) => (
             <polygon
@@ -425,7 +428,7 @@ export function TablePhoto({
             <polygon
               key={o.id}
               points={pts(o.pts)}
-              fill={mode === 'all' ? 'rgba(0,0,0,0.001)' : 'none'}
+              fill={mode === 'all' ? OV.hit : 'none'}
               stroke={o.colour}
               stroke-width={tapped === o.id ? 7 : 4}
               vector-effect="non-scaling-stroke"
@@ -447,7 +450,7 @@ export function TablePhoto({
         <div class="row table-photo-info" data-testid="table-photo-info">
           <span class="grow">{infoOf(tappedPiece)}</span>
           {onPick && (
-            <button class="btn btn-small btn-primary" data-testid="table-photo-pick" onClick={() => onPick(tappedPiece)}>
+            <button class="btn btn-small btn-filled" data-testid="table-photo-pick" onClick={() => onPick(tappedPiece)}>
               Show where it goes
             </button>
           )}

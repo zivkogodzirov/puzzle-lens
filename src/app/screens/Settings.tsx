@@ -1,36 +1,53 @@
+import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { TopBar } from '../components/TopBar';
 import { settings, type LiveFormat, type Units } from '../settings';
 import { APP_VERSION, isStandalone, requestPersistence } from '../env';
 import { eraseAllData } from '../../db/db';
+import { ListRow, ListSection } from '../ui/List';
+import { Segmented } from '../ui/Segmented';
+import { confirmAction } from '../ui/ActionSheet';
+import { Icon } from '../ui/icons';
 
-function Segmented<T extends string | number>({
-  value,
-  options,
-  onChange,
-  label,
-  testId,
+/**
+ * One setting chosen with a segmented control, laid out like a grouped-list section: a header above
+ * (a heading, so VoiceOver can jump to it) and a footer sentence below.
+ */
+function SegmentGroup({
+  header,
+  footer,
+  footerTestId,
+  children,
 }: {
-  value: T;
-  options: Array<[T, string]>;
-  onChange: (v: T) => void;
-  label?: string;
-  testId?: string;
+  header: string;
+  footer?: ComponentChildren;
+  footerTestId?: string;
+  children: ComponentChildren;
 }) {
   return (
-    <div class="segmented" role="group" aria-label={label}>
-      {options.map(([v, label]) => (
-        <button key={String(v)} aria-pressed={value === v} data-testid={testId ? `${testId}-${String(v)}` : undefined} onClick={() => onChange(v)}>
-          {label}
-        </button>
-      ))}
-    </div>
+    <section class="list-section settings-group">
+      <h3 class="list-header">{header}</h3>
+      <div class="settings-control">{children}</div>
+      {footer && (
+        <p class="list-footer" data-testid={footerTestId}>
+          {footer}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** "Yes" with a check mark (the mark is decoration; the word says it). */
+function Done({ children }: { children: ComponentChildren }) {
+  return (
+    <span class="settings-done">
+      {children} <Icon name="check" size={16} class="icon-inline" />
+    </span>
   );
 }
 
 export function SettingsScreen() {
   const [storage, setStorage] = useState<{ usage?: number; quota?: number; persisted?: boolean } | null>(null);
-  const [confirmErase, setConfirmErase] = useState(false);
 
   const refreshStorage = async () => {
     try {
@@ -45,97 +62,127 @@ export function SettingsScreen() {
     void refreshStorage();
   }, []);
 
+  const erase = async () => {
+    const ok = await confirmAction({
+      title: 'Erase all Puzzle Lens data?',
+      message: "This deletes your puzzles, settings, logs, device checks and saved photos on this iPhone. It can't be undone.",
+      confirmLabel: 'Erase everything',
+    });
+    if (!ok) return;
+    await eraseAllData();
+    location.reload();
+  };
+
   const tester = settings.testerMode.value;
   return (
     <main class="screen">
       <TopBar title="Settings" />
 
-      <h2>Tester mode</h2>
-      <Segmented<'on' | 'off'>
-        label="Tester mode"
-        testId="tester"
-        value={tester ? 'on' : 'off'}
-        options={[
-          ['on', 'On'],
-          ['off', 'Off'],
-        ]}
-        onChange={(v) => (settings.testerMode.value = v === 'on')}
-      />
-      <p class="muted small" data-testid="tester-explained">
-        {tester
-          ? 'On while you test the app: the 🧪 test steps, Device check, Send report, the Activity log, the Live camera and extra numbers (tracking speed, phone height and tilt) are shown.'
-          : 'Off: the testing tools and extra numbers are hidden for a cleaner look. Your puzzles and settings stay as they are. Turn it on again here at any time.'}
-      </p>
+      <SegmentGroup
+        header="Tester mode"
+        footerTestId="tester-explained"
+        footer={
+          tester ? (
+            <>
+              On while you test the app: the <Icon name="flask-conical" size={16} class="icon-inline" /> test steps, Device check, Send report, the Activity
+              log, the Live camera and extra numbers (tracking speed, phone height and tilt) are shown.
+            </>
+          ) : (
+            'Off: the testing tools and extra numbers are hidden for a cleaner look. Your puzzles and settings stay as they are. Turn it on again here at any time.'
+          )
+        }
+      >
+        <Segmented<'on' | 'off'>
+          label="Tester mode"
+          testId="tester"
+          value={tester ? 'on' : 'off'}
+          options={[
+            ['on', 'On'],
+            ['off', 'Off'],
+          ]}
+          onChange={(v) => (settings.testerMode.value = v === 'on')}
+        />
+      </SegmentGroup>
+      {tester && (
+        <ListSection>
+          <ListRow icon={<Icon name="eye" />} tone="accent" title="Components (for testing)" href="#/ui" testId="settings-components" />
+        </ListSection>
+      )}
 
-      <h2>Accuracy</h2>
-      <a class="btn btn-block" href="#/accuracy" data-testid="settings-accuracy">
-        📊 How often is the app right?
-      </a>
-      <p class="muted small">From your ✓ Fits / ✗ Doesn't fit answers.</p>
+      <ListSection header="Accuracy" footer="From your ✓ Fits / ✗ Doesn't fit answers.">
+        <ListRow icon={<Icon name="bar-chart" />} tone="accent" title="How often is the app right?" href="#/accuracy" testId="settings-accuracy" />
+      </ListSection>
 
-      <h2>Units</h2>
-      <Segmented<Units>
-        value={settings.units.value}
-        options={[
-          ['mm', 'mm'],
-          ['cm', 'cm'],
-          ['in', 'inches'],
-        ]}
-        onChange={(v) => (settings.units.value = v)}
-      />
-      <p class="muted small">Only changes how sizes are shown.</p>
+      <SegmentGroup header="Units" footer="Only changes how sizes are shown.">
+        <Segmented<Units>
+          label="Units"
+          testId="units"
+          value={settings.units.value}
+          options={[
+            ['mm', 'mm'],
+            ['cm', 'cm'],
+            ['in', 'inches'],
+          ]}
+          onChange={(v) => (settings.units.value = v)}
+        />
+      </SegmentGroup>
 
-      <h2>Live camera format</h2>
-      <Segmented<LiveFormat>
-        value={settings.liveFormat.value}
-        options={[
-          ['auto-4x3', 'Full sensor 4:3'],
-          ['4k', '4K'],
-          ['1080p', '1080p'],
-        ]}
-        onChange={(v) => (settings.liveFormat.value = v)}
-      />
-      <p class="muted small">"Full sensor 4:3" is recommended: photos are then taken without pausing the camera. Applies the next time the camera starts.</p>
+      <SegmentGroup
+        header="Live camera format"
+        footer={'"Full sensor 4:3" is recommended: photos are then taken without pausing the camera. Applies the next time the camera starts.'}
+      >
+        <Segmented<LiveFormat>
+          label="Live camera format"
+          testId="live-format"
+          value={settings.liveFormat.value}
+          options={[
+            ['auto-4x3', 'Full sensor 4:3'],
+            ['4k', '4K'],
+            ['1080p', '1080p'],
+          ]}
+          onChange={(v) => (settings.liveFormat.value = v)}
+        />
+      </SegmentGroup>
 
-      <h2>Camera lens</h2>
-      <div class="row">
-        <span>{settings.cameraDeviceId.value ? 'A lens you picked on the Live screen' : 'Automatic (recommended)'}</span>
-        {settings.cameraDeviceId.value && (
-          <button class="btn btn-small" data-testid="lens-automatic" onClick={() => (settings.cameraDeviceId.value = '')}>
-            Use automatic
-          </button>
-        )}
-      </div>
-      <p class="muted small">Automatic uses the main back camera, which keeps sizes steady. Applies the next time the camera starts.</p>
+      <ListSection header="Camera lens" footer="Automatic uses the main back camera, which keeps sizes steady. Applies the next time the camera starts.">
+        <ListRow title={settings.cameraDeviceId.value ? 'A lens you picked on the Live screen' : 'Automatic (recommended)'} />
+        {settings.cameraDeviceId.value && <ListRow title="Use automatic" testId="lens-automatic" onClick={() => (settings.cameraDeviceId.value = '')} />}
+      </ListSection>
 
-      <h2>Scan mode</h2>
-      <Segmented<'full' | 'quick'>
-        value={settings.scanMode.value}
-        options={[
-          ['full', 'Full (overview + close-ups)'],
-          ['quick', 'Quick (one overview photo)'],
-        ]}
-        onChange={(v) => (settings.scanMode.value = v)}
-      />
-      <p class="muted small">
-        Quick finds, colours and places the pieces from one photo; their shapes (corner, edge) are read less surely. Full adds close-ups (2×) for the shapes.
-        You can always switch to close-ups on the scan screen.
-      </p>
+      <SegmentGroup
+        header="Scan mode"
+        footer="Quick finds, colours and places the pieces from one photo; their shapes (corner, edge) are read less surely. Full adds close-ups (2×) for the shapes. You can always switch to close-ups on the scan screen."
+      >
+        <Segmented<'full' | 'quick'>
+          label="Scan mode"
+          testId="scan-mode"
+          value={settings.scanMode.value}
+          options={[
+            ['full', 'Full (overview + close-ups)'],
+            ['quick', 'Quick (one overview photo)'],
+          ]}
+          onChange={(v) => (settings.scanMode.value = v)}
+        />
+      </SegmentGroup>
 
-      <h2>Live tracking speed</h2>
-      <Segmented<30 | 15>
-        value={settings.trackingFps.value}
-        options={[
-          [30, 'Smooth (30/s)'],
-          [15, 'Battery saver (15/s)'],
-        ]}
-        onChange={(v) => (settings.trackingFps.value = v)}
-      />
+      <SegmentGroup header="Live tracking speed">
+        <Segmented<30 | 15>
+          label="Live tracking speed"
+          testId="tracking-fps"
+          value={settings.trackingFps.value}
+          options={[
+            [30, 'Smooth (30/s)'],
+            [15, 'Battery saver (15/s)'],
+          ]}
+          onChange={(v) => (settings.trackingFps.value = v)}
+        />
+      </SegmentGroup>
 
       {tester && (
-        <>
-          <h2>Performance display</h2>
+        <SegmentGroup header="Performance display" footer="On the Live camera screen (also its button with a pulse line).">
           <Segmented<'on' | 'off'>
+            label="Performance display"
+            testId="hud"
             value={settings.showHud.value ? 'on' : 'off'}
             options={[
               ['on', 'Show'],
@@ -143,64 +190,31 @@ export function SettingsScreen() {
             ]}
             onChange={(v) => (settings.showHud.value = v === 'on')}
           />
-          <p class="muted small">On the Live camera screen (also its HUD button).</p>
-        </>
+        </SegmentGroup>
       )}
 
-      <h2>Storage</h2>
-      <div class="card">
-        <dl class="kv">
-          <dt>Running as</dt>
-          <dd>{isStandalone.value ? 'Home Screen app ✓' : 'Safari tab (install recommended)'}</dd>
-          <dt>Used</dt>
-          <dd>{storage?.usage != null ? `${(storage.usage / 1048576).toFixed(1)} MB` : '—'}</dd>
-          <dt>Available</dt>
-          <dd>{storage?.quota != null ? `${(storage.quota / 1073741824).toFixed(1)} GB` : '—'}</dd>
-          <dt>Protected from clean-up</dt>
-          <dd>{storage?.persisted == null ? '—' : storage.persisted ? 'Yes ✓' : 'Not yet'}</dd>
-        </dl>
+      <ListSection header="Storage" testId="settings-storage">
+        <ListRow title="Running as" value={isStandalone.value ? <Done>Home Screen app</Done> : 'Safari tab (install recommended)'} />
+        <ListRow title="Used" value={storage?.usage != null ? `${(storage.usage / 1048576).toFixed(1)} MB` : '—'} />
+        <ListRow title="Available" value={storage?.quota != null ? `${(storage.quota / 1073741824).toFixed(1)} GB` : '—'} />
+        <ListRow title="Protected from clean-up" value={storage?.persisted == null ? '—' : storage.persisted ? <Done>Yes</Done> : 'Not yet'} />
         {!storage?.persisted && (
-          <button
-            class="btn btn-small"
-            style={{ marginTop: '10px' }}
+          <ListRow
+            title={<span class="settings-action">Ask iPhone to protect my data</span>}
+            testId="protect-data"
             onClick={async () => {
               await requestPersistence();
               await refreshStorage();
             }}
-          >
-            Ask iPhone to protect my data
-          </button>
+          />
         )}
-      </div>
+      </ListSection>
 
-      <h2>Erase</h2>
-      {!confirmErase ? (
-        <button class="btn btn-danger btn-small" onClick={() => setConfirmErase(true)}>
-          Erase all Puzzle Lens data…
-        </button>
-      ) : (
-        <div class="notice notice-bad">
-          <p>This deletes settings, logs, device checks and saved photos on this iPhone. It can't be undone.</p>
-          <div class="row">
-            <button
-              class="btn btn-danger btn-small"
-              onClick={async () => {
-                await eraseAllData();
-                location.reload();
-              }}
-            >
-              Yes, erase everything
-            </button>
-            <button class="btn btn-small" onClick={() => setConfirmErase(false)}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      <ListSection header="Erase" footer="Deletes your puzzles, settings, logs, device checks and saved photos on this iPhone. You're asked first.">
+        <ListRow title="Erase all Puzzle Lens data…" destructive testId="erase-all" onClick={() => void erase()} />
+      </ListSection>
 
-      <p class="muted small" style={{ marginTop: '28px' }}>
-        Puzzle Lens {APP_VERSION}
-      </p>
+      <p class="muted small settings-version">Puzzle Lens {APP_VERSION}</p>
     </main>
   );
 }

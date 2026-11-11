@@ -1,5 +1,6 @@
 import type { SnapRecord } from '../../camera/snap';
 import { mb } from '../../perf/hud';
+import { Callout } from '../ui/Callout';
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
@@ -21,14 +22,14 @@ export function SnapSheet({ record, onClose, onUseSystemCamera }: { record: Snap
         </p>
       )}
       {cameraFailed && onUseSystemCamera && (
-        <button class="btn btn-primary" data-testid="use-system-camera" onClick={onUseSystemCamera}>
+        <button type="button" class="btn btn-filled" data-testid="use-system-camera" onClick={onUseSystemCamera}>
           Use the iPhone camera instead
         </button>
       )}
       {saveWarning && (
-        <p class="notice notice-warn small" data-testid="snap-save-warning">
+        <Callout kind="warn" testId="snap-save-warning">
           {saveWarning}
-        </p>
+        </Callout>
       )}
       {previewUrl && <img src={previewUrl} alt="Last photo" />}
       {stats && (
@@ -38,7 +39,13 @@ export function SnapSheet({ record, onClose, onUseSystemCamera }: { record: Snap
             {stats.width} × {stats.height} ({mp.toFixed(1)} MP)
           </dd>
           <dt>Taken with</dt>
-          <dd>{snap.method === 'takePhoto' ? 'the app (ImageCapture)' : snap.method === 'grabFrame' ? 'the app (full-size live picture)' : "iPhone's camera screen"}</dd>
+          <dd>
+            {snap.method === 'takePhoto'
+              ? 'the app (ImageCapture)'
+              : snap.method === 'grabFrame'
+                ? 'the app (full-size live picture)'
+                : "iPhone's camera screen"}
+          </dd>
           {snap.requested && (
             <>
               <dt>Asked for</dt>

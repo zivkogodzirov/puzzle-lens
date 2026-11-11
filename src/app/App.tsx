@@ -15,6 +15,8 @@ import { TestSteps } from './components/TestSteps';
 import { AccuracyScreen } from './screens/Accuracy';
 import { ProgressScreen } from './screens/Progress';
 import { useShell } from './shell';
+import { UiGallery } from './screens/UiGallery';
+import { UiHost } from './ui/Host';
 
 export function App() {
   const r = route.value;
@@ -36,6 +38,8 @@ export function App() {
       {r === 'trays' && <TrayLabelsScreen />}
       {r === 'accuracy' && <AccuracyScreen />}
       {r === 'progress' && <ProgressScreen />}
+      {r === 'ui' && <UiGallery />}
+      <UiHost />
       <TestSteps />
     </div>
   );

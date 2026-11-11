@@ -9,6 +9,8 @@ import { Hud } from '../components/Hud';
 import { MarkerOverlay } from '../components/MarkerOverlay';
 import { SnapSheet } from '../components/SnapSheet';
 import { TestButton } from '../components/TestSteps';
+import { IconButton } from '../ui/Button';
+import { Icon } from '../ui/icons';
 
 export function LiveScreen() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -96,15 +98,17 @@ export function LiveScreen() {
       {live && <MarkerOverlay video={videoEl} />}
 
       <div class="live-top">
-        <button
-          class="chip"
+        <IconButton
+          label="Back to Home"
+          class="btn-cam"
+          testId="live-home"
           onClick={() => {
             stopCamera();
             go('home');
           }}
         >
-          ‹ Home
-        </button>
+          <Icon name="chevron-left" />
+        </IconButton>
         <span class="title">
           {state === 'live' ? (pumpMode.value === 'off' ? 'Connecting…' : 'Live') : state === 'starting' ? 'Starting camera…' : 'Camera'}
         </span>
@@ -112,7 +116,7 @@ export function LiveScreen() {
           <select
             aria-label="Camera lens"
             data-testid="lens-select"
-            style={{ width: 'auto', maxWidth: '40vw', minHeight: '40px', background: 'rgba(0,0,0,0.5)', color: '#fff' }}
+            style={{ width: 'auto', maxWidth: '40vw', minHeight: '40px', background: 'var(--cam-scrim)', color: 'var(--white)' }}
             value={settings.cameraDeviceId.value}
             onChange={(e) => {
               const id = (e.currentTarget as HTMLSelectElement).value;
@@ -129,9 +133,15 @@ export function LiveScreen() {
           </select>
         )}
         {settings.testerMode.value && (
-          <button class="chip" aria-pressed={settings.showHud.value} onClick={() => (settings.showHud.value = !settings.showHud.value)}>
-            HUD
-          </button>
+          <IconButton
+            label="Performance display"
+            class="btn-cam"
+            testId="hud-toggle"
+            aria-pressed={settings.showHud.value}
+            onClick={() => (settings.showHud.value = !settings.showHud.value)}
+          >
+            <Icon name="activity" />
+          </IconButton>
         )}
         <TestButton variant="camera" />
       </div>
@@ -165,7 +175,7 @@ export function LiveScreen() {
                   : 'Point the camera straight down at your table. iPhone will ask for camera permission.'}
               </p>
               {cameraError.value && <p class="bad">{cameraError.value}</p>}
-              <button class="btn btn-primary" data-testid="start-camera" onClick={() => void startCamera()}>
+              <button class="btn btn-filled" data-testid="start-camera" onClick={() => void startCamera()}>
                 {state === 'paused' ? 'Resume camera' : 'Start camera'}
               </button>
             </>
@@ -186,8 +196,10 @@ export function LiveScreen() {
             </>
           )}
           {live && info?.capabilities.torch && (
-            <button
-              class="chip"
+            <IconButton
+              label="Light"
+              class="btn-cam"
+              testId="torch"
               aria-pressed={torchOn}
               onClick={() => {
                 const on = !torchOn;
@@ -195,8 +207,8 @@ export function LiveScreen() {
                 void setTorch(on);
               }}
             >
-              🔦
-            </button>
+              <Icon name="flashlight" />
+            </IconButton>
           )}
         </div>
         <button class="snap-btn" aria-label="Snap a full-resolution photo" data-testid="snap" disabled={snapBusy.value} onClick={onSnap} />

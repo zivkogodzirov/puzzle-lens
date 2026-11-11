@@ -4,7 +4,10 @@
  * the page to a Mac and print there.
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { TestButton } from '../components/TestSteps';
+import { StepNavBar } from '../components/StepNavBar';
+import { TopBar } from '../components/TopBar';
+import { Callout } from '../ui/Callout';
+import { Icon } from '../ui/icons';
 import { plural } from '../words';
 import { go, routeArg } from '../router';
 import { db } from '../../db/db';
@@ -13,27 +16,28 @@ import type { PieceRow, Project } from '../../project/types';
 import { shareOrDownload } from '../../report/share';
 import { useColourGroups } from '../components/Trays';
 import { logError, logInfo, logWarn } from '../../log/logger';
+import { PAPER } from '../tokens';
 
 const PER_PAGE = 6;
 const THUMBS = 8;
 
 export const LABEL_CSS = `
 .tl-pages { display: flex; flex-direction: column; gap: 16px; }
-.tl-page { background: #fff; color: #000; display: grid; grid-template-columns: 1fr; gap: 0; box-sizing: border-box; border-radius: 8px; overflow: hidden; }
-.tray-label { border: 1px dashed #999; padding: 4mm; box-sizing: border-box; display: flex; flex-direction: column; gap: 2.5mm; font-family: -apple-system, Helvetica, Arial, sans-serif; background: #fff; color: #000; }
+.tl-page { background: ${PAPER.bg}; color: ${PAPER.black}; display: grid; grid-template-columns: 1fr; gap: 0; box-sizing: border-box; border-radius: 8px; overflow: hidden; }
+.tray-label { border: 1px dashed ${PAPER.cut}; padding: 4mm; box-sizing: border-box; display: flex; flex-direction: column; gap: 2.5mm; font-family: -apple-system, Helvetica, Arial, sans-serif; background: ${PAPER.bg}; color: ${PAPER.black}; }
 .tl-head { display: flex; align-items: center; gap: 4mm; }
-.tl-letter { width: 24mm; height: 24mm; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16mm; font-weight: 800; line-height: 1; border: 0.4mm solid #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.tl-letter { width: 24mm; height: 24mm; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16mm; font-weight: 800; line-height: 1; border: 0.4mm solid ${PAPER.black}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .tl-title { font-size: 7mm; font-weight: 800; }
-.tl-sub { font-size: 3.2mm; color: #333; margin-top: 1mm; }
-.tl-swatch { height: 4mm; border-radius: 1mm; margin-top: 1.5mm; border: 0.3mm solid #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.tl-sub { font-size: 3.2mm; color: ${PAPER.text2}; margin-top: 1mm; }
+.tl-swatch { height: 4mm; border-radius: 1mm; margin-top: 1.5mm; border: 0.3mm solid ${PAPER.black}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .tl-thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5mm; }
-.tl-thumbs img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #eee; border-radius: 1mm; display: block; }
-.tl-foot { font-size: 2.8mm; color: #444; }
+.tl-thumbs img { width: 100%; aspect-ratio: 1; object-fit: contain; background: ${PAPER.thumb}; border-radius: 1mm; display: block; }
+.tl-foot { font-size: 2.8mm; color: ${PAPER.text3}; }
 @media print {
   @page { size: A4; margin: 8mm; }
-  html, body { background: #fff !important; }
+  html, body { background: ${PAPER.bg} !important; }
   .no-print, .banner { display: none !important; }
-  .app, .screen { padding: 0 !important; margin: 0 !important; max-width: none !important; background: #fff !important; }
+  .app, .screen { padding: 0 !important; margin: 0 !important; max-width: none !important; background: ${PAPER.bg} !important; }
   .tl-pages { gap: 0; }
   .tl-page { width: 194mm; grid-template-columns: 1fr 1fr; grid-auto-rows: 93mm; border-radius: 0; break-after: page; }
   .tl-page:last-child { break-after: auto; }
@@ -67,7 +71,8 @@ export function TrayLabelsScreen() {
   if (project === null)
     return (
       <main class="screen">
-        <div class="notice notice-bad">This puzzle is not on this iPhone.</div>
+        <TopBar title="Tray labels" />
+        <Callout kind="bad">This puzzle is not on this iPhone.</Callout>
         <button class="btn btn-primary btn-block" onClick={() => go('home')}>
           Back to my puzzles
         </button>
@@ -76,6 +81,7 @@ export function TrayLabelsScreen() {
   if (!project || !pieces)
     return (
       <main class="screen">
+        <TopBar title="Tray labels" back={{ label: 'Puzzle', route: 'puzzle', arg: id }} />
         <p class="muted">Loading…</p>
       </main>
     );
@@ -126,7 +132,7 @@ function Labels({ project, pieces }: { project: Project; pieces: PieceRow[] }) {
   };
   const send = () => {
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${project.name}: tray labels</title><style>${LABEL_CSS}
-body { margin: 0; padding: 12px; background: #ddd; }
+body { margin: 0; padding: 12px; background: ${PAPER.desk}; }
 .help { font: 14px -apple-system, Helvetica, Arial, sans-serif; margin: 0 0 12px; }
 @media print { .help { display: none; } body { padding: 0; } }</style></head><body>
 <p class="help"><strong>Puzzle Lens tray labels.</strong> Print this page (File › Print, or ⌘P) on A4. Cut along the dashed lines.</p>
@@ -150,17 +156,12 @@ ${pagesRef.current?.outerHTML ?? ''}</body></html>`;
   return (
     <main class="screen tray-labels" data-testid="tray-labels">
       <style>{LABEL_CSS}</style>
+      {/* Back to the puzzle, under its name. The bar has the no-print class: on paper only the labels show, as before. */}
+      <StepNavBar title="Tray labels" backLabel={project.name} onBack={() => go('puzzle', project.id)} backTestId="labels-back" noPrint />
       <div class="no-print">
-        <div class="topbar">
-          <button class="btn btn-back" data-testid="labels-back" onClick={() => go('puzzle', project.id)}>
-            ‹ Back
-          </button>
-          <h1>Tray labels</h1>
-          <TestButton />
-        </div>
         <div class="row two-up">
           <button class="btn btn-primary" data-testid="print-labels" disabled={!ready} onClick={print}>
-            🖨️ Print
+            <Icon name="printer" size={20} /> Print
           </button>
           <button class="btn" data-testid="send-labels" disabled={!ready} onClick={send}>
             Send to my Mac
@@ -172,18 +173,18 @@ ${pagesRef.current?.outerHTML ?? ''}</body></html>`;
           {groups?.fixed ? '' : ' The groups can still change until you put pieces in a tray: print after the first tray is filled to be sure.'}
         </p>
         {printError && (
-          <div class="notice notice-bad" role="alert">
+          <Callout kind="bad" role="alert">
             {printError}
-          </div>
+          </Callout>
         )}
         {shareNote && (
-          <div class="notice notice-warn" role="alert">
+          <Callout kind="warn" role="alert">
             The Share menu didn't open.{' '}
             <a href={shareNote.url} download={shareNote.name} data-testid="download-labels">
               Download the labels
             </a>{' '}
             instead: the file goes to the Files app, in Downloads.
-          </div>
+          </Callout>
         )}
         {!ready && <p class="muted">Preparing the labels…</p>}
       </div>

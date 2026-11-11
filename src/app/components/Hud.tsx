@@ -2,6 +2,7 @@ import { hud, mb } from '../../perf/hud';
 import { cameraInfo } from '../../camera/camera';
 import { pumpMode } from '../../camera/framePump';
 import { wakeLockActive } from '../../camera/wakeLock';
+import { Icon } from '../ui/icons';
 
 const STAGE_LABELS: Record<string, string> = {
   read: 'read',
@@ -55,7 +56,11 @@ export function Hud() {
       <div>
         <b>screen awake</b> {wakeLockActive.value ? 'yes' : 'no'}
       </div>
-      {hud.lastError.value && <div class="bad">⚠ {hud.lastError.value}</div>}
+      {hud.lastError.value && (
+        <div class="bad hud-error" data-testid="hud-error">
+          <Icon name="alert-triangle" size={14} /> {hud.lastError.value}
+        </div>
+      )}
     </div>
   );
 }

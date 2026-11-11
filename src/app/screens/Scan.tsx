@@ -1,4 +1,5 @@
 import { settings } from '../settings';
+import { Fragment } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { go, routeArg } from '../router';
 import { readerWorker, restartReader, trackerWorker } from '../workers';
@@ -25,6 +26,8 @@ import { CoverageMap, PhotoResult, type OutlineFlag } from '../components/ScanMa
 import type { FinishedCheck, FreeScanReply } from '../../shared/apis';
 import { logError, logInfo } from '../../log/logger';
 import { errorWords } from './Puzzle';
+import { Callout } from '../ui/Callout';
+import { Icon } from '../ui/icons';
 
 const SCAN_TIMEOUT_MS = 120_000;
 
@@ -139,6 +142,25 @@ async function rescaleCatalog(projectId: string, k: number): Promise<void> {
  * close-ups (2×) cover the table for shape reading. Each photo is checked, placed on the table and
  * merged into the catalog; grey outlines show what has been found.
  */
+/**
+ * One line of the result note. A "✓" in it ("Coin found ✓") is drawn as the check icon (M9 part 2); one in
+ * quotes names a button ("✓ in the puzzle") and stays text.
+ */
+function NoteLine({ text }: { text: string }) {
+  const parts = text.split(/(?<!")✓/);
+  if (parts.length === 1) return <p>{text}</p>;
+  return (
+    <p>
+      {parts.map((t, i) => (
+        <Fragment key={i}>
+          {i > 0 && <Icon name="check" size={16} class="inline-icon" />}
+          {t}
+        </Fragment>
+      ))}
+    </p>
+  );
+}
+
 export function ScanScreen() {
   const id = routeArg.value;
   const [project, setProject] = useState<Project | null | undefined>(undefined);
@@ -314,8 +336,10 @@ export function ScanScreen() {
     return (
       <main class="screen" data-testid="scan-missing">
         <TopBar title="Scan pieces" />
-        <div class="notice notice-bad">This puzzle is not on this iPhone (it may have been deleted).</div>
-        <button class="btn btn-primary btn-block" onClick={() => go('home')}>
+        <Callout kind="bad" role="alert" icon={<Icon name="alert-triangle" size={20} />}>
+          This puzzle is not on this iPhone (it may have been deleted).
+        </Callout>
+        <button type="button" class="btn btn-filled btn-block" onClick={() => go('home')}>
           Back to my puzzles
         </button>
       </main>
@@ -326,9 +350,9 @@ export function ScanScreen() {
   if (!free && !project.markerMap) {
     return (
       <main class="screen" data-testid="scan-needs-setup">
-        <h1>Scan pieces</h1>
+        <TopBar title="Scan pieces" back={{ label: project.name, route: 'puzzle', arg: project.id }} />
         <p>First lay out the markers and photograph the empty table (set-up step 5).</p>
-        <button class="btn btn-primary btn-block" onClick={() => go('new', project.id)}>
+        <button type="button" class="btn btn-filled btn-block" onClick={() => go('new', project.id)}>
           Continue set-up
         </button>
       </main>
@@ -779,12 +803,13 @@ export function ScanScreen() {
                 onClick={() => setNote(null)}
               >
                 {note.lines.map((l) => (
-                  <p key={l}>{l}</p>
+                  <NoteLine key={l} text={l} />
                 ))}
               </div>
               {noteMore && (
-                <button class="scan-note-more" data-testid="scan-note-more" onClick={() => setNoteOpen(true)}>
-                  More ▾
+                <button type="button" class="scan-note-more" data-testid="scan-note-more" onClick={() => setNoteOpen(true)}>
+                  More
+                  <Icon name="chevron-down" size={14} />
                 </button>
               )}
             </div>
@@ -847,7 +872,8 @@ export function ScanScreen() {
             <div class="row scan-photo-row">
               {free && (
                 <label class="chip pick-photo" data-testid="pick-photo">
-                  🖼 Choose a photo
+                  <Icon name="image" size={20} />
+                  Choose a photo
                   <input
                     type="file"
                     accept="image/*"
@@ -872,7 +898,11 @@ export function ScanScreen() {
               )}
             </div>
           )}
-          {kind === 'detail' && !target && covered >= 98 && <p class="chip ok">All close-ups done ✓</p>}
+          {kind === 'detail' && !target && covered >= 98 && (
+            <p class="chip ok">
+              All close-ups done <Icon name="check" size={18} />
+            </p>
+          )}
         </div>
       </TableCamera>
       {showPhoto && lastPhoto && <PhotoResult url={lastPhoto.url} size={lastPhoto.size} outlines={lastPhoto.outlines} onClose={() => setShowPhoto(false)} />}
@@ -882,10 +912,10 @@ export function ScanScreen() {
           <TestStrip />
           <div class={note.ok ? 'notice notice-good' : 'notice notice-bad'}>
             {note.lines.map((l) => (
-              <p key={l}>{l}</p>
+              <NoteLine key={l} text={l} />
             ))}
           </div>
-          <button class="btn btn-primary" data-testid="scan-note-close">
+          <button type="button" class="btn btn-filled" data-testid="scan-note-close">
             Close
           </button>
         </div>

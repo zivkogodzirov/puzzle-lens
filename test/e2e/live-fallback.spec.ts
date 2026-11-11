@@ -27,7 +27,7 @@ test('fallback frames: leaving the Live screen and coming back works without err
   // The un-sendable clone was refused by the worker and must already be stopped.
   expect((await fakeCameraStats(page)).liveClones, 'clones left running').toBe(0);
 
-  await page.getByRole('button', { name: '‹ Home' }).click();
+  await page.getByRole('button', { name: 'Back to Home' }).click();
   await expect(page.getByTestId('install-banner')).toBeVisible();
   await page.waitForTimeout(500);
   expect(problems.pageErrors, 'uncaught errors when leaving the Live screen').toEqual([]);

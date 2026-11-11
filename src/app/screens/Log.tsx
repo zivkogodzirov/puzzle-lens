@@ -9,7 +9,7 @@ export function LogScreen() {
   return (
     <main class="screen">
       <TopBar title="Activity log">
-        <button class="btn btn-small" onClick={() => setTick((t) => t + 1)}>
+        <button class="navbar-btn" data-testid="log-refresh" onClick={() => setTick((t) => t + 1)}>
           Refresh
         </button>
       </TopBar>

@@ -189,6 +189,20 @@ test.describe('live view of the table', () => {
     const inView = Number(await overlay.getAttribute('data-drawn'));
     let at = (await overlay.getAttribute('data-first'))!.split(',').map(Number);
     await page.getByTestId('live-tap').click({ position: { x: at[0]!, y: at[1]! } });
+    // M9 part 2: the answers carry check / x icons beside the same words, Fits filled green; Close is an icon
+    // button with a name; Back in the top row too.
+    await expect(page.getByTestId('live-fits')).toHaveClass(/btn-good/);
+    await expect(page.getByTestId('live-fits')).toHaveText('Fits');
+    await expect(page.getByTestId('live-fits').locator('svg[data-icon="check"]')).toHaveCount(1);
+    await expect(page.getByTestId('live-not')).toHaveText("Doesn't fit");
+    await expect(page.getByTestId('live-not').locator('svg[data-icon="x"]')).toHaveCount(1);
+    await expect(page.getByTestId('live-info-close')).toHaveAccessibleName('Close');
+    await expect(page.getByTestId('live-info-close').locator('svg[data-icon="x"]')).toHaveCount(1);
+    await expect(page.getByTestId('live-table-close')).toHaveAccessibleName('Back');
+    for (const id of ['live-fits', 'live-not', 'live-info-close', 'live-table-close']) {
+      const b = (await page.getByTestId(id).boundingBox())!;
+      expect(Math.min(b.width, b.height), `${id}: at least 44 px`).toBeGreaterThanOrEqual(44);
+    }
     await page.getByTestId('live-fits').click();
     const fitsAt = Date.now();
     const note = page.getByTestId('live-note');
@@ -208,6 +222,17 @@ test.describe('live view of the table', () => {
     await page.getByTestId('live-undo').click();
     await expect(note).toContainText('Undone: that spot is offered again.');
     await page.screenshot({ path: test.info().outputPath('live-view-undo.png') });
+
+    // An answer kept: its Undo toast shows on the page when the live view closes; opening the live view again
+    // closes that toast (review 2026-11-11: it lay over the live view's "Doesn't fit").
+    at = (await overlay.getAttribute('data-first'))!.split(',').map(Number);
+    await page.getByTestId('live-tap').click({ position: { x: at[0]!, y: at[1]! } });
+    await page.getByTestId('live-fits').click();
+    await page.getByTestId('live-table-close').click();
+    await expect(page.getByTestId('toast')).toBeVisible();
+    await page.getByTestId('live-toggle').click();
+    await expect(page.getByTestId('live-table')).toBeVisible();
+    await expect(page.getByTestId('toast')).toHaveCount(0);
 
     // Closing turns the camera off.
     await page.getByTestId('live-table-close').click();

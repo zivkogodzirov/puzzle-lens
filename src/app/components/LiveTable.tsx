@@ -10,6 +10,8 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { TestButton } from './TestSteps';
+import { IconButton } from '../ui/Button';
+import { Icon } from '../ui/icons';
 import { settings } from '../settings';
 import { errorWords } from '../words';
 import { cameraError, cameraState, cameraStream, startCamera, stopCamera } from '../../camera/camera';
@@ -25,6 +27,7 @@ import { trackerWorker } from '../workers';
 import { OverlayPredictor } from '../livePredict';
 import { logInfo, logWarn } from '../../log/logger';
 import { OVERLAY_BAD, strokeHalo } from '../overlay';
+import { OV } from '../tokens';
 
 /** A piece is shown as gone from its spot after this many of the last GONE_CHECKS presence checks. */
 const GONE_OF = 3;
@@ -50,8 +53,8 @@ export interface MatchLine {
   confirmed: boolean;
 }
 
-const LINE_COLOUR = '#ffffff';
-const LINE_OK_COLOUR = '#3ccf7a';
+const LINE_COLOUR = OV.join;
+const LINE_OK_COLOUR = OV.joinOk;
 
 interface Drawn {
   id: string;
@@ -380,7 +383,7 @@ export function LiveTable({
         ctx.beginPath();
         ctx.moveTo(p[0], p[1]);
         ctx.lineTo(q[0], q[1]);
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+        ctx.strokeStyle = OV.joinHalo;
         ctx.lineWidth = 6;
         ctx.stroke();
         ctx.strokeStyle = c;
@@ -395,7 +398,7 @@ export function LiveTable({
       ctx.textBaseline = 'middle';
       for (const l of labels) {
         const tw = ctx.measureText(l.text).width + 10;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillStyle = OV.labelBg;
         ctx.beginPath();
         ctx.roundRect(l.at[0] - tw / 2, l.at[1] - 10, tw, 20, 6);
         ctx.fill();
@@ -492,9 +495,9 @@ export function LiveTable({
       <div class="live-tap" data-testid="live-tap" onClick={onTap} />
 
       <div class="live-top">
-        <button class="chip" onClick={onClose} data-testid="live-table-close">
-          ‹ Back
-        </button>
+        <IconButton label="Back" class="btn-cam" testId="live-table-close" onClick={onClose}>
+          <Icon name="chevron-left" />
+        </IconButton>
         <span class="title">{title}</span>
         <TestButton variant="camera" />
       </div>
@@ -530,7 +533,7 @@ export function LiveTable({
           {state === 'starting' ? (
             <p>Starting the camera…</p>
           ) : (
-            <button class="btn btn-primary" data-testid="start-camera" onClick={() => void startCamera()}>
+            <button class="btn btn-filled" data-testid="start-camera" onClick={() => void startCamera()}>
               {state === 'paused' ? 'Resume camera' : 'Start camera'}
             </button>
           )}
@@ -539,10 +542,10 @@ export function LiveTable({
 
       <div class="live-table-bottom">
         {note && (
-          <p class="chip live-note" role="status" data-testid="live-note">
-            {note.text}
+          <p class="live-note" role="status" data-testid="live-note">
+            <span class="live-note-text">{note.text}</span>
             {note.undo && (
-              <button class="btn btn-small live-note-undo" data-testid="live-undo" onClick={note.undo}>
+              <button type="button" class="live-note-undo" data-testid="live-undo" onClick={note.undo}>
                 Undo
               </button>
             )}
@@ -558,7 +561,7 @@ export function LiveTable({
               <div class="row" style={{ gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <span class="small">Tried it in {answer.labelOf(tp)}?</span>
                 <button
-                  class="btn btn-small btn-fits"
+                  class="btn btn-small btn-good btn-fits"
                   data-testid="live-fits"
                   onClick={() => {
                     const where = answer.labelOf(tp);
@@ -567,7 +570,8 @@ export function LiveTable({
                     showNote(`✓ In the puzzle at ${where}.`, undoOf(tp, true));
                   }}
                 >
-                  ✓ Fits
+                  <Icon name="check" size={20} />
+                  Fits
                 </button>
                 <button
                   class="btn btn-small"
@@ -577,7 +581,8 @@ export function LiveTable({
                     showNote('Noted: the next best spot is shown now.', undoOf(tp, false));
                   }}
                 >
-                  ✗ Doesn't fit
+                  <Icon name="x" size={20} />
+                  Doesn't fit
                 </button>
               </div>
             )}
@@ -592,9 +597,9 @@ export function LiveTable({
                   Show where it goes
                 </button>
               )}
-              <button class="btn btn-small" aria-label="Close" onClick={() => setTapped(null)}>
-                ✕
-              </button>
+              <IconButton label="Close" class="btn-cam live-info-close" testId="live-info-close" onClick={() => setTapped(null)}>
+                <Icon name="x" />
+              </IconButton>
             </div>
           </div>
         ) : (

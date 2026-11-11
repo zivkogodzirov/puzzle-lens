@@ -21,9 +21,7 @@ test('live camera: frames reach the tracker worker and OpenCV finds the marker',
   await expect(hud).toContainText('camera 1280×960');
 
   await expect.poll(() => hudNumber(page, 'tracker-fps'), { message: 'tracker fps should rise above 0', timeout: 15_000 }).toBeGreaterThan(0);
-  await expect
-    .poll(() => hudNumber(page, 'markers-seen'), { message: 'the tracker should see the test marker', timeout: 20_000 })
-    .toBeGreaterThanOrEqual(1);
+  await expect.poll(() => hudNumber(page, 'markers-seen'), { message: 'the tracker should see the test marker', timeout: 20_000 }).toBeGreaterThanOrEqual(1);
 
   const framesLine = await noteFramePath(page, testInfo);
   expect(framesLine).toMatch(/direct \(worker\)|copied \(fallback\)/);
@@ -34,9 +32,10 @@ test('live camera: frames reach the tracker worker and OpenCV finds the marker',
   testInfo.annotations.push({ type: 'hud', description: hudText.replace(/\n/g, ' | ') });
   console.log(`[live] HUD: ${hudText.replace(/\n/g, ' | ')}`);
   expect(hudText, 'the HUD shows no tracker error').not.toContain('⚠');
+  await expect(page.getByTestId('hud-error'), 'the HUD shows no tracker error').toHaveCount(0);
 
   // Leaving the screen turns the camera off cleanly (no page errors: checked by the fixture).
-  await page.getByRole('button', { name: '‹ Home' }).click();
+  await page.getByRole('button', { name: 'Back to Home' }).click();
   await expect(page.getByTestId('install-banner')).toBeVisible();
   await expect.poll(async () => (await fakeCameraStats(page)).liveCameraTracks, { message: 'camera tracks left running' }).toBe(0);
 });
@@ -124,7 +123,7 @@ test('when both ways fail, the iPhone camera screen is offered', async ({ page }
   await expect(sheet.getByTestId('use-system-camera')).toBeVisible();
 });
 
-test('a photo that comes back small (540×960, like the owner\'s iPhone with tracking on) is replaced by the full-size live picture', async ({ page }) => {
+test("a photo that comes back small (540×960, like the owner's iPhone with tracking on) is replaced by the full-size live picture", async ({ page }) => {
   await startLiveCamera(page);
   await page.evaluate(() => {
     const IC = (window as unknown as { ImageCapture: { prototype: { takePhoto: () => Promise<Blob> } } }).ImageCapture;

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'preact/hooks';
 import { latestFrame, latestFrameAt } from '../../camera/framePump';
 import { frameToElement } from '../../camera/coords';
+import { OV } from '../tokens';
 
 /**
  * Draws detected printed markers (green outlines + id) over the live video.
@@ -35,8 +36,8 @@ export function MarkerOverlay({ video }: { video: HTMLVideoElement | null }) {
       const vid = { width: video.videoWidth, height: video.videoHeight };
       const el = { width: w, height: h };
       ctx.lineWidth = 3;
-      ctx.strokeStyle = '#3ccf7a';
-      ctx.fillStyle = '#3ccf7a';
+      ctx.strokeStyle = OV.marker;
+      ctx.fillStyle = OV.marker;
       ctx.font = '600 16px -apple-system, system-ui';
       for (const m of f.markers) {
         ctx.beginPath();

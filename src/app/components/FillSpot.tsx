@@ -11,11 +11,14 @@ import type { PieceRow, Project } from '../../project/types';
 import { useBlobUrl } from '../screens/Puzzle';
 import { TablePhoto } from './Trays';
 import { LiveTable } from './LiveTable';
+import { OV } from '../tokens';
+import { Icon } from '../ui/icons';
+import { Callout } from '../ui/Callout';
 
 /** Cells across the close-up. */
 const ZOOM = 9;
-const BEST = '#3ccf7a';
-const OTHER = '#ffd84a';
+const BEST: string = OV.good;
+const OTHER: string = OV.weak;
 const pct = (p: number): number => Math.min(99, Math.round(p * 100));
 const WORDS = { strong: 'Strong', likely: 'Likely', several: 'Several spots look alike' } as const;
 
@@ -33,6 +36,7 @@ export function FillSpot({
   pieces,
   onAnswer,
   onUndo,
+  onLiveClosed,
   filled,
 }: {
   project: Project;
@@ -47,6 +51,8 @@ export function FillSpot({
   onAnswer?: (piece: PieceRow, spot: { col: number; row: number; rot: 0 | 1 | 2 | 3 }, fits: boolean) => void;
   /** Undo right after an answer in the live view (M9 part 1). */
   onUndo?: (piece: PieceRow, fits: boolean) => Promise<void>;
+  /** Its live view ("Find it live") closed (M9 part 2: the page shows the toast for a ✓ Fits given there now). */
+  onLiveClosed?: () => void;
   /** Spots already filled with a piece that fits ("c,r"). */
   filled?: Set<string>;
 }) {
@@ -124,9 +130,9 @@ export function FillSpot({
       </p>
       {picture(full, 'fill-picture', false)}
       {hint && (
-        <p class="small notice notice-warn" data-testid="fill-hint">
+        <Callout kind="warn" icon={<Icon name="alert-triangle" />} testId="fill-hint">
           {hint}
-        </p>
+        </Callout>
       )}
       {sel && zoom && (
         <>
@@ -154,9 +160,9 @@ export function FillSpot({
             </div>
           )}
           {isFilled ? (
-            <p class="small notice notice-good" data-testid="fill-filled">
-              ✓ This spot is filled: you said a piece fits here.
-            </p>
+            <Callout kind="good" icon={<Icon name="check" />} testId="fill-filled">
+              This spot is filled: you said a piece fits here.
+            </Callout>
           ) : !cands.length ? (
             <p class="small" data-testid="fill-none">
               {spots
@@ -194,10 +200,10 @@ export function FillSpot({
                 </div>
               )}
               <button class="btn btn-block" data-testid="fill-photo" disabled={!onTable.length} onClick={() => setPhoto(true)}>
-                Show on my table photo
+                <Icon name="map" size={20} /> Show on my table photo
               </button>
               <button class="btn btn-block" data-testid="fill-live" disabled={!onTable.length} onClick={() => setLive(true)}>
-                📷 Find it live
+                <Icon name="scan-eye" size={20} /> Find it live
               </button>
             </>
           )}
@@ -227,7 +233,10 @@ export function FillSpot({
           }
           title={`Pieces for column ${sel[0] + 1}, row ${sel[1] + 1}`}
           legend={<>Green: the best piece for this spot; yellow: also possible.</>}
-          onClose={() => setLive(false)}
+          onClose={() => {
+            setLive(false);
+            onLiveClosed?.();
+          }}
         />
       )}
       {photo && sel && (
@@ -270,11 +279,11 @@ function Candidate({
       )}
       {onAnswer && (
         <div class="fill-answer">
-          <button class="btn btn-small btn-fits" data-testid="fill-fits" aria-label="It fits here" onClick={() => onAnswer(c, true)}>
-            ✓ Fits
+          <button class="btn btn-small btn-fits btn-good" data-testid="fill-fits" aria-label="It fits here" onClick={() => onAnswer(c, true)}>
+            <Icon name="check" size={20} /> Fits
           </button>
           <button class="btn btn-small" data-testid="fill-not" aria-label="It doesn't fit here" onClick={() => onAnswer(c, false)}>
-            ✗ No
+            <Icon name="x" size={20} /> No
           </button>
         </div>
       )}

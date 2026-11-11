@@ -317,13 +317,13 @@ test('Fits / Doesn’t fit (M5 part 2): ruled-out spots, a piece into the puzzle
   await expect(page.getByTestId('spot-verdict')).not.toContainText('Column 3, row 2');
   await page.getByTestId('spot-clear').click();
   await expect(page.getByTestId('spot-verdict')).toContainText('Column 3, row 2');
-  // Fits: the piece goes into the puzzle (off the table), with Undo.
+  // Fits: the piece goes into the puzzle (off the table), with Undo in a toast (M9 part 2; was a note in the page).
   await page.getByTestId('spot-fits').click();
-  await expect(page.getByTestId('placed-note')).toContainText('In the puzzle at column 3, row 2');
+  await expect(page.getByTestId('toast-text')).toContainText('In the puzzle at column 3, row 2');
   await expect(page.getByTestId('in-puzzle')).toContainText('1 in the puzzle');
   await expect(thumbs).toHaveCount(5);
   await page.screenshot({ path: test.info().outputPath('fits.png'), fullPage: true });
-  await page.getByTestId('placed-undo').click();
+  await page.getByTestId('toast-action').click();
   await expect(page.getByTestId('in-puzzle')).toHaveCount(0);
   await expect(thumbs).toHaveCount(6);
   await thumbs.nth(0).click();
@@ -411,7 +411,8 @@ test('which pieces join (M6): a square of 4 first, then a pair; They fit / Don�
   await page.getByTestId('matches-toggle').click();
   // What next: the square, its four spots marked on the box picture.
   const next = page.getByTestId('match-next');
-  await expect(next).toContainText('A square of 4 ✓');
+  await expect(next).toContainText('A square of 4');
+  await expect(next.getByRole('img', { name: 'all four pairs agree' })).toBeVisible();
   await expect(next).toContainText('columns 4–5, rows 3–4');
   await expect(next.getByTestId('match-block-box').locator('rect.spot-best')).toHaveCount(4);
   // Its four pairs and the other pair are listed, the square's marked ✓.
@@ -420,7 +421,8 @@ test('which pieces join (M6): a square of 4 first, then a pair; They fit / Don�
   await page.getByTestId('matches').screenshot({ path: test.info().outputPath('matches.png') });
   // All 4 fit: joined, and the pair is next.
   await next.getByTestId('match-block-fits').click();
-  await expect(page.getByTestId('match-note')).toContainText('the 4 pieces are joined');
+  // Each answer: a toast with Undo (M9 part 2; was a note in the panel).
+  await expect(page.getByTestId('toast-text')).toContainText('the 4 pieces are joined');
   await expect(page.getByTestId('match-joined')).toContainText('4 pairs joined');
   await expect(page.getByTestId('match-next')).toContainText('These two join');
   await expect(page.getByTestId('match-next')).toContainText('side by side');
@@ -428,9 +430,9 @@ test('which pieces join (M6): a square of 4 first, then a pair; They fit / Don�
   await expect(page.getByTestId('matches-count')).toHaveText('1');
   // Don't fit: not suggested again; Undo brings it back.
   await page.getByTestId('match-next').getByTestId('match-not').click();
-  await expect(page.getByTestId('match-note')).toContainText('isn’t suggested again');
+  await expect(page.getByTestId('toast-text')).toContainText('isn’t suggested again');
   await expect(page.getByTestId('match-none')).toBeVisible();
-  await page.getByTestId('match-undo').click();
+  await page.getByTestId('toast-action').click();
   await expect(page.getByTestId('match-next')).toContainText('These two join');
   await page.getByTestId('match-next').getByTestId('match-fits').click();
   await expect(page.getByTestId('match-joined')).toContainText('5 pairs joined');
@@ -567,12 +569,14 @@ test('a quick tap on ✓ Fits right after tapping a piece counts: its panel does
   // screen: the panel opens below it.
   for (const [k, where] of (['partly on screen', 'below the screen'] as const).entries()) {
     await expect(thumbs).toHaveCount(6 - k);
+    // After the first ✓ Fits, its Undo toast sits above the action bar for 8 s (M9 part 2): the pieces go just above it.
+    const toast = (await page.getByTestId('toast').count()) ? await page.getByTestId('toast').boundingBox() : null;
     await page.evaluate(
       ([below, bottom]) => {
         const g = document.querySelector('[data-testid="catalog"]')!.getBoundingClientRect();
         scrollBy(0, below ? g.bottom - bottom + 4 : g.top - 300);
       },
-      [k === 1, height] as const,
+      [k === 1, toast ? Math.min(height, toast.y - 8) : height] as const,
     );
     const t = (await thumbs.nth(0).boundingBox())!;
     await page.mouse.click(t.x + t.width / 2, t.y + t.height / 2);
@@ -582,7 +586,12 @@ test('a quick tap on ✓ Fits right after tapping a piece counts: its panel does
     await page.mouse.move(at.x, at.y);
     await page.mouse.down();
     await page.waitForTimeout(100);
-    expect(await fits(), `${where}: ✓ Fits doesn't move under the finger`).toEqual(at);
+    const now = await fits();
+    // Pressed, a button shrinks to 97 % around its centre (M9 part 2): the centre stays, the edges move by under 2 px.
+    expect(Math.abs(now.x - at.x), `${where}: ✓ Fits doesn't move under the finger`).toBeLessThan(0.5);
+    expect(Math.abs(now.y - at.y), `${where}: ✓ Fits doesn't move under the finger`).toBeLessThan(0.5);
+    expect(Math.abs(now.top - at.top), `${where}: ✓ Fits doesn't move under the finger`).toBeLessThan(2);
+    expect(Math.abs(now.bottom - at.bottom), `${where}: ✓ Fits doesn't move under the finger`).toBeLessThan(2);
     await page.mouse.up();
     await expect(page.getByTestId('in-puzzle')).toContainText(`${k + 1} in the puzzle`);
   }

@@ -11,7 +11,9 @@
  * Address: `#/new` before the puzzle exists, `#/new/<id>` after.
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { TestButton } from '../components/TestSteps';
+import { StepNavBar } from '../components/StepNavBar';
+import { Callout } from '../ui/Callout';
+import { Icon } from '../ui/icons';
 import { plural } from '../words';
 import { go, replaceRoute, routeArg } from '../router';
 import { isStandalone } from '../env';
@@ -40,6 +42,7 @@ import { shareOrDownload } from '../../report/share';
 import { logError, logInfo, logWarn } from '../../log/logger';
 import { errorWords, setupSteps, UNREADABLE_PHOTO, useBlobUrl } from './Puzzle';
 import { StepTable } from './StepTable';
+import { PAPER } from '../tokens';
 
 const COMMON_COUNTS = [500, 1000, 1500, 2000];
 const MAX_COUNT = 40000;
@@ -158,7 +161,7 @@ export function NewPuzzleScreen() {
   if (id && project === undefined) {
     return (
       <main class="screen">
-        <WizardTop title="New puzzle" onBack={() => go('home')} />
+        <WizardTop title="New puzzle" backLabel="Home" onBack={() => go('home')} />
         <p class="muted">Loading…</p>
       </main>
     );
@@ -166,8 +169,8 @@ export function NewPuzzleScreen() {
   if (id && project === null) {
     return (
       <main class="screen" data-testid="wizard-missing">
-        <WizardTop title="New puzzle" onBack={() => go('home')} />
-        <div class="notice notice-bad">{loadError ?? 'This puzzle is not on this iPhone (it may have been deleted).'}</div>
+        <WizardTop title="New puzzle" backLabel="Home" onBack={() => go('home')} />
+        <Callout kind="bad">{loadError ?? 'This puzzle is not on this iPhone (it may have been deleted).'}</Callout>
         <button class="btn btn-primary btn-block" onClick={() => go('home')}>
           Back to my puzzles
         </button>
@@ -181,10 +184,12 @@ export function NewPuzzleScreen() {
     if (project) return go('puzzle', project.id);
     go('home');
   };
+  // What back goes to, said next to its chevron: the step before, the install advice, the puzzle, or Home.
+  const backLabel = step > 1 ? `Step ${step - 1}` : step === 1 && !project && !isStandalone.value ? 'Install' : project ? project.name : 'Home';
 
   return (
     <main class="screen wizard" data-testid="wizard" data-step={step}>
-      <WizardTop title={project?.name ?? 'New puzzle'} onBack={back} onClose={() => (project ? go('puzzle', project.id) : go('home'))} />
+      <WizardTop title={project?.name ?? 'New puzzle'} backLabel={backLabel} onBack={back} onClose={() => (project ? go('puzzle', project.id) : go('home'))} />
       {step >= 1 && <StepDots step={step} reached={project?.setupStep ?? 1} steps={setupSteps(project ?? { tracking: 'pieces' })} />}
       {step === 0 && <StepInstall onContinue={() => setStep(1)} />}
       {step === 1 && <StepNameCount project={project ?? null} ensureProject={ensureProject} save={save} onNext={async (p) => advance(2, p)} />}
@@ -202,20 +207,16 @@ export function NewPuzzleScreen() {
   );
 }
 
-function WizardTop({ title, onBack, onClose }: { title: string; onBack: () => void; onClose?: () => void }) {
+/** The wizard's NavBar: back goes one step back (or to where the wizard was opened from); Close leaves it. */
+function WizardTop({ title, backLabel, onBack, onClose }: { title: string; backLabel: string; onBack: () => void; onClose?: () => void }) {
   return (
-    <div class="topbar">
-      <button class="btn btn-back" data-testid="wizard-back" aria-label="Back" onClick={onBack}>
-        ‹ Back
-      </button>
-      <h1>{title}</h1>
+    <StepNavBar title={title} backLabel={backLabel} onBack={onBack} backTestId="wizard-back">
       {onClose && (
-        <button class="btn btn-small" data-testid="wizard-close" onClick={onClose}>
+        <button class="navbar-btn" data-testid="wizard-close" onClick={onClose}>
           Close
         </button>
       )}
-      <TestButton />
-    </div>
+    </StepNavBar>
   );
 }
 
@@ -244,16 +245,17 @@ function StepInstall({ onContinue }: { onContinue: () => void }) {
   return (
     <section data-testid="step-install">
       <h2>First: install Puzzle Lens on your Home Screen</h2>
-      <div class="notice notice-warn">
-        <p style={{ marginTop: 0 }}>
+      <Callout kind="warn">
+        <p>
           You're in a <strong>Safari tab</strong>. Safari and the Home Screen app keep <strong>separate</strong> puzzles: a puzzle you start here will{' '}
           <strong>not</strong> appear in the Home Screen app. Safari may also delete it after 7 days without a visit.
         </p>
         <p>So it's best to install first and start your puzzle in the Home Screen app.</p>
-      </div>
+      </Callout>
       <ol class="steps">
         <li>
-          Tap <strong>Share</strong> (square with an arrow). If you don't see it, tap <strong>⋯</strong> first.
+          Tap <strong>Share</strong> (square with an arrow). If you don't see it, tap{' '}
+          <Icon name="more-horizontal" size={18} class="icon-inline" label="⋯ (More)" /> first.
         </li>
         <li>
           Tap <strong>Add to Home Screen</strong> (under <strong>View More</strong> if needed), then <strong>Add</strong>.
@@ -393,9 +395,9 @@ function StepNameCount({
         ))}
       </div>
       {error && (
-        <div class="notice notice-bad" role="alert" data-testid="step-error">
+        <Callout kind="bad" role="alert" testId="step-error">
           {error}
-        </div>
+        </Callout>
       )}
       <button class="btn btn-primary btn-block wizard-next" data-testid="wizard-next" disabled={busy} onClick={() => void next()}>
         Next
@@ -581,7 +583,7 @@ function StepBox({ project, save, onNext }: { project: Project; save: (patch: Pr
   const pickers = (
     <div class="stack">
       <label class="btn btn-primary btn-block file-btn" data-testid="box-take-photo">
-        📷 Take a photo of the box
+        <Icon name="camera" size={20} /> Take a photo of the box
         <input
           ref={cameraInput}
           class="hidden-input"
@@ -593,7 +595,7 @@ function StepBox({ project, save, onNext }: { project: Project; save: (patch: Pr
         />
       </label>
       <label class="btn btn-block file-btn" data-testid="box-choose-photo">
-        🖼️ Choose from Photos
+        <Icon name="image" size={20} /> Choose from Photos
         <input
           ref={photosInput}
           class="hidden-input"
@@ -610,9 +612,9 @@ function StepBox({ project, save, onNext }: { project: Project; save: (patch: Pr
     <section data-testid="step-box">
       <h2>Photo of the box picture</h2>
       {error && (
-        <div class="notice notice-bad" role="alert" data-testid="step-error">
+        <Callout kind="bad" role="alert" testId="step-error">
           {error}
-        </div>
+        </Callout>
       )}
 
       {phase.kind === 'choose' && (
@@ -678,7 +680,7 @@ function StepBox({ project, save, onNext }: { project: Project; save: (patch: Pr
           </button>
           <div class="row two-up">
             <button class="btn" data-testid="box-turn" onClick={() => void turn()}>
-              ↻ Turn picture
+              <Icon name="rotate" size={20} /> Turn picture
             </button>
             <button class="btn" data-testid="box-adjust" onClick={() => void adjust()}>
               Adjust corners
@@ -802,7 +804,7 @@ function StepGrid({ project, save, onNext }: { project: Project; save: (patch: P
           <div class="small muted">{project.grid ? (project.grid.source === 'manual' ? 'Typed in by you' : 'Chosen') : 'Best match'}</div>
         </div>
       ) : (
-        <div class="notice notice-warn">No grid fits {project.pieceCount} pieces well. Please type one in below.</div>
+        <Callout kind="warn">No grid fits {project.pieceCount} pieces well. Please type one in below.</Callout>
       )}
       {options.length > 1 && (
         <>
@@ -861,9 +863,9 @@ function StepGrid({ project, save, onNext }: { project: Project; save: (patch: P
         </div>
       )}
       {error && (
-        <div class="notice notice-bad" role="alert" data-testid="step-error">
+        <Callout kind="bad" role="alert" testId="step-error">
           {error}
-        </div>
+        </Callout>
       )}
       <p class="small muted">The app checks the grid again later, as it finds edge pieces, and tells you if it looks wrong.</p>
       <button class="btn btn-primary btn-block wizard-next" data-testid="wizard-next" disabled={!chosen} onClick={() => void next()}>
@@ -951,7 +953,7 @@ function StepMarkers({ project, onNext }: { project: Project; onNext: () => Prom
         The app finds its way on your table with {MARKER_COUNT} printed markers on {SHEET_COUNT} A4 sheets. Print them on plain white paper.
       </p>
       <button class="btn btn-primary btn-block" data-testid="open-marker-sheets" onClick={() => go('markers', project.id)}>
-        🖨️ Print marker sheets
+        <Icon name="printer" size={20} /> Print marker sheets
       </button>
       <ul class="small muted tips">
         <li>
@@ -972,18 +974,18 @@ function StepMarkers({ project, onNext }: { project: Project; onNext: () => Prom
       ) : (
         <>
           {scale !== null && !typing && (
-            <div class={`notice ${off ? 'notice-warn' : 'notice-good'}`} data-testid="print-scale-saved">
+            <Callout kind={off ? 'warn' : 'good'} testId="print-scale-saved">
               {off ? (
                 <>
                   <strong>Saved: the bar measures {(scale * CHECK_BAR_MM).toFixed(1).replace(/\.0$/, '')} mm</strong> (printed at {pct} %).
-                  <p class="small">
+                  <p>
                     Best: print again with <strong>Actual size / 100 %</strong>. If you keep these sheets, the app corrects for it.
                   </p>
                 </>
               ) : (
-                <strong>Saved: printed at the right size ✓</strong>
+                <strong>Saved: printed at the right size</strong>
               )}
-            </div>
+            </Callout>
           )}
           {!typing ? (
             <div class="row two-up">
@@ -1021,9 +1023,9 @@ function StepMarkers({ project, onNext }: { project: Project; onNext: () => Prom
         </>
       )}
       {error && (
-        <div class="notice notice-bad" role="alert" data-testid="step-error">
+        <Callout kind="bad" role="alert" testId="step-error">
           {error}
-        </div>
+        </Callout>
       )}
       <button
         class="btn btn-primary btn-block wizard-next"
@@ -1045,7 +1047,7 @@ function StepMarkers({ project, onNext }: { project: Project; onNext: () => Prom
 const PAGE_PRINT_CSS = `
 ${MARKER_SHEET_PRINT_CSS}
 @media print {
-  .app, .screen, .marker-sheets { padding: 0 !important; margin: 0 !important; max-width: none !important; background: #fff !important; }
+  .app, .screen, .marker-sheets { padding: 0 !important; margin: 0 !important; max-width: none !important; background: ${PAPER.bg} !important; }
   .no-print, .banner { display: none !important; }
 }
 `;
@@ -1083,17 +1085,12 @@ export function MarkerSheetsScreen() {
   return (
     <main class="screen marker-sheets" data-testid="marker-sheets">
       <style>{PAGE_PRINT_CSS}</style>
+      {/* The bar has the no-print class too: on paper only the sheets show, as before. */}
+      <StepNavBar title="Marker sheets" backLabel={projectId ? 'Set-up' : 'Home'} onBack={back} backTestId="sheets-back" noPrint />
       <div class="no-print">
-        <div class="topbar">
-          <button class="btn btn-back" data-testid="sheets-back" onClick={back}>
-            ‹ Back
-          </button>
-          <h1>Marker sheets</h1>
-          <TestButton />
-        </div>
         <div class="row two-up">
           <button class="btn btn-primary" data-testid="print-sheets" onClick={print}>
-            🖨️ Print
+            <Icon name="printer" size={20} /> Print
           </button>
           <button class="btn" data-testid="send-sheets" onClick={send}>
             Send to my Mac
@@ -1104,18 +1101,18 @@ export function MarkerSheetsScreen() {
           Mail), and print from there. In Safari you can also use <strong>Share › Print</strong>.
         </p>
         {printError && (
-          <div class="notice notice-bad" role="alert">
+          <Callout kind="bad" role="alert">
             {printError}
-          </div>
+          </Callout>
         )}
         {shareNote && (
-          <div class="notice notice-warn" role="alert">
+          <Callout kind="warn" role="alert">
             The Share menu didn't open.{' '}
             <a href={shareNote.url} download={shareNote.name} data-testid="download-sheets">
               Download the sheets
             </a>{' '}
             instead: the file goes to the Files app, in Downloads.
-          </div>
+          </Callout>
         )}
       </div>
       {Array.from({ length: SHEET_COUNT }, (_, i) => (

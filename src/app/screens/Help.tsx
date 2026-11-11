@@ -6,6 +6,9 @@ import { useEffect, useState } from 'preact/hooks';
 import { TopBar } from '../components/TopBar';
 import { isStandalone } from '../env';
 import { logInfo } from '../../log/logger';
+import { Callout } from '../ui/Callout';
+import { ListRow, ListSection } from '../ui/List';
+import { Icon } from '../ui/icons';
 
 /** Where the app is published (vite.config.ts BASE). */
 const PUBLIC_ADDRESS = 'https://zivkogodzirov.github.io/puzzle-lens/';
@@ -18,6 +21,30 @@ function appAddress(): string {
   } catch {
     return PUBLIC_ADDRESS;
   }
+}
+
+/** The guide's steps, for the index at the top (each scrolls to its card further down). */
+const STEPS: ReadonlyArray<[testId: string, title: string]> = [
+  ['help-install', 'Install Puzzle Lens on your Home Screen'],
+  ['help-camera', 'Try the camera'],
+  ['help-marker', 'Test marker'],
+  ['help-device', 'Run the Device check, twice'],
+  ['help-report', 'Send me a report'],
+  ['help-send-list', 'What to send me for this milestone'],
+];
+
+function scrollToStep(testId: string): void {
+  const el = document.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
+  if (!el) return;
+  let smooth = true;
+  try {
+    smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    /* no matchMedia */
+  }
+  el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
+  // VoiceOver and keyboards carry on from the step's heading.
+  el.querySelector<HTMLElement>('h2')?.focus({ preventScroll: true });
 }
 
 /** "https://example.com/app/" → "example.com/app", easier to read and type. */
@@ -68,25 +95,31 @@ export function HelpScreen() {
         <strong data-testid="public-address">{short(PUBLIC_ADDRESS)}</strong>.
       </p>
 
+      <ListSection header="Steps" testId="help-index">
+        {STEPS.map(([tid, title], i) => (
+          <ListRow key={tid} title={`${i + 1}. ${title}`} chevron onClick={() => scrollToStep(tid)} testId={`${tid}-link`} />
+        ))}
+      </ListSection>
+
       {/* ---------- 1. Install ---------- */}
-      <section class="card" data-testid="help-install">
-        <h2 style={{ marginTop: '4px' }}>1. Install Puzzle Lens on your Home Screen</h2>
+      <section class="card help-step" data-testid="help-install">
+        <h2 style={{ marginTop: '4px' }} tabIndex={-1}>1. Install Puzzle Lens on your Home Screen</h2>
         {standalone ? (
-          <div class="notice notice-good" data-testid="install-status">
-            <span class="ok">✓</span> You're using the Home Screen app. This part is done.
-          </div>
+          <Callout kind="good" testId="install-status">
+            You're using the Home Screen app. This part is done.
+          </Callout>
         ) : (
-          <div class="notice notice-warn" data-testid="install-status">
+          <Callout kind="warn" testId="install-status">
             You're in a Safari tab right now. Please install the app with the steps below.
-          </div>
+          </Callout>
         )}
         <ol class="steps">
           <li>
             Open <strong>Safari</strong> and go to <strong>{short(PUBLIC_ADDRESS)}</strong>.
           </li>
           <li>
-            Tap the <strong>Share</strong> button (a square with an arrow pointing up). If you don't see it, tap the <strong>⋯</strong> button at
-            the bottom right first, then <strong>Share</strong>.
+            Tap the <strong>Share</strong> button (a square with an arrow pointing up). If you don't see it, tap the{' '}
+            <Icon name="more-horizontal" size={18} class="icon-inline" label="⋯ (More)" /> button at the bottom right first, then <strong>Share</strong>.
           </li>
           <li>
             In the list that opens, scroll down (tap <strong>View More</strong> if you see it) and tap <strong>Add to Home Screen</strong>.
@@ -113,8 +146,8 @@ export function HelpScreen() {
       </section>
 
       {/* ---------- 2. Camera ---------- */}
-      <section class="card" data-testid="help-camera">
-        <h2 style={{ marginTop: '4px' }}>2. Try the camera</h2>
+      <section class="card help-step" data-testid="help-camera">
+        <h2 style={{ marginTop: '4px' }} tabIndex={-1}>2. Try the camera</h2>
         <ol class="steps">
           <li>
             On the Home page, tap <strong>Live camera</strong>.
@@ -122,7 +155,7 @@ export function HelpScreen() {
           <li>
             Tap <strong>Start camera</strong>, then <strong>Allow</strong> when your iPhone asks.
           </li>
-          <li>Point the camera at your table and tap the HUD button at the top: the small box at the top left is the performance display (the same button hides it):</li>
+          <li>Point the camera at your table and tap the performance display button at the top (the one with a pulse line): the small box at the top left shows the numbers (the same button hides it):</li>
         </ol>
         <dl class="kv" data-testid="hud-explained">
           <dt>camera</dt>
@@ -150,8 +183,9 @@ export function HelpScreen() {
         </dl>
         <ol class="steps" start={4}>
           <li>
-            The <strong>1×</strong> and <strong>2×</strong> buttons switch the zoom (2× only shows if your camera has it). 🔦 turns the light on and
-            off. If there's a lens menu at the top, leave it as it is unless I ask.
+            The <strong>1×</strong> and <strong>2×</strong> buttons switch the zoom (2× only shows if your camera has it). The{' '}
+            <Icon name="flashlight" size={18} class="icon-inline" label="light" /> button turns the light on and off. If there's a lens menu at the top, leave it
+            as it is unless I ask.
           </li>
           <li>
             The big <strong>white round button</strong> is <strong>Snap</strong>. It takes a full-resolution photo, then shows a check of it: size,
@@ -165,8 +199,8 @@ export function HelpScreen() {
       </section>
 
       {/* ---------- 3. Test marker ---------- */}
-      <section class="card" data-testid="help-marker">
-        <h2 style={{ marginTop: '4px' }}>3. Test marker</h2>
+      <section class="card help-step" data-testid="help-marker">
+        <h2 style={{ marginTop: '4px' }} tabIndex={-1}>3. Test marker</h2>
         <p class="small">
           Later, the app finds its way around your table with printed square codes ("markers"). For now you can try one on a screen.
         </p>
@@ -212,8 +246,8 @@ export function HelpScreen() {
       </section>
 
       {/* ---------- 4. Device check ---------- */}
-      <section class="card" data-testid="help-device">
-        <h2 style={{ marginTop: '4px' }}>4. Run the Device check, twice</h2>
+      <section class="card help-step" data-testid="help-device">
+        <h2 style={{ marginTop: '4px' }} tabIndex={-1}>4. Run the Device check, twice</h2>
         <p class="small">
           The camera and storage can behave differently in Safari and in the Home Screen app, so I need both.
         </p>
@@ -237,8 +271,8 @@ export function HelpScreen() {
       </section>
 
       {/* ---------- 5. Report ---------- */}
-      <section class="card" data-testid="help-report">
-        <h2 style={{ marginTop: '4px' }}>5. Send me a report</h2>
+      <section class="card help-step" data-testid="help-report">
+        <h2 style={{ marginTop: '4px' }} tabIndex={-1}>5. Send me a report</h2>
         <ol class="steps">
           <li>
             On the Home page, tap <strong>Send report</strong>.
@@ -263,8 +297,8 @@ export function HelpScreen() {
       </section>
 
       {/* ---------- 6. What to send ---------- */}
-      <section class="card" data-testid="help-send-list">
-        <h2 style={{ marginTop: '4px' }}>6. What to send me for this milestone</h2>
+      <section class="card help-step" data-testid="help-send-list">
+        <h2 style={{ marginTop: '4px' }} tabIndex={-1}>6. What to send me for this milestone</h2>
         <ol class="steps">
           <li>
             <strong>A photo of the puzzle box:</strong> the front picture, taken straight on, the whole box in view, no glare.
@@ -316,7 +350,7 @@ function TestMarkerOverlay({ onClose }: { onClose: () => void }) {
         position: 'fixed',
         inset: 0,
         zIndex: 1000,
-        background: '#fff',
+        background: 'var(--paper)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -332,7 +366,7 @@ function TestMarkerOverlay({ onClose }: { onClose: () => void }) {
         draggable={false}
         style={{ width: 'min(92vw, 84vh)', height: 'min(92vw, 84vh)', display: 'block' }}
       />
-      <p style={{ color: '#555', fontSize: '15px', margin: 0 }}>Tap anywhere to close</p>
+      <p style={{ color: 'var(--paper-muted)', fontSize: '15px', margin: 0 }}>Tap anywhere to close</p>
     </div>
   );
 }

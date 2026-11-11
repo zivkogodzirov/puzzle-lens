@@ -4,6 +4,7 @@ import { frameToElement } from '../../camera/coords';
 import { applyH } from '../../geo/homography';
 import type { PieceRow } from '../../project/types';
 import { strokeHalo } from '../overlay';
+import { OV } from '../tokens';
 
 /**
  * Outlines of catalogued pieces drawn over the live video (PLAN §5 "Overlay state colours"):
@@ -63,7 +64,7 @@ export function PieceOverlay({ video, pieces }: { video: HTMLVideoElement | null
           else ctx.lineTo(x, y);
         }
         ctx.closePath();
-        const [colour, dash, width] = p.flags.clump ? ['#ff9f2e', [6, 4], 2.5] : p.flags.weak ? ['#ffd84a', [], 2] : ['rgba(225, 230, 235, 0.9)', [], 1.5];
+        const [colour, dash, width] = p.flags.clump ? [OV.clump, [6, 4], 2.5] : p.flags.weak ? [OV.weak, [], 2] : [OV.scanLine, [], 1.5];
         strokeHalo(ctx, width);
         ctx.strokeStyle = colour;
         ctx.setLineDash(dash);

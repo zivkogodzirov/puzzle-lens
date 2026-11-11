@@ -1,4 +1,6 @@
-# M9, part 1: easier to read and use (and M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+# M9, part 2: one look across the app (and M9 part 1, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+
+**New in M9 part 2** (design stage 2 of 6): the whole app now uses one set of building blocks: iPhone-style top bars whose **‹ back** goes to the screen you came from, lists, coloured message boxes, a sheet that slides up from the bottom to confirm big deletions, and a dark **Undo** message above the bottom bar. One set of line icons replaces the emoji. Nothing about how the app finds or places pieces changed.
 
 **New in M9 part 1** (the first of 6 design stages): colours that are easy to read in light mode, bigger ✓ Fits / ✗ Doesn't fit buttons side by side, a dark edge under every piece outline so they show on your cream table, **Undo** in the live view, a **bar at the bottom of the puzzle page** (Scan · Live view · Fill a spot · Joins), the app reopening your last puzzle, the 🧪 button in the top bar, and a **Tester mode** switch in Settings (on for now, so nothing you test with disappears).
 
@@ -19,6 +21,30 @@ These steps are for version **{version}** (Settings shows the version).
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## M9 part 2: one look across the app
+Look at each screen in light mode, then once in dark mode.
+
+### Home and Settings
+1. Home has a big **Puzzle Lens** title, your puzzles in a white list with their box pictures, and one blue **New puzzle** button. With Tester mode on, a **Diagnostics** group lists Live camera, Device check, Send report and Activity log, each with a small coloured icon.
+2. Tap **Import a backup**: the Files picker opens. Tap Cancel.
+3. Open **Settings**: Tester mode at the top, the other choices in grouped sections. Tap **Erase all Puzzle Lens data…**: a sheet rises from the bottom. Tap **Cancel** (only Cancel!) and check your puzzles are still there.
+4. With Tester mode on, Settings has **Components (for testing)**: a page with every building block. Have a look; tap the buttons, open the sheet and the toast.
+
+### Back buttons and icons
+1. Open your puzzle: the top says **‹ Home** and the puzzle's name. Open **Progress**: its back button shows the puzzle's name and goes back to it. Settings, Help and Device check go back to Home.
+2. The bottom bar (Scan · Live view · Fill a spot · Joins) has drawn icons instead of emoji; the Joins number is still in its bubble.
+3. On the camera screens (Scan, Live view, Live camera), the top buttons are round with icons: back arrow, light, the speed display (pulse line), and the flask for these steps.
+
+### The puzzle page
+1. Tap a piece: its panel shows fully below the top bar. **Fits** is now a solid green button with a tick; **Doesn't fit** has a cross.
+2. Tap **Fits**: a dark message appears just above the bottom bar, "In the puzzle at column …, row …", with **Undo**. Tap Undo: the piece is back. (Without a tap it goes after about 8 seconds, and it goes at once if you open Live view or a sheet, so it never sits over their buttons.)
+3. In **Live view**, answer **Fits** on a piece, then close the live view: the same message with Undo appears on the puzzle page.
+4. Under the pieces' status line there's a list: **Show my table**, **Sort into trays by colour**, **Progress** (and **How often is the app right?**). Tap **Sort into trays**: the trays open under the list; tap again to close.
+5. Scroll to **Scanned pieces** → **Delete scanned pieces…**: a sheet comes up. Tap **Cancel**: nothing is deleted.
+6. **Start a new batch…** now explains itself in a sheet with Start and scan / Start / Cancel. Tap **Cancel**.
+7. At the very bottom, **Delete this puzzle…** asks in a sheet. Tap **Cancel**: the puzzle stays.
+8. Message boxes (backup reminder, warnings, errors) are tinted boxes with a coloured icon square instead of a coloured border. Are they easy to read?
 
 ## M9 part 1: easier to read and use
 Do these in **light mode** first (Settings › Display & Brightness › Light), then once more in dark mode.
@@ -48,7 +74,7 @@ Do these in **light mode** first (Settings › Display & Brightness › Light), 
 
 ### Tester mode and words
 1. Open **Settings**: **Tester mode** at the top is **On**. Tap **Off**, go Home: Live camera, Device check, Send report, Activity log and the 🧪 button are gone. Open your puzzle → **Scan**: the "cm high · tilt" line under the gauge is gone; in **Live view** there's no "/s" after "Tracking ✓".
-2. Set Tester mode back to **On** (please keep it on while we test): everything is back. On the **Live camera** screen the speed display (HUD) now starts hidden: tap **HUD** to show it.
+2. Set Tester mode back to **On** (please keep it on while we test): everything is back. On the **Live camera** screen the speed display now starts hidden: tap the round button with a pulse line to show it.
 3. If you ever see "1 pieces" or a message that looks like computer text ("undefined", "TypeError", words joined together), please send a screenshot.
 
 ### Reduce Motion (optional)
@@ -190,6 +216,7 @@ In the M8 part 3 follow-up I said a darker cloth might help pale pieces. I never
 - Your answers are kept with the puzzle, and in backups.
 
 ## Please tell me
+- M9 part 2: do the new top bars, lists and message boxes feel more like an iPhone app? Anything harder to find than before? Is the Undo message in a good place, or does it get in the way?
 - M9 part 1: is the app easier to read in light mode? Anything still faint, too small, or covered by the bottom bar? Did the app reopen your puzzle, and does the screen stay on?
 - M9 part 1: are the outlines in the live view easier to see on your table now? Does the live view still feel smooth?
 - M8 part 4: does the scan note read well on your iPhone (Home Screen app and Safari)? Did **More ▾** show when the note was long?

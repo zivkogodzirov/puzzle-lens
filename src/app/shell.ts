@@ -27,6 +27,7 @@ const SCREEN_NAME: Record<Route, string> = {
   trays: 'Tray labels',
   accuracy: 'How often is the app right?',
   progress: 'Progress',
+  ui: 'Components',
 };
 
 /** Screens about one puzzle (`#/<screen>/<puzzle id>`): their title names the puzzle. */

@@ -17,6 +17,7 @@ import { APP_VERSION } from '../env';
 import { parseMd, renderMd } from '../miniMarkdown';
 import { settings } from '../settings';
 import { testText, textKey } from '../testText';
+import { Icon } from '../ui/icons';
 
 const SEEN_KEY = 'testSteps.seen';
 const TICKS_KEY = 'testSteps.ticks.';
@@ -95,14 +96,19 @@ export function TestButton({ variant = 'bar' }: { variant?: 'bar' | 'camera' }) 
   const id = useSlot(variant === 'camera' ? 1 : 0, 'button');
   if (!settings.testerMode.value || shownSlot()?.id !== id) return null;
   const seen = seenSteps.value;
+  // M9 part 2: an icon button (36 px circle in a 44 px hit area): grey in a top bar, on the camera material
+  // over the camera picture. The red dot marks steps not opened yet.
   return (
     <button
-      class={variant === 'camera' ? 'chip test-btn test-btn-camera' : 'test-btn'}
+      type="button"
+      class={variant === 'camera' ? 'btn-icon btn-cam test-btn' : 'btn-icon test-btn'}
       aria-label={seen ? 'What to test' : 'What to test (new steps)'}
       data-testid="test-tab"
       onClick={openTestSteps}
     >
-      <span aria-hidden="true">🧪</span>
+      <span aria-hidden="true" class="btn-icon-glyph">
+        <Icon name="flask-conical" />
+      </span>
       {!seen && <span class="test-btn-dot" data-testid="test-tab-new" />}
     </button>
   );
@@ -147,7 +153,7 @@ export function TestSteps() {
     <>
       {settings.testerMode.value && (!shown || shown.kind === 'strip') && (
         <button class="test-tab" aria-label="What to test" data-testid="test-tab" onClick={openTestSteps}>
-          <span aria-hidden="true">🧪</span>
+          <Icon name="flask-conical" size={12} />
           <span class="test-tab-word">Test</span>
           {!seen && <span class="test-tab-dot" data-testid="test-tab-new" aria-label="New steps" />}
         </button>
@@ -155,7 +161,10 @@ export function TestSteps() {
       {open && (
         <div class="test-sheet" role="dialog" aria-label="What to test" data-testid="test-sheet">
           <div class="test-sheet-bar">
-            <strong class="grow">🧪 What to test</strong>
+            <strong class="grow test-sheet-title">
+              <Icon name="flask-conical" size={20} />
+              What to test
+            </strong>
             <button class="btn btn-small" data-testid="test-close" onClick={close}>
               Close
             </button>
