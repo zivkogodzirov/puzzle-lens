@@ -94,6 +94,23 @@ describe('the finished-puzzle note', () => {
     ]);
   });
 
+  it('pieces lying on the puzzle: its empty spots are not saved, and the note says why (review 2026-11-11)', async () => {
+    const f = fin({ loose: 2, onPuzzle: 15 });
+    expect(m.spotsComplete(f)).toBe(false);
+    expect(m.spotsComplete(fin({ onPuzzle: m.OPEN_SPOTS_MAX_ON_PUZZLE }))).toBe(true);
+    expect(m.spotsComplete(fin())).toBe(true);
+    const lines = m.finishedLines(f, project(true));
+    expect(lines.slice(1, 4)).toEqual([
+      'That matches your puzzle (28 × 36).',
+      "About 15 loose pieces lie on the puzzle, so the empty spots under them can't be seen: the empty spots were not saved and your progress is unchanged. Take the loose pieces off the puzzle and take another photo.",
+      'About 2 loose pieces lie next to the puzzle. They were not added: to add them, take a photo of them away from the puzzle.',
+    ]);
+    expect(lines.join(' ')).not.toContain('Saved');
+    // Nothing is written: the project comes back as it was.
+    const p = { id: 'x', openSpots: null } as never;
+    expect(await m.saveOpenSpots(p, { ...f, thumb: new Blob([new Uint8Array([1])]) })).toBe(p);
+  });
+
   it('a different grid: the advice stays right after the count', () => {
     const lines = m.finishedLines(fin({ cols: 27, loose: 2 }), { ...project(true), openSpots: undefined });
     expect(lines[1]).toBe('Your puzzle is set to 28 × 36, so nothing was saved from this photo: check the grid, or take the photo again from straight above.');

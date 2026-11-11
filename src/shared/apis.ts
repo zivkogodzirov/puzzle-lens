@@ -93,6 +93,9 @@ export interface FinishedCheck {
   cornersPreview: Array<[number, number]>;
   /** Loose pieces seen beside the puzzle (touching ones count once): not catalogued from this photo. */
   loose?: number;
+  // M10 fix (review 2026-11-11): the gaps under pieces lying on the puzzle can't be seen.
+  /** Pieces lying on the puzzle (scanFreePixels.piecesOnPuzzle): with some, its gaps are not all saved as its empty spots. */
+  onPuzzle?: number;
 }
 
 export type FreeScanReply = ScanMarkerlessResult & {

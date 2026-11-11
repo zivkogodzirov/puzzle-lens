@@ -85,6 +85,9 @@ export interface FoundPiece {
   flags: PieceFlags;
   /** Confidence 0–1 (contrast and shape plausibility). */
   score: number;
+  // M10 split: where a piece cut from touching pieces was cut.
+  /** Only on pieces cut apart (flags.split): points along the cut, photo px (flat x, y). */
+  cutImg?: number[];
 }
 
 /** Glare mask at detection resolution: pixel (x, y) ↔ photo ((x + 0.5)·factor − 0.5, …). */
@@ -273,8 +276,30 @@ export const SEG = {
   maxInterior: 1.3,
   /** An enclosed region is pale print if this share of it is pale… */
   interiorPale: 0.2,
-  /** …or if it borders at most one piece and is at least this big (× expected area). */
+  /**
+   * …or if it borders at most one piece and is at least this big (× expected area). 0.1 was tried
+   * (M10, review FS2): +5 synthetic pieces, but on the owner's photos it broke IMG_9245's scale
+   * (6.06 → 4.00 px/mm, 23 → 47 "pieces"), added 7 false pieces on IMG_9244's assembled picture and
+   * merged two pieces on IMG_9127: kept at 0.3.
+   */
   interiorMin: 0.3,
+  /**
+   * Pale outline stretches snapped to the cut line (snapPale; M10, review FS2). Search ± this (mm); a
+   * sample is pale when the print 0.5–0.8 mm inside is within paleSnapDist (RGB) of the table beyond;
+   * the valley is at least paleSnapMinDepth (8-bit) deep; runs of at least paleSnapMinRun px move.
+   * Only on pale pieces (≥ paleSnapShare of the outline pale), not weak ones, on a smooth table:
+   * the review's version (every piece, any surface) gained more on test48 + test300 (markers
+   * +11 / −0, marker-free +16 / −0) but moved the owner's tan pieces on IMG_9274–9277 (which-pieces-
+   * join and re-identification tests failed), the coin-glare phantom on IMG_9274 (a weak blob) and
+   * brown print on IMG_9245's lid. As kept: markers +3 / −0 (recall 94.87 → 94.97 %), marker-free
+   * +3 / −0 (94.49 → 94.59 %); every matched outline it moves gains ≥ 0.02 IoU; ×1.02 time.
+   */
+  paleSnap: true as boolean,
+  paleSnapSearchMm: 1.2,
+  paleSnapDist: 30,
+  paleSnapMinDepth: 5,
+  paleSnapMinRun: 6,
+  paleSnapShare: 0.35,
   /** Fragments closer than this (mm) are joined when the union is at most `fragmentUnion` × the expected area. */
   fragmentGapMm: 3,
   fragmentMax: 0.85,
@@ -1966,7 +1991,7 @@ function onePiece(
   if (flags.weak && score < SEG.minWeakScore && Math.hypot(colour.meanLab[0] - white[0], colour.meanLab[1], colour.meanLab[2]) < SEG.tableLikeDeltaE)
     return null;
 
-  return {
+  const piece: FoundPiece = {
     outlineImg,
     outlineMm,
     centreMm: [cx, cy],
@@ -1979,6 +2004,203 @@ function onePiece(
     flags,
     score,
   };
+  if (SEG.paleSnap && !flags.clump && !flags.weak && c.field.noise <= SEG.grainyNoise) {
+    // Pale stretches onto the cut line (snapPale), at the piece's own scale (tilted photos).
+    const tC2 = performance.now();
+    const ctr: Vec2 = [(minX + maxX) / 2, (minY + maxY) / 2];
+    const t = applyH(geo.imgToTable, ctr);
+    const pa = applyH(geo.tableToImg, [t[0] + 0.5, t[1]]);
+    const pb = applyH(geo.tableToImg, [t[0] - 0.5, t[1]]);
+    const ppm = Math.hypot(pa[0] - pb[0], pa[1] - pb[1]);
+    const snapped = snapPale(c.rgba, outlineImg, ppm);
+    c.prof.snap = (c.prof.snap ?? 0) + performance.now() - tC2;
+    if (snapped) Object.assign(piece, withOutline(snapped, geo));
+  }
+  return piece;
+}
+
+/** The geometry of a piece recomputed for a new photo outline. */
+function withOutline(outlineImg: number[], geo: Geometry): Partial<FoundPiece> {
+  const outlineMm: number[] = [];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (let k = 0; k < outlineImg.length; k += 2) {
+    const q = applyH(geo.imgToTop, [outlineImg[k]!, outlineImg[k + 1]!]);
+    outlineMm.push(q[0], q[1]);
+    minX = Math.min(minX, outlineImg[k]!);
+    maxX = Math.max(maxX, outlineImg[k]!);
+    minY = Math.min(minY, outlineImg[k + 1]!);
+    maxY = Math.max(maxY, outlineImg[k + 1]!);
+  }
+  const { area, cx, cy } = polyAreaCentroid(outlineMm);
+  const rect = minAreaRect(outlineMm);
+  return {
+    outlineImg,
+    outlineMm,
+    centreMm: [cx, cy],
+    angleDeg: rect.angleDeg,
+    areaMm2: area,
+    sizeMm: rect.size,
+    bboxImg: [minX, minY, maxX - minX, maxY - minY],
+  };
+}
+
+/**
+ * Pale stretches of an outline moved onto the piece's cut line (FS2). Where the print just inside
+ * the outline is about the table's colour (near-white print on the white table), traceOutline has
+ * no colour contrast and keeps the coarse small-image mask, so the outline there runs a little
+ * inside or outside the true edge. The die cut, the contact shadow and the visible wall still
+ * make a thin dark line at the edge: along the outline's normal, within ±paleSnapSearchMm, the
+ * outermost clear brightness valley is taken as the edge. Only runs of at least paleSnapMinRun
+ * such samples (1 px apart) move, by the median offset of their neighbours.
+ *
+ * Returns null when nothing moved.
+ */
+function snapPale(rgba: PixelBuffer, poly: number[], ppm: number): number[] | null {
+  const { data, width, height, stride } = rgba;
+  const at = (x: number, y: number, out: Float32Array): void => {
+    const xc = Math.min(width - 1.001, Math.max(0, x));
+    const yc = Math.min(height - 1.001, Math.max(0, y));
+    const x0 = Math.floor(xc);
+    const y0 = Math.floor(yc);
+    const fx = xc - x0;
+    const fy = yc - y0;
+    const o00 = y0 * stride + x0 * 4;
+    const o01 = o00 + stride;
+    for (let ch = 0; ch < 3; ch++)
+      out[ch] = (data[o00 + ch]! * (1 - fx) + data[o00 + 4 + ch]! * fx) * (1 - fy) + (data[o01 + ch]! * (1 - fx) + data[o01 + 4 + ch]! * fx) * fy;
+  };
+  // Resample the outline every 1 px.
+  const pts: number[] = [];
+  {
+    const m = poly.length / 2;
+    let carry = 0;
+    for (let i = 0; i < m; i++) {
+      const j = (i + 1) % m;
+      const ax = poly[2 * i]!;
+      const ay = poly[2 * i + 1]!;
+      const bx = poly[2 * j]!;
+      const by = poly[2 * j + 1]!;
+      const L = Math.hypot(bx - ax, by - ay);
+      let t = carry;
+      while (t < L) {
+        pts.push(ax + ((bx - ax) * t) / L, ay + ((by - ay) * t) / L);
+        t += 1;
+      }
+      carry = t - L;
+    }
+  }
+  const n = pts.length / 2;
+  if (n < 20) return null;
+  const sg = polySigned(pts) > 0 ? 1 : -1;
+  const T = SEG.paleSnapSearchMm * ppm;
+  const dt = 0.25;
+  const K = Math.round(T / dt);
+  const off = new Float32Array(n);
+  const ok = new Uint8Array(n);
+  const nx = new Float32Array(n);
+  const ny = new Float32Array(n);
+  const L = new Float32Array(2 * K + 1);
+  const S = new Float32Array(2 * K + 1);
+  const rgb = new Float32Array(3);
+  const tmp = new Float32Array(3);
+  const cin = new Float32Array(3);
+  const cout = new Float32Array(3);
+  const innerWin = Math.round((0.8 * ppm) / dt);
+  const kStart = Math.max(1, K - Math.round((0.3 * ppm) / dt));
+  let paleN = 0;
+  for (let i = 0; i < n; i++) {
+    const a = (i - 2 + n) % n;
+    const b = (i + 2) % n;
+    let tx = pts[2 * b]! - pts[2 * a]!;
+    let ty = pts[2 * b + 1]! - pts[2 * a + 1]!;
+    const tl = Math.hypot(tx, ty) || 1;
+    tx /= tl;
+    ty /= tl;
+    // Outward normal: (ty, −tx) for a clockwise-on-screen (positive) polygon.
+    const ux = sg > 0 ? ty : -ty;
+    const uy = sg > 0 ? -tx : tx;
+    nx[i] = ux;
+    ny[i] = uy;
+    const px = pts[2 * i]!;
+    const py = pts[2 * i + 1]!;
+    // Mean colour at offset t along the normal, over 3 samples along the outline.
+    const avg = (t: number, out: Float32Array) => {
+      out[0] = out[1] = out[2] = 0;
+      for (let s = -1; s <= 1; s++) {
+        at(px + t * ux + s * tx, py + t * uy + s * ty, rgb);
+        out[0] += rgb[0]! / 3;
+        out[1] += rgb[1]! / 3;
+        out[2] += rgb[2]! / 3;
+      }
+    };
+    // Outside probe: beyond the search range (the table). Inside probe: just inside the outline.
+    cout.fill(0);
+    for (const t of [T + 0.6 * ppm, T + 1.2 * ppm]) {
+      avg(t, tmp);
+      for (let ch = 0; ch < 3; ch++) cout[ch]! += tmp[ch]! / 2;
+    }
+    cin.fill(0);
+    for (const t of [-0.5 * ppm, -0.8 * ppm]) {
+      avg(t, tmp);
+      for (let ch = 0; ch < 3; ch++) cin[ch]! += tmp[ch]! / 2;
+    }
+    if (Math.hypot(cin[0]! - cout[0]!, cin[1]! - cout[1]!, cin[2]! - cout[2]!) > SEG.paleSnapDist) continue;
+    paleN++;
+    for (let k = -K; k <= K; k++) {
+      avg(k * dt, tmp);
+      L[k + K] = (tmp[0]! + 2 * tmp[1]! + tmp[2]!) / 4;
+    }
+    for (let k = 0; k <= 2 * K; k++) S[k] = (L[Math.max(0, k - 1)]! + 2 * L[k]! + L[Math.min(2 * K, k + 1)]!) / 4;
+    const lout = (cout[0]! + 2 * cout[1]! + cout[2]!) / 4;
+    // Outermost valley deep enough below both sides (scanning outward; a later one wins unless
+    // much shallower than the deepest so far).
+    let best = -1;
+    let bestDepth = 0;
+    for (let k = kStart; k < 2 * K; k++) {
+      if (!(S[k]! <= S[k - 1]! && S[k]! <= S[k + 1]!)) continue;
+      let inMax = 0;
+      for (let q = Math.max(0, k - innerWin); q < k; q++) inMax = Math.max(inMax, S[q]!);
+      const depth = Math.min(inMax, lout) - S[k]!;
+      if (depth >= SEG.paleSnapMinDepth && depth >= 0.6 * bestDepth) {
+        best = k;
+        bestDepth = Math.max(bestDepth, depth);
+      }
+    }
+    if (best < 0) continue;
+    off[i] = (best - K) * dt;
+    ok[i] = 1;
+  }
+  if (paleN < SEG.paleSnapShare * n) return null;
+  // Runs of valid samples (circular) at least paleSnapMinRun long; median-smoothed offsets.
+  const keep = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    if (!ok[i]) continue;
+    let run = 1;
+    for (let k = 1; k < n && ok[(i + k) % n]; k++) run++;
+    for (let k = 1; k < n && ok[(i - k + n) % n]; k++) run++;
+    if (run >= SEG.paleSnapMinRun) keep[i] = 1;
+  }
+  const out: number[] = [];
+  let moved = 0;
+  const win: number[] = [];
+  for (let i = 0; i < n; i++) {
+    let d = 0;
+    if (keep[i]) {
+      win.length = 0;
+      for (let k = -3; k <= 3; k++) {
+        const j = (i + k + n) % n;
+        if (keep[j]) win.push(off[j]!);
+      }
+      win.sort((p, q) => p - q);
+      d = win[win.length >> 1]!;
+      moved++;
+    }
+    out.push(pts[2 * i]! + d * nx[i]!, pts[2 * i + 1]! + d * ny[i]!);
+  }
+  return moved ? out : null;
 }
 
 /** Membership contrast below which the full-resolution refinement falls back to the small mask (8-bit levels). */

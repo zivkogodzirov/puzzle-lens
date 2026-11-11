@@ -27,6 +27,7 @@ import type { SpotChoice } from '../../../cv/openSpots';
 import type { PieceRow } from '../../../project/types';
 import { logError, logInfo } from '../../../log/logger';
 import { plural } from '../../words';
+import { aboutPieces, piecesHeld } from '../../pieceCounts';
 import { borderCounts, useBlobUrl } from './shared';
 import { usePuzzle } from './context';
 import { needsCheck, PiecesGrid } from './PiecesGrid';
@@ -41,6 +42,8 @@ export function PiecesTab() {
   const [inPuzzleOpen, setInPuzzleOpen] = useState(false);
   const inPuzzle = useMemo(() => allRows.filter((r) => r.status === 'placed').length, [allRows]);
   const progress = useMemo(() => progressCounts([...states.values()]), [states]);
+  // M10 split: pieces in outlines of touching pieces beyond one each (about, by size).
+  const touchingExtra = useMemo(() => piecesHeld(rows.filter((r) => r.status === 'table' || r.status === 'pending')).extra, [rows]);
   const showProgress = canScan && all !== null && piecesRead && rows.length > 0;
   return (
     <>
@@ -54,12 +57,13 @@ export function PiecesTab() {
       )}
       <div class="card pieces-head" data-testid="pieces-head">
         <p class="pieces-head-count" data-testid="puzzle-pieces">
-          <strong>{all === null ? '—' : plural(all, 'piece')} read</strong>
+          {/* M10 fix: touching pieces counted as the pieces they hold, as "about N found" below (review 2026-11-11). */}
+          <strong>{all === null ? '—' : aboutPieces(all + touchingExtra, touchingExtra)} read</strong>
           {all !== null && (tray > 0 || missing > 0 || placed > 0 || aside > 0) && (
             <span class="muted" data-testid="puzzle-status-counts">
               {': '}
               {[
-                `${table} on the table`,
+                `${touchingExtra > 0 ? `about ${table + touchingExtra}` : table} on the table`,
                 missing > 0 ? `${missing} no longer seen at ${missing === 1 ? 'its' : 'their'} spot` : '',
                 tray > 0 ? `${tray} in trays` : '',
                 placed > 0 ? `${placed} in the puzzle` : '',
@@ -81,7 +85,7 @@ export function PiecesTab() {
             {/* Each count kept whole on one line (the line wraps between them). */}
             <span class="nw">
               <span class="state-dot state-found" />
-              {progress.found} found
+              {touchingExtra > 0 ? `about ${progress.found + touchingExtra}` : progress.found} found
             </span>
             {' · '}
             <span class="nw">

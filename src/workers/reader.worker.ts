@@ -17,7 +17,7 @@ import type { ReaderApi } from '../shared/apis';
 import { PhotoChecker } from '../cv/photoCheck';
 import { setupFromPhoto, toGray } from '../cv/tableSetup';
 import { ensureRgba, scanPixels, tableFromPixels } from '../cv/scanPhoto';
-import { gridPxPerMm, loosePiecesBeside, scanFreePixels } from '../cv/scanFreePixels';
+import { gridPxPerMm, loosePiecesBeside, piecesOnPuzzle, scanFreePixels } from '../cv/scanFreePixels';
 import { findCoin, type CoinFound } from '../cv/coin';
 import { readPiece } from '../cv/readPiece';
 import { readShape, READ_OK } from '../cv/shapeRead';
@@ -369,10 +369,12 @@ const api: ReaderApi = {
       // The pieces found but not placed, and their scale, are not sent back.
       const { unplaced, unplacedPxPerMm, ...scan } = r;
       let loose = 0;
+      let onPuzzle = 0; // M10 fix: pieces lying on the puzzle (its gaps under them can't be seen)
       if (finishedRaw) {
         // Found again at the puzzle's own scale when the scan's scale was far from it (scanFreePixels).
         let seen = looseFound ?? (r.registered ? r.pieces : (unplaced ?? []));
         loose = loosePiecesBeside(seen, finishedRaw);
+        onPuzzle = piecesOnPuzzle(seen, finishedRaw);
         if (loose && (looseFound || !r.registered) && opts.findCoin) {
           // These pieces may still hold the coin (it was taken out of r.pieces only): the coin found
           // above, else look for it at the puzzle's own scale.
@@ -427,6 +429,7 @@ const api: ReaderApi = {
         gapsPreview: finishedRaw.gapsPx.map(([x, y]) => [x * previewScale, y * previewScale] as [number, number]),
         cornersPreview: finishedRaw.cornersPx.map(([x, y]) => [x * previewScale, y * previewScale] as [number, number]),
         loose,
+        onPuzzle,
       };
       const outlinesPreview = r.pieces.map((p) => p.outlineImg.filter((_, i) => i % 4 < 2).map((v) => v * previewScale));
       const regionsPreview = (r.regions ?? []).map((g) => ({ kind: g.kind, points: g.outlineImg.filter((_, i) => i % 4 < 2).map((v) => v * previewScale) }));

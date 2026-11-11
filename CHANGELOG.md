@@ -4,6 +4,19 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M10 (part 1): better piece finding (2026-11-11; tested on the Mac with your photos, not yet on your iPhone)
+- **By 5 builders in parallel** (a hand-counted photo test; splitting touching pieces; pale edges; the tilt fit; the finished-puzzle grid), merged, checked by an independent reviewer and fixed.
+- **A hand-counted test on your photos:** every loose piece on 11 of your photos marked by hand (479 pieces), so each change is measured. Before → after: outlined one by one **252 → 297**, false pieces **43 → 22**, no piece lost.
+- **Touching pieces split:** a group of 2–5 touching pieces on a scan's first photo is cut into one outline per piece when its size is close to a whole number of pieces and every part is piece-shaped; the side along the cut is marked unsure. IMG_9127: 27 → 49 of 60 one by one. Not on steep photos (piece sizes disagree too much) and not on later photos of a scan (the cut would differ each time).
+- **Single pieces no longer marked "touching"** on tilted photos (IMG_9224: 6 of 8 freed), with stray bits of a neighbour cut off first.
+- **False "pieces" on the built picture dropped** (a blob inside the built puzzle surrounded by print): IMG_9280 23 → 7, IMG_9281 2 → 0, IMG_9244 8 → 5; no loose piece in a hole or beside the puzzle lost.
+- **Counts:** a group that still touches counts as "about N" (by size): "Found about 58 pieces", "about N pieces read", "about N on the table".
+- **Tilt fit allows for knobs:** without markers, a slightly tilted first photo is levelled from piece sizes corrected for each piece's knobs and holes. Computer-made 48-piece tests: position error 1.34 / 4.05 mm → 0.49 / 1.54 mm (now inside the 1 / 2 mm target). Your photos are unchanged (none has 30 cleanly read pieces yet).
+- **Nearly finished puzzle reads 28 × 36:** IMG_9244 read 28 × 37 (rows of a real puzzle differ slightly in height); the grid's own count is used when its seams fit clearly better. Empty spots are **not saved while loose pieces lie on the puzzle** (the holes under them can't be seen), so progress isn't overcounted.
+- **Pale edges:** pale outline stretches snap to the thin dark cut line (small: +3 pieces on the computer-made tests, none of your photos changed).
+- **Fixed after the independent check:** single pieces cut in two on steep photos (IMG_9226/9227) and twice on flat ones; leftover half-piece rows that never went away; IMG_9244's 88 saved spots that missed about 40 holes (progress showed 920 in); count words that disagreed.
+- **Left:** pale white-dress pieces still partly outlined; pieces in a box lid or the tray pile; the shaded table corner on IMG_9263; cuts follow a straight line, not the seam.
+
 ### M9 (part 6): polish (2026-11-11; tested on the Mac, not yet on your iPhone)
 - **The last of the 6 design stages**, by 3 builders in parallel (piece tiles; text size; How it works and VoiceOver), merged and tested together.
 - **Piece tiles:** each piece cut out from its picture with its stored outline (mapped back through the photo's table mapping; only when the photos that saw it agree on its turn, else the plain picture), 72 % of a grey tile with a soft shadow. One sign per meaning instead of rings: corner/edge top-left; a filled tick for very likely, an empty tick for maybe, a purple dot for shape read; amber ? / ! top-right to have a look; the tray letter only in Sort into trays. VoiceOver names like "Edge piece, very likely column 17 row 8, number 3". Checked on your IMG_9276: 22 of 22 pieces cut out and lined up. 1,000 pieces still scroll at 17–19 ms a frame.

@@ -25,6 +25,7 @@ import { OVERLAY_STATE } from '../../overlay';
 import { puzzleProgress, spotLabel } from '../../../project/progress';
 import type { PieceRow } from '../../../project/types';
 import { plural } from '../../words';
+import { aboutPieces, piecesHeld } from '../../pieceCounts';
 import { usePuzzle } from './context';
 import { TableNext } from './TableNext';
 
@@ -104,7 +105,8 @@ export function TableTab() {
     <div class="table-tab">
       <div class="table-status" data-testid="table-status">
         <p class="table-status-text">
-          <span data-testid="table-status-on">{plural(rows.length, 'piece')} on the table</span> ·{' '}
+          {/* M10 fix: touching pieces counted as the pieces they hold, as on the Pieces tab (review 2026-11-11). */}
+          <span data-testid="table-status-on">{aboutPieces(piecesHeld(rows).total, piecesHeld(rows).extra)} on the table</span> ·{' '}
           <span data-testid="table-status-sure">{sure} with a sure spot</span>
         </p>
         {progress && <ProgressRing done={progress.done} total={progress.total} />}

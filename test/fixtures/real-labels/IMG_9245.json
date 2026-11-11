@@ -1,0 +1,41 @@
+{
+ "_about": "Hand-made labels of one of the owner's real photos (test/fixtures/real, kept out of git) for test/unit/cv-real-counts.test.ts. Numbers only, no pixels of the photo. Coordinates are photo pixels at the size the app reads the photo (4032 px on the long side). pieces: every loose piece seen by eye on 1:1 crops (M10 part 1, 2026-11-11): its centre x, y and a tag: single (lies on its own), touching (touches or overlaps another piece), pale (pale print on the pale table), in-lid-or-tray (in a box lid or tray), in-hole (on the table in a gap of the built puzzle), on-picture (lying on top of the built picture), beside-puzzle (next to the built puzzle), cut-by-edge (cut by the photo's edge: not scored). unsure: true = doubtful (hidden under others, or maybe part of the built puzzle): not scored, and an outline on it is not a false piece. picture: the built puzzle's outer outline(s) as flat x, y lists, holes: bare table inside it (a frame's inside); an outline that holds no piece counts as a false piece on the picture when its centre is inside. ignore: areas whose outlines are neither scored nor false (a coin, a tray cut by the photo's edge). sidePx: one piece pitch in photo px (18.6 mm at the photo's scale), for the match distance (a found centre within half of it).",
+ "photo": "IMG_9245",
+ "size": [
+  2268,
+  4032
+ ],
+ "sidePx": 113,
+ "note": "brown pieces in a brown cardboard lid, 6.1 px/mm",
+ "picture": [],
+ "holes": [],
+ "ignore": [],
+ "pieces": [
+  {"x": 765, "y": 1338, "tag": "in-lid-or-tray"},
+  {"x": 1065, "y": 1408, "tag": "in-lid-or-tray"},
+  {"x": 1073, "y": 1525, "tag": "in-lid-or-tray"},
+  {"x": 1244, "y": 1412, "tag": "in-lid-or-tray"},
+  {"x": 1486, "y": 1450, "tag": "in-lid-or-tray"},
+  {"x": 1298, "y": 1608, "tag": "in-lid-or-tray"},
+  {"x": 1486, "y": 1633, "tag": "in-lid-or-tray"},
+  {"x": 765, "y": 1704, "tag": "in-lid-or-tray"},
+  {"x": 940, "y": 1729, "tag": "in-lid-or-tray"},
+  {"x": 1036, "y": 1667, "tag": "in-lid-or-tray"},
+  {"x": 1094, "y": 1742, "tag": "in-lid-or-tray"},
+  {"x": 1138, "y": 1863, "tag": "in-lid-or-tray"},
+  {"x": 1269, "y": 1913, "tag": "in-lid-or-tray"},
+  {"x": 1406, "y": 1894, "tag": "in-lid-or-tray"},
+  {"x": 1570, "y": 1920, "tag": "in-lid-or-tray"},
+  {"x": 950, "y": 2044, "tag": "in-lid-or-tray"},
+  {"x": 1106, "y": 2006, "tag": "in-lid-or-tray"},
+  {"x": 1350, "y": 2063, "tag": "in-lid-or-tray"},
+  {"x": 1119, "y": 2138, "tag": "in-lid-or-tray"},
+  {"x": 1506, "y": 2150, "tag": "in-lid-or-tray"},
+  {"x": 1150, "y": 2313, "tag": "in-lid-or-tray"},
+  {"x": 1281, "y": 2263, "tag": "in-lid-or-tray"},
+  {"x": 1444, "y": 2250, "tag": "in-lid-or-tray"},
+  {"x": 1515, "y": 2835, "tag": "in-lid-or-tray"},
+  {"x": 1742, "y": 2824, "tag": "in-lid-or-tray"},
+  {"x": 1955, "y": 3266, "tag": "in-lid-or-tray"}
+ ]
+}

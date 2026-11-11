@@ -83,6 +83,9 @@ export type ShapeGroup = PieceKind | 'unsure';
 export function pieceGroup(p: PieceRow, cell: [number, number] | null): ShapeGroup {
   if (p.flags.clump || p.flags.cut || p.flags.part) return 'unsure';
   const r = readShape(p.outlineMm, cell);
+  // M10 split: a piece cut from touching ones has one side along the cut (a straight cut reads as
+  // flat), so only "interior" (no flat side at all) is trusted from its outline.
+  if (p.flags.split) return r && r.kind === 'interior' && r.quality >= READ_OK ? 'interior' : 'unsure';
   return r && r.kind && r.quality >= READ_OK ? r.kind : 'unsure';
 }
 

@@ -41,7 +41,7 @@ vi.mock('../../src/cv/assembledGrid', async (orig) => ({
   readAssembledGrid: (_cv: unknown, _rgba: unknown, q: Array<[number, number]>) => mocks.grid?.(q.flat()) ?? null,
 }));
 
-const { gridPxPerMm, loosePiecesBeside, scanFreePixels } = await import('../../src/cv/scanFreePixels');
+const { gridPxPerMm, loosePiecesBeside, piecesOnPuzzle, scanFreePixels } = await import('../../src/cv/scanFreePixels');
 
 const W = 4032;
 const H = 3024;
@@ -283,6 +283,20 @@ describe('loose pieces beside a finished puzzle', () => {
     const turned = { ...grid, cornersPx: [...grid.cornersPx].reverse() };
     expect(loosePiecesBeside([piece({}, [3850, 500], side), piece({}, [2000, 1500], side)], turned)).toBe(1);
     expect(loosePiecesBeside([], grid)).toBe(0);
+  });
+
+  it('counts the pieces lying on the puzzle, at least a cell in from its edge (review 2026-11-11)', () => {
+    const pieces = [
+      piece({}, [2000, 1500], side), // on the picture
+      piece({ clump: true }, [1000, 800], 1.6 * side), // two touching ones in a hole
+      piece({ weak: true }, [3000, 2000], side), // a pale one
+      piece({ weak: true }, [3650, 1500], 0.6 * side), // a false blob of the print by its edge (0.5 cell in)
+      piece({}, [1500, 1500], 0.5 * side), // a scrap
+      piece({ weak: true, part: true }, [2500, 2500], side), // found only in part
+      piece({}, [3850, 500], side), // beside the puzzle
+    ];
+    expect(piecesOnPuzzle(pieces, grid)).toBe(3);
+    expect(piecesOnPuzzle([], grid)).toBe(0);
   });
 
   it('the puzzle’s own scale: one cell is one piece pitch', () => {

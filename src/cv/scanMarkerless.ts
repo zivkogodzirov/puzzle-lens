@@ -17,6 +17,7 @@
  *  5. Outlines and centres are mapped into the catalog frame; area, size and angle recomputed there.
  */
 import { readShape, READ_OK } from './shapeRead';
+import { refineClumps } from './splitClumps';
 import type { Cv } from './loadCv';
 import type { PixelBuffer } from './frameAnalyser';
 import { DEFAULT_PITCH_MM, estimatePxPerMm, findPieces, minAreaRect, type FindResult, type FoundPiece, type FoundRegion } from './pieceFinder';
@@ -120,8 +121,9 @@ export const PART_OUTLINE = { minShare: 0.6, minSingles: 8 };
 /** Marks single pieces much smaller than the photo's others as found only in part (see PART_OUTLINE). */
 export function flagPartOutlines<T extends Pick<FoundPiece, 'areaMm2' | 'flags'>>(pieces: T[]): T[] {
   const single = (p: T) => !p.flags.cut && !p.flags.clump && !p.flags.weak && p.areaMm2 > 0;
+  // The median from whole outlines only (not pieces cut from touching ones).
   const areas = pieces
-    .filter(single)
+    .filter((p) => single(p) && !p.flags.split)
     .map((p) => p.areaMm2)
     .sort((a, b) => a - b);
   if (areas.length < PART_OUTLINE.minSingles) return pieces;
@@ -315,15 +317,21 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
   // is one piece (a single piece with long knobs at both ends comes out too long; owner's IMG_9276,
   // 2026-11-08: 4 single pieces were "touching"). Done here, after the scale checks, which rely on
   // whole pieces showing as clumps when the first scale guess is too small (IMG_9245).
-  {
+  // Then (M10 part 1, src/cv/splitClumps.ts): false pieces on the built picture dropped, single pieces
+  // still flagged as touching checked against the local piece size (a tilted photo), touching pieces
+  // split, and how many pieces each blob left touching holds; after the scale checks for the same
+  // reason. Also for a detection redone at the scale registration measured (below).
+  const settle = (r: FindResult): FindResult => {
     const side = Math.sqrt(pieceAreaMm2);
-    res = {
-      ...res,
-      pieces: res.pieces.map((p) =>
-        p.flags.clump && !p.flags.cut && oneCleanPiece(p, side, pieceAreaMm2) ? { ...p, flags: { ...p.flags, clump: false } } : p,
-      ),
-    };
-  }
+    const pieces = r.pieces.map((p) =>
+      p.flags.clump && !p.flags.cut && oneCleanPiece(p, side, pieceAreaMm2) ? { ...p, flags: { ...p.flags, clump: false } } : p,
+    );
+    const t3 = performance.now();
+    const refined = refineClumps(rgba, pieces, { regions: r.regions, pieceAreaMm2, split: !opts.catalog.length });
+    timings.refine = (timings.refine ?? 0) + performance.now() - t3;
+    return { ...r, pieces: refined.pieces };
+  };
+  res = settle(res);
   // Not placed on the catalog: no pieces, but the assembled areas stay (in this photo's own frame),
   // so a photo of the finished puzzle taken after loose pieces were scanned is still recognised as
   // one (M7 part 4: it can't be matched to the loose pieces; its areas were dropped, so the finished
@@ -351,7 +359,12 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
   if (!opts.catalog.length) {
     // The first photo defines the frame. Undo the phone's small tilt, measured from how piece
     // sizes change across the photo (nearer pieces look bigger), so the frame is metric.
-    const Hr = levelFromSizes(res.pieces, { W, H, zoom: opts.zoom, pxPerMm: ppm }) ?? IDENTITY;
+    // (Pieces cut from touching ones are left out: their areas are only as good as the cut.)
+    const Hr =
+      levelFromSizes(
+        res.pieces.filter((p) => !p.flags.split),
+        { W, H, zoom: opts.zoom, pxPerMm: ppm },
+      ) ?? IDENTITY;
     const pieces = flagPartOutlines(res.pieces.map((p) => mapPiece(p, Hr)));
     timings.total = performance.now() - T0;
     return {
@@ -371,7 +384,12 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
 
   const register = (pieces: FoundPiece[]): Registration | null => {
     const t2 = performance.now();
-    const r = registerPieces(pieces, opts.catalog, { pitchMm: pitch });
+    // Pieces cut from touching ones are left out: their outlines are only as good as the cut.
+    const r = registerPieces(
+      pieces.filter((p) => !p.flags.split),
+      opts.catalog,
+      { pitchMm: pitch },
+    );
     timings.register = (timings.register ?? 0) + performance.now() - t2;
     return r;
   };
@@ -381,6 +399,7 @@ export function scanMarkerless(cv: Cv, rgba: PixelBuffer, opts: ScanMarkerlessOp
     // The scale estimate was off: detect again at the scale registration measured.
     ppm = ppm / reg.scale;
     ({ frame, res } = find(ppm));
+    res = settle(res);
     const again = register(res.pieces);
     if (!again) return empty();
     reg = again;
@@ -412,37 +431,60 @@ export const LEVEL_MIN_PIECES = 30;
  * Tilt from piece sizes (no markers, no gravity): seen through a tilted camera, the table's
  * scale changes across the photo, image area ∝ (n · ray)³ with n the table normal in camera
  * coordinates and ray = (x, y, 1) the normalised image direction. A robust fit of
- * log(area) = c + 3 (a x + b y) over whole pieces gives n ≈ (a, b, 1); the returned homography
- * (provisional mm → levelled mm, scale kept at the image centre) rotates the view to face the
- * table squarely. Pieces' own size scatter (knobs/blanks, ±10 %) averages out over ≥ 30 pieces.
- * Null when there are too few pieces or the fit is not significant.
+ * log(area) = c + β·(tabs − blanks) + 3 (a x + b y) over whole pieces gives n ≈ (a, b, 1); the
+ * returned homography (provisional mm → levelled mm, scale kept at the image centre) rotates the
+ * view to face the table squarely.
+ *
+ * The β term (FS4, review 2026-11-11): a piece's own area differs by its knobs (each tab adds, each
+ * blank takes away, log-area sd 11 % on the synthetic pieces, 1.4 % once (tabs − blanks) is
+ * accounted for) and ~40 pieces don't average that out: the knob-blind fit was worse than no
+ * levelling on 7 of 8 near-flat 48-piece photos. With the knob term, fitted jointly per photo on the
+ * pieces whose shape reads cleanly (readShape quality ≥ READ_OK, no unsure side), the marker-free
+ * later-photo error (cv-markerless-accuracy, median / p95 mm) went test48 1.34 / 4.05 → 0.49 / 1.52,
+ * val48 1.31 / 3.83 → 0.52 / 1.91, test300 0.72 / 1.95 → 0.40 / 1.06, val300 0.65 / 2.02 → 0.60 / 1.42.
+ * With fewer than LEVEL_MIN_PIECES such pieces it falls back to the knob-blind fit over all whole
+ * pieces. β is fitted per photo, not fixed: the owner's real pieces measured 0.042 ± 0.007 (114
+ * reads on the coin photos IMG_9263/9264/9274–9277) against ~0.058 on the synthetic ones.
+ * Known bias: on found outlines the fit reads ~0.8 × the true tilt (truth outlines: within 0.3°;
+ * IMG_9224's assembled frame comes out square at ~1.2 ×). Not corrected: a fixed 1.2 × gain made
+ * 4 of 20 synthetic 48-piece photos worse and depends on how outlines are traced.
+ *
+ * Null with fewer than LEVEL_MIN_PIECES whole pieces, when the fit is singular, or when the tilt it
+ * finds is below 0.1° (nothing to correct) or above 12° (not held flat, or a nonsense fit). There is
+ * no significance test: a χ² gate did not help on the synthetic sets (review 2026-11-11).
  */
 export function levelFromSizes(pieces: FoundPiece[], o: { W: number; H: number; zoom: number; pxPerMm: number }): Mat3 | null {
   const K = nominalIntrinsics(o.W, o.H, o.zoom);
   const k = o.pxPerMm / K.f; // provisional mm → normalised image coords (origin at the centre)
-  let pts = pieces
-    .filter((p) => !p.flags.cut && !p.flags.clump && !p.flags.weak && p.areaMm2 > 0)
-    .map((p) => ({ x: p.centreMm[0] * k, y: p.centreMm[1] * k, l: Math.log(p.areaMm2) }));
-  if (pts.length < LEVEL_MIN_PIECES) return null;
+  const whole = pieces.filter((p) => !p.flags.cut && !p.flags.clump && !p.flags.weak && p.areaMm2 > 0);
+  if (whole.length < LEVEL_MIN_PIECES) return null;
+  const all = whole.map((p) => ({ x: p.centreMm[0] * k, y: p.centreMm[1] * k, l: Math.log(p.areaMm2), t: 0 }));
+  // Tabs − blanks of each cleanly read piece (readShape: 4–27 ms for a whole overview).
+  const read: typeof all = [];
+  whole.forEach((p, i) => {
+    const rd = readShape(p.outlineMm, null);
+    if (!rd || rd.quality < READ_OK || rd.sides.some((sd) => sd.kind === 'unsure')) return;
+    read.push({ ...all[i]!, t: rd.sides.filter((sd) => sd.kind === 'tab').length - rd.sides.filter((sd) => sd.kind === 'blank').length });
+  });
+  const knobs = read.length >= LEVEL_MIN_PIECES;
+  let pts = knobs ? read : all;
+  // Unknowns: c, a, b (and β with knobs). Least squares l = c + 3a x + 3b y (+ β t), trimmed at 2.5 MAD.
+  const row = (p: (typeof all)[number]) => (knobs ? [1, 3 * p.x, 3 * p.y, p.t] : [1, 3 * p.x, 3 * p.y]);
   let sol: number[] | null = null;
   for (let iter = 0; iter < 3; iter++) {
-    // Least squares l = c + 3a x + 3b y.
-    const A = [
-      [0, 0, 0],
-      [0, 0, 0],
-      [0, 0, 0],
-    ];
-    const r = [0, 0, 0];
+    const m = knobs ? 4 : 3;
+    const A = Array.from({ length: m }, () => new Array<number>(m).fill(0));
+    const r = new Array<number>(m).fill(0);
     for (const p of pts) {
-      const v = [1, 3 * p.x, 3 * p.y];
-      for (let i = 0; i < 3; i++) {
+      const v = row(p);
+      for (let i = 0; i < m; i++) {
         r[i]! += v[i]! * p.l;
-        for (let j = 0; j < 3; j++) A[i]![j]! += v[i]! * v[j]!;
+        for (let j = 0; j < m; j++) A[i]![j]! += v[i]! * v[j]!;
       }
     }
-    sol = solve3(A, r);
+    sol = solveN(A, r);
     if (!sol) return null;
-    const res = pts.map((p) => p.l - (sol![0]! + 3 * sol![1]! * p.x + 3 * sol![2]! * p.y));
+    const res = pts.map((p) => p.l - row(p).reduce((acc, v, i) => acc + v * sol![i]!, 0));
     const mad = median(res.map((e) => Math.abs(e))) * 1.48 || 1e-6;
     const kept = pts.filter((_, i) => Math.abs(res[i]!) < 2.5 * mad);
     if (kept.length === pts.length || kept.length < LEVEL_MIN_PIECES) break;
@@ -499,6 +541,24 @@ function solve3(A: number[][], b: number[]): number[] | null {
     }
   }
   return [M[0]![3]! / M[0]![0]!, M[1]![3]! / M[1]![1]!, M[2]![3]! / M[2]![2]!];
+}
+
+/** Solves A x = b (n × n) by Gauss–Jordan with partial pivoting; null when singular. */
+function solveN(A: number[][], b: number[]): number[] | null {
+  const n = b.length;
+  const M = A.map((r, i) => [...r, b[i]!]);
+  for (let c = 0; c < n; c++) {
+    let p = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(M[r]![c]!) > Math.abs(M[p]![c]!)) p = r;
+    if (Math.abs(M[p]![c]!) < 1e-12) return null;
+    [M[c], M[p]] = [M[p]!, M[c]!];
+    for (let r = 0; r < n; r++) {
+      if (r === c) continue;
+      const f = M[r]![c]! / M[c]![c]!;
+      for (let k = c; k <= n; k++) M[r]![k]! -= f * M[c]![k]!;
+    }
+  }
+  return M.map((r, i) => r[n]! / r[i]!);
 }
 
 /**

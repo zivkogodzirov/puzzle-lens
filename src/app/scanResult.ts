@@ -36,8 +36,15 @@ export interface PiecesCounts {
   kind: 'overview' | 'detail';
   /** Pieces in the photo (overview), or read by the close-up. */
   count: number;
-  /** New in the catalog. */
+  // M10 split: some of `count` estimated from the size of outlines of touching pieces.
+  /** The count includes pieces estimated in touching groups ("about"). */
+  about?: boolean;
+  /** About how many pieces the spots where pieces touch hold. */
+  inClumps?: number;
+  /** New in the catalog (pieces: an outline of touching pieces counts as the pieces it holds). */
   added: number;
+  /** M10 fix: `added` includes pieces estimated in touching groups ("about"). */
+  addedAbout?: boolean;
   /** Without anything to check (not touching, not faint, not cut by the edge). */
   ready: number;
   /** Spots where pieces touch; faint outlines; pieces only partly outlined. */
@@ -65,7 +72,7 @@ export function piecesResult(c: PiecesCounts): ScanResult {
   if (c.clumps)
     items.push({
       tone: 'warn',
-      text: `${c.clumps === 1 ? '1 spot where pieces touch' : `${c.clumps} spots where pieces touch`} (dashed, arrows apart): spread them apart and take another.`,
+      text: `${c.clumps === 1 ? '1 spot where pieces touch' : `${c.clumps} spots where pieces touch`}${c.inClumps && c.inClumps > c.clumps ? ` (about ${c.inClumps} pieces)` : ''} (dashed, arrows apart): spread them apart and take another.`,
     });
   if (c.faint)
     items.push({
@@ -101,8 +108,8 @@ export function piecesResult(c: PiecesCounts): ScanResult {
   return {
     kind: c.kind === 'overview' ? 'found' : 'closeup',
     ok: true,
-    title: c.kind === 'overview' ? `Found ${plural(c.count, 'piece')}` : `Close-up read: ${plural(c.count, 'piece')}`,
-    sub: `${c.added} new${seen ? `, ${seen} seen before` : ''}`,
+    title: c.kind === 'overview' ? `Found ${c.about ? 'about ' : ''}${plural(c.count, 'piece')}` : `Close-up read: ${plural(c.count, 'piece')}`,
+    sub: `${c.addedAbout ? 'about ' : ''}${c.added} new${seen ? `, ${seen} seen before` : ''}`,
     items,
     photo: c.photo,
   };

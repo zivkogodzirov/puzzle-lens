@@ -248,7 +248,8 @@ describe.skipIf(photos.length === 0)('real photos, marker-free scan', () => {
     async () => {
       const cv = await getCv();
       for (const [name, want] of [
-        ['IMG_9127', 1],
+        // M10 split: IMG_9127 2 (was 1): a pale piece cut from touching ones, found only in part.
+        ['IMG_9127', 2],
         ['IMG_9245', 2],
         ['IMG_9224', 0],
         ['IMG_9263', 0],

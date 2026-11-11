@@ -9,6 +9,8 @@
  * 2. Straightened (rectify.ts, true shape from the corner geometry).
  * 3. Rows and columns from the seams: thin dark lines (darker than the pixels 3 px either side),
  *    summed along each axis; the repeat length of each profile (autocorrelation) is one piece.
+ *    With the grid known, a count within 1 of it is read at the grid's count when an even comb of
+ *    that count, anchored at the puzzle's edges, fits the seams clearly better (gridCountFits).
  * 4. Gaps: cells whose middle is mostly table (colour of the table just outside the puzzle), that
  *    part plain — a missing piece shows the table through it (its neighbours' knobs reach in).
  */
@@ -355,9 +357,65 @@ function distToPoly(poly: number[], [px, py]: Point): number {
 }
 
 /**
+ * How well an even comb of n pieces, anchored at both ends of a seam profile (the puzzle's edges),
+ * lands on seams: for each of the n − 1 inner seams the strongest profile value within
+ * ±GRID_COMB_REACH of a piece of where the comb puts it, averaged, over the profile's mean (`lo`:
+ * the unmeasured margin at each end).
+ */
+function combFit(p: Float64Array, n: number, lo: number): number {
+  const len = p.length;
+  let mean = 0;
+  for (let i = lo; i < len - lo; i++) mean += p[i]!;
+  mean /= Math.max(1, len - 2 * lo);
+  if (n < 2 || mean <= 0) return 0;
+  const P = len / n;
+  let s = 0;
+  for (let k = 1; k < n; k++) {
+    let best = 0;
+    for (let x = Math.max(0, Math.round((k - GRID_COMB_REACH) * P)); x <= Math.min(len - 1, Math.round((k + GRID_COMB_REACH) * P)); x++)
+      best = Math.max(best, p[x]!);
+    s += best;
+  }
+  return s / (n - 1) / mean;
+}
+
+/**
+ * The grid's count `g` is read instead of the rounded repeat count `read` (both along one axis of the
+ * straightened picture): `exact` within 1 of it, and the comb of g fits the seams GRID_COMB_MARGIN
+ * better than the comb of the read count.
+ */
+function gridCountFits(p: Float64Array, read: number, g: number, exact: number, lo: number): boolean {
+  if (read === g || Math.abs(exact - g) >= 1) return false;
+  return combFit(p, g, lo) >= GRID_COMB_MARGIN * combFit(p, read, lo);
+}
+
+/** A corner of the quad within `margin` px of the photo's edge (or outside it). */
+function nearPhotoEdge(rgba: PixelBuffer, q: Point[], margin: number): boolean {
+  return q.some(([x, y]) => x < margin || y < margin || x > rgba.width - 1 - margin || y > rgba.height - 1 - margin);
+}
+
+/**
+ * Comb of a count (combFit), measured on the owner's 4 photos of the puzzle (IMG_9244, 9272, 9280,
+ * 9281, 2026-11-11): the seams lie within a fifth of a piece of the even comb of the true count
+ * (36 rows, 28 columns), so a reach of 0.15 piece. The true count fits 1.20–1.71 × better than
+ * either count next to it (IMG_9244's rows: 36 2.64, 37 1.68); a quad cut a whole piece short fits
+ * the grid's count 0.51–0.63 × as well as the shorter count, and a wrong grid one more across
+ * (29 on IMG_9272) 0.54 ×. A quad cut half a piece short fits both about as badly (0.92–1.18 ×):
+ * that's what the photo-edge rule is for (GRID_EDGE_MARGIN). Photos cropped so the photo's edge
+ * cuts the puzzle (IMG_9244, 9280, 9281; 13 crops) were never read at the grid's count by this
+ * rule, with or without the photo-edge rule. The margin 1.15 stays under the smallest true fit
+ * measured (1.20).
+ */
+const GRID_COMB_REACH = 0.15;
+const GRID_COMB_MARGIN = 1.15;
+/** The grid's count is not read on a puzzle whose corner lies within this many pieces of the photo's edge. */
+const GRID_EDGE_MARGIN = 0.5;
+
+/**
  * Counts rows and columns of an assembled puzzle and looks for gaps. `pieceCount` (from the box)
- * sets the search range; `grid` (the puzzle's known columns × rows) only decides which way round
- * the count is reported. Neither is forced on the result.
+ * sets the search range; `grid` (the puzzle's known columns × rows) decides which way round the
+ * count is reported, and a count within 1 of it is read at the grid's own count when the seams fit
+ * that clearly better (gridCountFits). The count is never forced otherwise.
  */
 export function readAssembledGrid(
   cv: Cv,
@@ -390,6 +448,9 @@ export function readAssembledGrid(
   let colsExact = W / cx.lag;
   let rowsExact = H / cy.lag;
   let cornersPx = corners;
+  // Cells across and down the straightened picture (its own x and y, before any turn).
+  let nX = Math.round(W / cx.lag);
+  let nY = Math.round(H / cy.lag);
   // Report in the puzzle's own orientation when the grid is known and the photo is turned.
   if (opts.grid) {
     const asIs = Math.abs(Math.round(colsExact) - opts.grid.cols) + Math.abs(Math.round(rowsExact) - opts.grid.rows);
@@ -399,9 +460,20 @@ export function readAssembledGrid(
       cornersPx = [corners[1]!, corners[2]!, corners[3]!, corners[0]!];
     }
   }
-  const cols = Math.round(colsExact);
-  const rows = Math.round(rowsExact);
   const turnedNow = cornersPx !== corners;
+  // The repeat length can be off by over 1 % (rows of a real puzzle differ a little in height: the
+  // seams drift up to a fifth of a piece against an even comb), so a count near x.5 can round the
+  // wrong way: owner's IMG_9244 read 36.58 rows (28 × 37) for its 36. When the grid is known and a
+  // count is within 1 of it, the seams decide: an even comb of the grid's count, anchored at the
+  // puzzle's edges, must fit them clearly better than one of the read count (gridCountFits).
+  // Not when the puzzle may be cut off by the photo's edge: its outline then ends anywhere in a row.
+  if (opts.grid && !nearPhotoEdge(rgba, corners, GRID_EDGE_MARGIN * Math.sqrt(polyArea(corners.flat()) / Math.max(1, opts.pieceCount)))) {
+    const [gX, gY] = turnedNow ? [opts.grid.rows, opts.grid.cols] : [opts.grid.cols, opts.grid.rows];
+    if (gridCountFits(px, nX, gX, W / cx.lag, Math.max(R, m))) nX = gX;
+    if (gridCountFits(py, nY, gY, H / cy.lag, Math.max(R, m))) nY = gY;
+  }
+  const cols = turnedNow ? nY : nX;
+  const rows = turnedNow ? nX : nY;
 
   // Gaps: the table's colour from a ring just outside the puzzle.
   const tableLab = ringLab(rgba, corners);
@@ -418,8 +490,6 @@ export function readAssembledGrid(
     corners as Vec2[],
   );
   if (tableLab) {
-    const nX = Math.round(W / cx.lag);
-    const nY = Math.round(H / cy.lag);
     const cw = W / nX;
     const ch = H / nY;
     for (let j = 0; j < nY; j++)
@@ -460,8 +530,6 @@ export function readAssembledGrid(
   }
   let gapSides: string[] = [];
   if (tableLab && gapRect.length) {
-    const nX = Math.round(W / cx.lag);
-    const nY = Math.round(H / cy.lag);
     const sidesRect = holeSides(data, W, H, nX, nY, gapRect, tableLab);
     // Turned: the reported top is the straightened picture's right side, and so on round.
     gapSides = sidesRect.map((sd) => (turnedNow ? [1, 2, 3, 0].map((k) => sd[k]).join('') : sd));

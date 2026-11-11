@@ -1,4 +1,6 @@
-# M9, part 6: polish (and M9 parts 1–5, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+# M10, part 1: better piece finding (and M9 parts 1–6, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+
+**New in M10 part 1:** the app finds more of your real pieces. **Touching pieces are split** into their own outlines (on your photo IMG_9127: 27 → 49 of 60 pieces outlined one by one); single pieces wrongly marked "touching" are now outlined on their own; **false "pieces" on the built picture are mostly gone** (IMG_9280: 23 → 7); a group of pieces that still touch counts as "about 3", so the scan says **"Found about N pieces"**. A photo of your nearly finished puzzle now reads **28 × 36** (it read one row too many). Measured on 11 of your photos where every loose piece was counted by hand (479 pieces): outlined one by one 252 → 297, false pieces 43 → 22, none lost.
 
 **New in M9 part 6** (the last of 6 design stages): pieces on the Pieces tab are **cut out from their pictures** on plain tiles with one small sign per meaning; text **grows with your iPhone's Text Size**; Help is now **"How it works"** in four illustrated steps (the testing guide moved to "For testing"); and a **VoiceOver** pass: every button says what it does, and progress and results are read out.
 
@@ -29,6 +31,21 @@ These steps are for version **{version}** (Settings shows the version).
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## M10 part 1: better piece finding
+### Touching pieces
+1. Spread about 30 loose pieces on the table, with a few **touching in twos and threes** and the rest apart. Open *The Kiss* → camera button → take one photo from straight above.
+2. The card should say **"Found about N pieces"**: is N close to how many you laid out?
+3. Tap **See photo**. Most touching pairs and threes should now have **one outline per piece** (solid). Groups the app couldn't split keep the dashed outline with the arrows-apart sign.
+4. Look for any **single piece cut in two** or two pieces drawn as one, and send me a screenshot if you see one.
+5. Pieces tab and Table tab: the counts there should also say "about N".
+
+### Your nearly finished puzzle
+1. Take a photo from straight above of the whole puzzle with a little table showing all round, **with some loose pieces lying on top of it**. The card should say **28 × 36** (not 28 × 37) and that the empty spots were **not saved** because pieces lie on the puzzle; your progress stays the same.
+2. Take the loose pieces off the puzzle and take another photo. Now it should say "Saved these … empty spots", with red squares on the holes. Are the red squares on real holes? Are many holes without a red square? (A screenshot helps.)
+
+### Pieces beside the built puzzle
+1. In the photo above, no outlines should sit on the built picture itself; the loose pieces beside it should be outlined.
 
 ## M9 part 6: polish
 ### Piece tiles

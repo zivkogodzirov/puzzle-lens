@@ -295,6 +295,8 @@ export function planMerge(
   const taken = new Set<string>();
   const updates: PieceRow[] = [];
   const added: PieceRow[] = [];
+  /** Rows that go: pending rows settled (below), and parts of a piece cut wrongly (M10 split). */
+  const removed: string[] = [];
   const thumbs: MergePlan['thumbs'] = [];
   const patches: MergePlan['patches'] = [];
   const patchId = ctx.patchId ?? ((pid: string) => `patch-${pid}`);
@@ -340,7 +342,8 @@ export function planMerge(
       const d = Math.hypot(p.table.x - f.centreMm[0], p.table.y - f.centreMm[1]);
       if (d > SAME_PIECE_DIST * size || d >= bestD) continue;
       const areaDiff = Math.abs(p.areaMm2 - f.areaMm2) / Math.max(p.areaMm2, f.areaMm2, 1);
-      if (areaDiff > SAME_PIECE_AREA && !f.flags.cut) continue;
+      // M10 split: a piece cut from touching ones is only as big as the cut: its size is not compared.
+      if (areaDiff > SAME_PIECE_AREA && !f.flags.cut && !f.flags.split && !p.flags.split) continue;
       if (vetoed(f, p)) continue;
       best = p;
       bestD = d;
@@ -365,9 +368,12 @@ export function planMerge(
       matched.add(i);
       // A sharper photo replaces the outline, but never a whole piece by a part of it (a pale edge
       // missed, a "weak" read), while a fuller read replaces a partial one.
-      const partial = (f.flags.weak && !best.flags.weak) || f.areaMm2 < 0.75 * best.areaMm2;
+      // (A row known only from a cut is not compared by size: the cut may have given it a neighbour's part, review 2026-11-11.)
+      const partial = (f.flags.weak && !best.flags.weak) || (!best.flags.split && f.areaMm2 < 0.75 * best.areaMm2);
       const fuller = Boolean(best.flags.weak) && !f.flags.weak && f.areaMm2 > best.areaMm2;
-      const sharper = (ctx.pxPerMm > best.bestPxPerMm * 1.15 || fuller) && !f.flags.cut && !f.flags.clump && !partial;
+      // M10 split: a piece known only from a cut (flags.split) takes its whole outline when seen on its own.
+      const whole = Boolean(best.flags.split) && !f.flags.split;
+      const sharper = (ctx.pxPerMm > best.bestPxPerMm * 1.15 || fuller || whole) && !f.flags.cut && !f.flags.clump && !partial;
       const next: PieceRow = {
         ...best,
         updatedAt: ctx.now,
@@ -394,6 +400,15 @@ export function planMerge(
           thumbs.push({ id, blob: f.thumb });
         }
         next.patch = takePatch(f, best.id, best.patch);
+        // M10 split (review 2026-11-11): the other parts cut from the same blob whose centres lie inside this whole outline were
+        // the same piece cut wrongly (one piece cut in 2–4): they go, or they would stay "on the table" for good (each covered).
+        if (whole)
+          for (const p of onTable) {
+            if (p.id === best.id || taken.has(p.id) || !p.flags.split || p.createdAt !== best.createdAt) continue;
+            if (!inPoly(f.outlineMm, p.table.x, p.table.y)) continue;
+            taken.add(p.id);
+            removed.push(p.id);
+          }
       } else if (!best.patch && f.patch && !f.flags.cut && !f.flags.clump) next.patch = takePatch(f, best.id, null);
       updates.push(next);
       continue;
@@ -625,7 +640,6 @@ export function planMerge(
 
   // Pending rows seen again in this photo: settled when the evidence is clear now.
   const merged: MergePlan['merged'] = [];
-  const removed: string[] = [];
   const byId = new Map(existing.map((p) => [p.id, p]));
   for (let k = 0; k < updates.length; k++) {
     const u = updates[k]!;

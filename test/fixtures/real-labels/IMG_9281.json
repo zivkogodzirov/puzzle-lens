@@ -1,0 +1,46 @@
+{
+ "_about": "Hand-made labels of one of the owner's real photos (test/fixtures/real, kept out of git) for test/unit/cv-real-counts.test.ts. Numbers only, no pixels of the photo. Coordinates are photo pixels at the size the app reads the photo (4032 px on the long side). pieces: every loose piece seen by eye on 1:1 crops (M10 part 1, 2026-11-11): its centre x, y and a tag: single (lies on its own), touching (touches or overlaps another piece), pale (pale print on the pale table), in-lid-or-tray (in a box lid or tray), in-hole (on the table in a gap of the built puzzle), on-picture (lying on top of the built picture), beside-puzzle (next to the built puzzle), cut-by-edge (cut by the photo's edge: not scored). unsure: true = doubtful (hidden under others, or maybe part of the built puzzle): not scored, and an outline on it is not a false piece. picture: the built puzzle's outer outline(s) as flat x, y lists, holes: bare table inside it (a frame's inside); an outline that holds no piece counts as a false piece on the picture when its centre is inside. ignore: areas whose outlines are neither scored nor false (a coin, a tray cut by the photo's edge). sidePx: one piece pitch in photo px (18.6 mm at the photo's scale), for the match distance (a found centre within half of it).",
+ "photo": "IMG_9281",
+ "size": [
+  2268,
+  4032
+ ],
+ "sidePx": 71,
+ "note": "finished puzzle (pitch from its 28 columns) and 20 loose pieces above it (2 cut by the edge)",
+ "picture": [
+  [
+   140,
+   770,
+   2118,
+   767,
+   2163,
+   3639,
+   95,
+   3619
+  ]
+ ],
+ "holes": [],
+ "ignore": [],
+ "pieces": [
+  {"x": 1854, "y": 68, "tag": "single"},
+  {"x": 1488, "y": 91, "tag": "single"},
+  {"x": 1314, "y": 97, "tag": "single"},
+  {"x": 1692, "y": 174, "tag": "single"},
+  {"x": 1838, "y": 196, "tag": "single"},
+  {"x": 1533, "y": 221, "tag": "single"},
+  {"x": 1389, "y": 231, "tag": "single"},
+  {"x": 1992, "y": 228, "tag": "single"},
+  {"x": 1198, "y": 232, "tag": "single"},
+  {"x": 1763, "y": 347, "tag": "single"},
+  {"x": 1544, "y": 379, "tag": "single"},
+  {"x": 1385, "y": 381, "tag": "single"},
+  {"x": 1929, "y": 402, "tag": "single"},
+  {"x": 1189, "y": 428, "tag": "single"},
+  {"x": 1636, "y": 492, "tag": "single"},
+  {"x": 1305, "y": 515, "tag": "single"},
+  {"x": 1788, "y": 529, "tag": "single"},
+  {"x": 1481, "y": 563, "tag": "single"},
+  {"x": 1394, "y": 15, "tag": "cut-by-edge"},
+  {"x": 1598, "y": 20, "tag": "cut-by-edge"}
+ ]
+}

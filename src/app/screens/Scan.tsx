@@ -5,6 +5,7 @@ import { readerWorker, restartReader, trackerWorker } from '../workers';
 import { TableCamera, type CaptureMeta } from '../components/TableCamera';
 import { TopBar } from '../components/TopBar';
 import { plural } from '../words';
+import { aboutPieces, piecesHeld } from '../pieceCounts';
 import { cameraState } from '../../camera/camera';
 import { snapBusy } from '../../camera/snap';
 import { deleteBlob, getProject, newId, projectBlobId, putBlob, updateProject } from '../../project/store';
@@ -460,7 +461,8 @@ export function ScanScreen() {
               stage('save');
               // The puzzle finished since the last photo of it (M7 part 4): the pieces the app had for
               // its empty spots went in.
-              if (!f.finished.gaps.length && project.openSpots) {
+              // M10 fix: not from a photo with pieces lying on the puzzle (spots under them can't be seen).
+              if (!f.finished.gaps.length && project.openSpots && spotsComplete(f.finished)) {
                 const r = await markFromFinishedPhoto(project.id);
                 if (r.filled) {
                   logInfo('scan', `Finished puzzle photo: ${r.filled} spots filled since the last one; ${r.ids.length} pieces marked as in the puzzle`);
@@ -703,11 +705,19 @@ export function ScanScreen() {
       if (plan.moved || plan.missing) logInfo('scan', `Moved pieces recognised: ${plan.moved}; no longer at their spot: ${plan.missing}`);
       const flagged = (f: 'clump' | 'weak' | 'part') => r.pieces.filter((p) => p.flags[f]).length;
       const part = flagged('part');
+      // M10 split: an outline of touching pieces counts as the pieces it holds (about, by size).
+      const held = piecesHeld(r.pieces.filter((p) => !p.flags.cut));
+      const inClumps = piecesHeld(r.pieces.filter((p) => !p.flags.cut && p.flags.clump)).total;
+      // M10 fix: new pieces counted the same way (review 2026-11-11: "Found about 68" beside "51 new, 17 seen before" on a first photo).
+      const addedHeld = piecesHeld(plan.added);
       report(
         piecesResult({
           kind,
-          count: kind === 'overview' ? r.pieces.filter((p) => !p.flags.cut).length : plan.updates.length - plan.missing + plan.added.length,
-          added: plan.added.length,
+          count: kind === 'overview' ? held.total : plan.updates.length - plan.missing + plan.added.length,
+          about: kind === 'overview' && held.extra > 0,
+          inClumps,
+          added: addedHeld.total,
+          addedAbout: addedHeld.extra > 0,
           ready: r.pieces.filter((p) => !p.flags.cut && !p.flags.clump && !p.flags.weak).length,
           clumps: flagged('clump'),
           faint: flagged('weak') - part,
@@ -831,7 +841,8 @@ export function ScanScreen() {
         </button>
       )}
       <p class="scan-counts" data-testid="scan-counts">
-        <span data-testid="scan-count">{plural(onTable.length, 'piece')} found</span>
+        {/* M10 split: touching pieces counted as the pieces they hold. */}
+        <span data-testid="scan-count">{aboutPieces(piecesHeld(onTable).total, piecesHeld(onTable).extra)} found</span>
         <span aria-hidden="true"> · </span>
         <span data-testid="scan-coverage">
           {plural(closeUps, 'close-up')}
@@ -973,6 +984,8 @@ export function ScanScreen() {
  * leftover pieces are then placed only there. A photo with no gaps clears them.
  */
 export async function saveOpenSpots(project: Project, fin: FinishedCheck): Promise<Project> {
+  // M10 fix: with pieces lying on the puzzle its gaps are not all of them (spotsComplete): nothing is saved.
+  if (!spotsComplete(fin)) return project;
   const id = projectBlobId(project.id, 'open-spots');
   if (fin.gaps.length && fin.thumb) {
     await putBlob(id, 'open-spots', fin.thumb);
@@ -988,6 +1001,21 @@ export async function saveOpenSpots(project: Project, fin: FinishedCheck): Promi
     return next;
   }
   return project;
+}
+
+// M10 fix (review 2026-11-11).
+/**
+ * Pieces lying on the puzzle (FinishedCheck.onPuzzle) beyond which its gaps are not taken as all its
+ * empty spots: the spots under and around them can't be seen. Saved as complete, they would count
+ * every other spot as filled and match the leftover pieces only to them: the owner's IMG_9244 (14
+ * pieces on it) saved 88 spots and missed about 40 holes (progress 920 in, about 880 really). IMG_9280
+ * and IMG_9281 (no piece on them) save their 21 spots as before.
+ */
+export const OPEN_SPOTS_MAX_ON_PUZZLE = 2;
+
+/** The gaps read from this photo can stand for all the puzzle's empty spots (few pieces lying on it). */
+export function spotsComplete(fin: Pick<FinishedCheck, 'onPuzzle'>): boolean {
+  return (fin.onPuzzle ?? 0) <= OPEN_SPOTS_MAX_ON_PUZZLE;
 }
 
 /** The finished-puzzle count is the puzzle's grid, either way round (true when no grid is set). */
@@ -1013,7 +1041,13 @@ export function finishedLines(fin: FinishedCheck, project: Pick<Project, 'grid' 
         : `Your puzzle is set to ${g.cols} × ${g.rows}, so nothing was saved from this photo: check the grid, or take the photo again from straight above.`,
     );
   }
-  if (same && gaps && project.openSpots && project.openSpots.gaps.length === gaps)
+  // M10 fix: pieces lying on the puzzle hide some of its empty spots: nothing saved (saveOpenSpots).
+  const complete = spotsComplete(fin);
+  if (same && !complete)
+    lines.push(
+      `${fin.onPuzzle === 1 ? '1 loose piece lies' : `About ${fin.onPuzzle} loose pieces lie`} on the puzzle, so the empty spots under them can't be seen: the empty spots were not saved and your progress is unchanged. Take the loose pieces off the puzzle and take another photo.`,
+    );
+  if (same && complete && gaps && project.openSpots && project.openSpots.gaps.length === gaps)
     lines.push(
       project.box
         ? `Saved: your leftover pieces will now be matched only to these ${gaps} empty spots, one piece per spot. Scan the leftover pieces (or open Pieces on the puzzle's page).`

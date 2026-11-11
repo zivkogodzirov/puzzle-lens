@@ -182,6 +182,48 @@ export function loosePiecesBeside(pieces: Array<Pick<FoundPiece, 'outlineImg' | 
   return n;
 }
 
+// M10 fix: pieces lying on a nearly finished puzzle (review 2026-11-11, IMG_9244).
+/**
+ * Pieces lying on the puzzle (on its picture, or in its holes): outlines a scan would keep (not cut,
+ * not found only in part) at least LOOSE_MIN_AREA of a piece's top face whose centre lies at least
+ * ON_PUZZLE_MIN_INSIDE of a cell inside the puzzle. The empty spots under and around them can't be
+ * seen, so the gaps read from such a photo are not all of them (Scan's saveOpenSpots). Owner's photos
+ * (2026-11-11): IMG_9244 14 (its 88 open spots miss about 40 holes, mostly where pieces lie on the
+ * picture and in the holes), IMG_9280 0 (its false blobs on the print are 0.25–0.45 of a piece, within
+ * 0.6 of a cell of the puzzle's edge), IMG_9281 and IMG_9272 none inside at all.
+ */
+export function piecesOnPuzzle(pieces: Array<Pick<FoundPiece, 'outlineImg' | 'flags'>>, grid: Pick<AssembledGrid, 'cornersPx' | 'cols' | 'rows'>): number {
+  const quad = grid.cornersPx;
+  const cell = outlineArea(quad.flat()) / Math.max(1, grid.cols * grid.rows);
+  const side = Math.sqrt(cell);
+  let n = 0;
+  for (const p of pieces) {
+    if (p.flags.cut || p.flags.part || p.outlineImg.length < 6) continue;
+    if (outlineArea(p.outlineImg) < LOOSE_MIN_AREA * REAL_PIECE_AREA_SHARE * cell) continue;
+    const c = centroid(p.outlineImg);
+    if (outsideBy(quad, c) === 0 && insideBy(quad, c) >= ON_PUZZLE_MIN_INSIDE * side) n++;
+  }
+  return n;
+}
+
+/** A piece on the puzzle lies at least this many cells inside its outline (false blobs on the print hug its edge). */
+export const ON_PUZZLE_MIN_INSIDE = 1;
+
+/** Distance from p to the nearest side of the polygon. */
+function insideBy(poly: ReadonlyArray<readonly [number, number]>, p: [number, number]): number {
+  let d = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const [ax, ay] = poly[i]!;
+    const [bx, by] = poly[(i + 1) % poly.length]!;
+    const ex = bx - ax;
+    const ey = by - ay;
+    const l2 = ex * ex + ey * ey || 1e-12;
+    const t = Math.max(0, Math.min(1, ((p[0] - ax) * ex + (p[1] - ay) * ey) / l2));
+    d = Math.min(d, Math.hypot(p[0] - ax - t * ex, p[1] - ay - t * ey));
+  }
+  return d;
+}
+
 /** The finished puzzle's scale (photo px per mm): a cell is one piece pitch across. */
 export function gridPxPerMm(grid: Pick<AssembledGrid, 'cornersPx' | 'cols' | 'rows'>, pitchMm: number): number {
   return Math.sqrt(outlineArea(grid.cornersPx.flat()) / Math.max(1, grid.cols * grid.rows)) / pitchMm;

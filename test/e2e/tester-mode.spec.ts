@@ -171,7 +171,7 @@ test.describe('developer numbers only in Tester mode', () => {
     // Level: the overview photo takes itself.
     await page.evaluate(() => ((window as unknown as { __beta: number }).__beta = 1));
     await expect(page.getByTestId('scan-note')).toContainText('Found', { timeout: 150_000 });
-    await expect(page.getByTestId('scan-count')).toContainText(/^\d+ pieces? found$/);
+    await expect(page.getByTestId('scan-count')).toContainText(/^(about )?\d+ pieces? found$/);
 
     // The live view: the tracking line without "/s" while Tester mode is off, with it when on.
     await page.evaluate((url) => ((window as unknown as { __fakeScene?: string }).__fakeScene = url), moved);

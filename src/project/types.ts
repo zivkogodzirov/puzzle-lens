@@ -218,6 +218,14 @@ export interface PieceFlags {
    * (no corner/edge read, no side shapes), only its picture.
    */
   part?: boolean;
+  // M10 split: touching pieces cut apart, and how many a blob left touching holds.
+  /**
+   * Cut from a blob of touching pieces (src/cv/splitClumps.ts): the side along the cut is
+   * approximate, so it is not read (readPiece) and the piece's group is not trusted from its outline.
+   */
+  split?: boolean;
+  /** With `clump`: about how many pieces it holds (its area ÷ a single piece's there, rounded). */
+  touching?: number;
 }
 
 export interface PieceRow {

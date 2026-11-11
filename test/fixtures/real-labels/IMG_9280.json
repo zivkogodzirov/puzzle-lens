@@ -1,0 +1,35 @@
+{
+ "_about": "Hand-made labels of one of the owner's real photos (test/fixtures/real, kept out of git) for test/unit/cv-real-counts.test.ts. Numbers only, no pixels of the photo. Coordinates are photo pixels at the size the app reads the photo (4032 px on the long side). pieces: every loose piece seen by eye on 1:1 crops (M10 part 1, 2026-11-11): its centre x, y and a tag: single (lies on its own), touching (touches or overlaps another piece), pale (pale print on the pale table), in-lid-or-tray (in a box lid or tray), in-hole (on the table in a gap of the built puzzle), on-picture (lying on top of the built picture), beside-puzzle (next to the built puzzle), cut-by-edge (cut by the photo's edge: not scored). unsure: true = doubtful (hidden under others, or maybe part of the built puzzle): not scored, and an outline on it is not a false piece. picture: the built puzzle's outer outline(s) as flat x, y lists, holes: bare table inside it (a frame's inside); an outline that holds no piece counts as a false piece on the picture when its centre is inside. ignore: areas whose outlines are neither scored nor false (a coin, a tray cut by the photo's edge). sidePx: one piece pitch in photo px (18.6 mm at the photo's scale), for the match distance (a found centre within half of it).",
+ "photo": "IMG_9280",
+ "size": [
+  2268,
+  4032
+ ],
+ "sidePx": 74,
+ "note": "finished puzzle (pitch from its 28 columns) and 9 loose pieces above it (1 cut by the edge)",
+ "picture": [
+  [
+   83,
+   527,
+   2164,
+   493,
+   2235,
+   3510,
+   72,
+   3499
+  ]
+ ],
+ "holes": [],
+ "ignore": [],
+ "pieces": [
+  {"x": 1556, "y": 92, "tag": "single"},
+  {"x": 1387, "y": 98, "tag": "single"},
+  {"x": 1961, "y": 111, "tag": "single"},
+  {"x": 1180, "y": 152, "tag": "single"},
+  {"x": 1652, "y": 210, "tag": "single"},
+  {"x": 1304, "y": 240, "tag": "single"},
+  {"x": 1814, "y": 246, "tag": "single"},
+  {"x": 1493, "y": 287, "tag": "single"},
+  {"x": 1786, "y": 40, "tag": "cut-by-edge"}
+ ]
+}

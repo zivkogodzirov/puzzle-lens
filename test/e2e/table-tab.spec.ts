@@ -51,13 +51,14 @@ function box(): string {
 }
 
 /** Seeds the puzzle (`withPieces` false: set up, but nothing scanned yet; `setup` false: stopped at step 3). */
-async function seed(page: Page, opts: { withPieces?: boolean; setup?: boolean } = {}): Promise<void> {
+async function seed(page: Page, opts: { withPieces?: boolean; setup?: boolean; touching?: boolean } = {}): Promise<void> {
   const withPieces = opts.withPieces ?? true;
   const setup = opts.setup ?? true;
+  const touching = opts.touching ?? false;
   await page.goto('./#/');
   await expect(page.locator('#app > .app.route-home')).toBeAttached();
   const ok = await page.evaluate(
-    async ([pid, ps, jpg, boxJpg, withPieces, setup]) => {
+    async ([pid, ps, jpg, boxJpg, withPieces, setup, touching]) => {
       const bytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
       const req = indexedDB.open('puzzle-lens');
       const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
@@ -130,6 +131,8 @@ async function seed(page: Page, opts: { withPieces?: boolean; setup?: boolean } 
           ...extra,
         });
         for (const p of ps) tx.objectStore('pieces').put(row(p.id, p.x, p.y, {}));
+        // M10 fix: an outline of about 3 touching pieces (the scan's estimate by its size).
+        if (touching) tx.objectStore('pieces').put(row('c1', 260, 170, { flags: { clump: true, touching: 3 } }));
         // One piece already in the puzzle.
         tx.objectStore('pieces').put(row('in1', 0, 0, { status: 'placed', placedAt: { col: 3, row: 0, rot: 0, at: 1, from: 'table' } }));
         const byPiece: Record<string, unknown> = {};
@@ -155,7 +158,7 @@ async function seed(page: Page, opts: { withPieces?: boolean; setup?: boolean } 
       dbh.close();
       return 'ok';
     },
-    [PID, PIECES, photo(), box(), withPieces, setup] as const,
+    [PID, PIECES, photo(), box(), withPieces, setup, touching] as const,
   );
   expect(ok).toBe('ok');
 }
@@ -268,6 +271,16 @@ test('the status line and the progress ring: pieces on the table, sure spots, in
   expect(dash[0]! / dash[1]!).toBeCloseTo(1 / 12, 2);
   // Scan stays in the navigation bar.
   await expect(page.getByTestId('navbar').getByTestId('scan-pieces')).toBeVisible();
+});
+
+test('touching pieces count as the pieces they hold, the same way on the Table and Pieces tabs (review 2026-11-11)', async ({ page }) => {
+  await seed(page, { touching: true });
+  await openTable(page);
+  // 6 single pieces and an outline of about 3 touching ones.
+  await expect(page.getByTestId('table-status-on')).toHaveText('about 9 pieces on the table');
+  await openTab(page, 'pieces');
+  // 8 rows read (one in the puzzle): about 10 pieces.
+  await expect(page.getByTestId('puzzle-pieces')).toContainText('about 10 pieces read: about 9 on the table, 1 in the puzzle');
 });
 
 test('the Next step chip above the tab bar opens the joins’ What next card in a sheet; They fit, with Undo above the chip', async ({ page }) => {
