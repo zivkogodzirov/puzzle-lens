@@ -18,6 +18,8 @@ import { MARKER_COUNT } from '../../markers/layout';
 import type { TableFix } from '../../geo/tableFix';
 import type { MarkerMap, PieceRow, Vec2 } from '../../project/types';
 import { logInfo, logWarn } from '../../log/logger';
+// M9 part 6 help: news read from the screen's one status region.
+import { useAnnounce } from '../ui/announce';
 
 export type TableCameraMode = 'setup' | CaptureKind;
 
@@ -312,6 +314,8 @@ export function TableCamera(props: {
   const fill = live && gauge && autoCapture && !busy ? Math.max(0, Math.min(1, gauge.steady)) : 0;
   const ring = 2 * Math.PI * 37;
   const refused = !live && Boolean(problemText && /refused|not allowed|denied/i.test(problemText));
+  // M9 part 6 help: the camera starting and the photo being taken, read out (the chips themselves are no live regions).
+  useAnnounce(!live && state === 'starting' ? 'Starting the camera' : snapBusy.value || busy ? (busy ?? 'Taking the photo') : null);
 
   return (
     <div class="live table-camera" data-testid="table-camera" data-mode={mode} data-state={state}>
@@ -378,9 +382,7 @@ export function TableCamera(props: {
       {!live && (
         <div class="cam-center">
           {state === 'starting' ? (
-            <p class="cam-hint" role="status">
-              Starting the camera…
-            </p>
+            <p class="cam-hint">Starting the camera…</p>
           ) : (
             <div
               class="cam-card"

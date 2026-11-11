@@ -544,7 +544,7 @@ export function MoreTab() {
                   ? ` → finished puzzle ≈ ${Math.round((p.grid.cols * p.piecePitch.wMm) / 10)} × ${Math.round((p.grid.rows * p.piecePitch.hMm) / 10)} cm`
                   : ''}
                 {p.scaleSource === 'estimate'
-                  ? ' (estimated from a typical piece; put a coin next to the pieces in the next overview for true sizes)'
+                  ? ' (estimated from a typical piece; put a coin next to the pieces in the next Whole table photo for true sizes)'
                   : p.scaleSource === 'coin'
                     ? ' (measured with your coin)'
                     : ''}

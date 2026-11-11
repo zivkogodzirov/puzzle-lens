@@ -59,12 +59,58 @@ function thumbPng(id: string): string {
   return c.encodeSync('png').toString('base64');
 }
 
+/** A piece's place on the table (mm) when the art is the photo (`cut`): its cell's centre. */
+function artCentreMm(id: string): Vec2 {
+  const p = pz.pieces.find((x) => x.id === id)!;
+  return [(p.col + 0.5) * pz.cellMm[0], (p.row + 0.5) * pz.cellMm[1]];
+}
+
+/**
+ * M9 part 6: a piece's thumbnail cut as the reader cuts one (reader.worker.ts `thumbsAndPreview`): the box of its
+ * outline in the art (the "photo", art px = table mm × art.pxPerMm) with 12 % to spare, at most 160 px, as a PNG.
+ */
+function readerThumbPng(id: string): string {
+  const p = pz.pieces.find((x) => x.id === id)!;
+  const [sx, sy] = art.pxPerMm;
+  const [cx, cy] = artCentreMm(id);
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (let i = 0; i + 1 < p.outlineMm.length; i += 2) {
+    const x = (cx + p.outlineMm[i]!) * sx;
+    const y = (cy + p.outlineMm[i + 1]!) * sy;
+    x0 = Math.min(x0, x);
+    y0 = Math.min(y0, y);
+    x1 = Math.max(x1, x);
+    y1 = Math.max(y1, y);
+  }
+  const w = x1 - x0;
+  const h = y1 - y0;
+  const pad = Math.round(Math.max(w, h) * 0.12);
+  const bx = Math.max(0, x0 - pad);
+  const by = Math.max(0, y0 - pad);
+  const bw = Math.min(art.width - bx, w + 2 * pad);
+  const bh = Math.min(art.height - by, h + 2 * pad);
+  const s = Math.min(1, 160 / Math.max(bw, bh));
+  const c = createCanvas(Math.max(1, Math.round(bw * s)), Math.max(1, Math.round(bh * s)));
+  c.getContext('2d').drawImage(fullArt(), bx, by, bw, bh, 0, 0, c.width, c.height);
+  return c.encodeSync('png').toString('base64');
+}
+
 export interface PiecesSeed {
+  /**
+   * M9 part 6: the art is the photo the pieces were read from (a snap mapping art px to table mm, each piece at its
+   * cell and its thumbnail cut as the reader cuts one), so the tiles show the pieces cut out by their outlines.
+   */
+  cut?: boolean;
   pieces?: string[];
   /** Pieces a rescan saw where no known piece was (status 'pending'), each maybe one of `maybe`. */
   pending?: Array<{ id: string; like: string; maybe: string[] }>;
   /** Pieces with a faint outline (flags.weak). */
   weak?: string[];
+  /** Pieces touching another piece (flags.clump). */
+  clump?: string[];
   /** Extra pieces on the table without a patch (not placed), with the outlines and thumbnails of the art's cells in turn. */
   bulk?: number;
   /** The tab to open (default: Pieces); null: stay on Home. */
@@ -75,30 +121,38 @@ export interface PiecesSeed {
 export async function seedPieces(page: Page, opts: PiecesSeed = {}): Promise<void> {
   const ids = opts.pieces ?? PIECES;
   const weak = new Set(opts.weak ?? []);
+  const clump = new Set(opts.clump ?? []);
+  const cut = Boolean(opts.cut);
+  const thumbOf = cut ? readerThumbPng : thumbPng;
+  const at = (id: string) => (cut ? artCentreMm(id) : null);
   const ps = ids.map((pid, i) => ({
     id: pid,
     b64: patchFor(pid, i % 4),
-    thumb: thumbPng(pid),
+    thumb: thumbOf(pid),
     outline: pz.pieces.find((x) => x.id === pid)!.outlineMm,
     weak: weak.has(pid),
+    clump: clump.has(pid),
+    at: at(pid),
   }));
-  const pend = (opts.pending ?? []).map((x) => ({ ...x, thumb: thumbPng(x.like), outline: pz.pieces.find((q) => q.id === x.like)!.outlineMm }));
+  const pend = (opts.pending ?? []).map((x) => ({ ...x, thumb: thumbOf(x.like), outline: pz.pieces.find((q) => q.id === x.like)!.outlineMm, at: at(x.like) }));
   // The bulk: the art's 80 cells in turn (their thumbnails stored once each).
-  const cells = pz.pieces.map((p) => ({ id: p.id, thumb: opts.bulk ? thumbPng(p.id) : '', outline: p.outlineMm }));
+  const cells = pz.pieces.map((p) => ({ id: p.id, thumb: opts.bulk ? thumbOf(p.id) : '', outline: p.outlineMm, at: at(p.id) }));
   const box = fullArt().encodeSync('jpeg', 92).toString('base64');
+  // The photo: art px → table mm.
+  const snap = cut ? { width: art.width, height: art.height, imgToTable: [1 / art.pxPerMm[0], 0, 0, 0, 1 / art.pxPerMm[1], 0, 0, 0, 1] } : null;
   await gotoScreen(page, '');
   const seeded = await page.evaluate(
-    async ([boxB64, list, pending, w, h, pid, bulk, bulkCells]) => {
+    async ([boxB64, list, pending, w, h, pid, bulk, bulkCells, photo]) => {
       const bytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
       const req = indexedDB.open('puzzle-lens');
       const dbh = await new Promise<IDBDatabase>((res) => (req.onsuccess = () => res(req.result)));
-      const row = (id: string, i: number, outline: number[], thumb: string, extra: object) => ({
+      const row = (id: string, i: number, outline: number[], thumb: string, extra: object, at: number[] | null = null) => ({
         id,
         projectId: pid,
         createdAt: 1,
         updatedAt: 1,
         status: 'table',
-        table: { x: (i % 40) * 30, y: Math.floor(i / 40) * 30, angleDeg: 0, lastSeen: 1, snapId: 's1' },
+        table: { x: at ? at[0]! : (i % 40) * 30, y: at ? at[1]! : Math.floor(i / 40) * 30, angleDeg: 0, lastSeen: 1, snapId: 's1' },
         outlineMm: outline,
         areaMm2: 345,
         sizeMm: [18, 19],
@@ -110,7 +164,9 @@ export async function seedPieces(page: Page, opts: PiecesSeed = {}): Promise<voi
         ...extra,
       });
       await new Promise<void>((res) => {
-        const tx = dbh.transaction(['projects', 'pieces', 'blobs'], 'readwrite');
+        const tx = dbh.transaction(['projects', 'pieces', 'blobs', 'snaps'], 'readwrite');
+        if (photo)
+          tx.objectStore('snaps').put({ id: 's1', projectId: pid, kind: 'overview', ts: 1, zoom: 1, quality: null, blobId: null, pieceIds: [], ...photo });
         tx.objectStore('blobs').put({ id: `${pid}:box-rect`, ts: 1, kind: 'box', blob: new Blob([bytes(boxB64)], { type: 'image/jpeg' }) });
         tx.objectStore('projects').put({
           id: pid,
@@ -145,15 +201,22 @@ export async function seedPieces(page: Page, opts: PiecesSeed = {}): Promise<voi
           tx.objectStore('blobs').put({ id: `${pid}:patch-${p.id}`, ts: 1, kind: 'patch', blob: new Blob([bytes(p.b64)]) });
           tx.objectStore('blobs').put({ id: `${pid}:thumb-${p.id}`, ts: 1, kind: 'thumb', blob: new Blob([bytes(p.thumb)], { type: 'image/png' }) });
           tx.objectStore('pieces').put(
-            row(p.id, i, p.outline, `${pid}:thumb-${p.id}`, {
-              flags: p.weak ? { weak: true } : {},
-              patch: { blobId: `${pid}:patch-${p.id}`, flats: [false, false, false, false], sure: false, ts: 5 },
-            }),
+            row(
+              p.id,
+              i,
+              p.outline,
+              `${pid}:thumb-${p.id}`,
+              {
+                flags: { ...(p.weak ? { weak: true } : {}), ...(p.clump ? { clump: true } : {}) },
+                patch: { blobId: `${pid}:patch-${p.id}`, flats: [false, false, false, false], sure: false, ts: 5 },
+              },
+              p.at,
+            ),
           );
         });
         pending.forEach((p, k) => {
           tx.objectStore('blobs').put({ id: `${pid}:thumb-${p.id}`, ts: 1, kind: 'thumb', blob: new Blob([bytes(p.thumb)], { type: 'image/png' }) });
-          tx.objectStore('pieces').put(row(p.id, 100 + k, p.outline, `${pid}:thumb-${p.id}`, { status: 'pending', maybe: p.maybe, patch: null }));
+          tx.objectStore('pieces').put(row(p.id, 100 + k, p.outline, `${pid}:thumb-${p.id}`, { status: 'pending', maybe: p.maybe, patch: null }, p.at));
         });
         if (bulk)
           bulkCells.forEach((c) =>
@@ -161,14 +224,14 @@ export async function seedPieces(page: Page, opts: PiecesSeed = {}): Promise<voi
           );
         for (let i = 0; i < bulk; i++) {
           const c = bulkCells[i % bulkCells.length]!;
-          tx.objectStore('pieces').put(row(`bulk-${String(i).padStart(4, '0')}`, 200 + i, c.outline, `${pid}:cell-${c.id}`, { patch: null }));
+          tx.objectStore('pieces').put(row(`bulk-${String(i).padStart(4, '0')}`, 200 + i, c.outline, `${pid}:cell-${c.id}`, { patch: null }, c.at));
         }
         tx.oncomplete = () => res();
       });
       dbh.close();
       return 'ok';
     },
-    [box, ps, pend, art.width, art.height, PROJECT, opts.bulk ?? 0, cells] as const,
+    [box, ps, pend, art.width, art.height, PROJECT, opts.bulk ?? 0, cells, snap] as const,
   );
   expect(seeded).toBe('ok');
   if (opts.open === null) return;

@@ -18,7 +18,8 @@ const SCREEN_NAME: Record<Route, string> = {
   device: 'Device check',
   settings: 'Settings',
   report: 'Send report',
-  help: 'Setup guide',
+  // M9 part 6 help: the Help screen is "How it works" now (its tester guide is a section in it).
+  help: 'How it works',
   log: 'Activity log',
   new: 'New puzzle',
   puzzle: 'Puzzle',

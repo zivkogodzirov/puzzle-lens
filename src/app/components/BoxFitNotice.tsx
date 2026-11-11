@@ -12,6 +12,8 @@ import { readerWorker } from '../workers';
 import { logError, logInfo } from '../../log/logger';
 import { errorWords, plural } from '../words';
 import { Icon } from '../ui/icons';
+// M9 part 6 help: the percentage in Tester mode only.
+import { settings } from '../settings';
 
 export function BoxFitNotice({ project, shown, onProject }: { project: Project; shown: Map<string, SpotChoice>; onProject: (p: Project) => void }) {
   const [busy, setBusy] = useState(false);
@@ -76,9 +78,9 @@ export function BoxFitNotice({ project, shown, onProject }: { project: Project; 
       <div class="callout-body">
         <strong class="callout-title">Box picture check</strong>
         <p>
-          Your pieces show that the box picture is about {pc} % {a < 1 ? 'bigger' : 'smaller'} than the real puzzle (it shows{' '}
-          {a < 1 ? 'a little more' : 'a little less'} of the scene), so spots near its edges are off by up to {Math.round(fit!.edgeShift * 100) / 100} of a
-          piece. Measured from {plural(Math.min(fit!.x.n, fit!.y.n), 'piece')} the app is sure about.
+          Your pieces show that the box picture is {settings.testerMode.value ? `about ${pc} %` : 'a little'} {a < 1 ? 'bigger' : 'smaller'} than the real
+          puzzle (it shows {a < 1 ? 'a little more' : 'a little less'} of the scene), so spots near its edges are off by up to{' '}
+          {Math.round(fit!.edgeShift * 100) / 100} of a piece. Measured from {plural(Math.min(fit!.x.n, fit!.y.n), 'piece')} the app is sure about.
         </p>
         <div class="callout-buttons">
           <button class="btn btn-small btn-filled" data-testid="box-fit-apply" disabled={busy} onClick={() => void apply()}>

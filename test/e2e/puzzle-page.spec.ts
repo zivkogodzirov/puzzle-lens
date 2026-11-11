@@ -199,10 +199,10 @@ test('icons instead of emoji, with their words: the tab bar, Scan, the old actio
   // A piece's answers (M9 part 3: "It fits" / "Not there"): a check and an x beside the words; It fits is the filled green button.
   await page.locator('[data-testid="catalog"] .thumb-btn').first().click();
   const fits = page.getByTestId('spot-fits');
-  await expect(fits).toHaveAccessibleName('It fits');
+  await expect(fits).toHaveAccessibleName(/^It fits in column \d+, row \d+$/); // M9 part 6: with the spot, for VoiceOver
   await expect(fits.locator('svg[data-icon="check"]')).toHaveCount(1);
   await expect(fits).toHaveClass(/btn-good/);
-  await expect(page.getByTestId('spot-not')).toHaveAccessibleName('Not there');
+  await expect(page.getByTestId('spot-not')).toHaveAccessibleName(/^Not there: column \d+, row \d+$/);
   await expect(page.getByTestId('spot-not').locator('svg[data-icon="x"]')).toHaveCount(1);
   // "Not a piece": a red plain button with a trash icon.
   await expect(page.getByTestId('spot-remove')).toHaveAccessibleName('Not a piece');
@@ -291,7 +291,8 @@ test('Delete scanned pieces (More tab): an action sheet; Cancel keeps them, Dele
   await page.getByTestId('delete-scan').click();
   await page.getByTestId('delete-scan-yes').click();
   await expect(page.getByTestId('scan-bin-note')).toContainText('6 pieces moved to the bin');
-  await expect(page.getByTestId('scan-bin-note')).toHaveAttribute('role', 'status');
+  // M9 part 6: read out from the screen's one status region.
+  await expect(page.getByTestId('announce')).toContainText('6 pieces moved to the bin');
   await expect(page.getByTestId('scan-bin')).toContainText('6 pieces');
   // Restore (nothing to swap with): at once.
   await page.getByTestId('restore-scan').click();

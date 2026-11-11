@@ -481,6 +481,23 @@ export function PhotoResult({
               </ul>
             )}
             {flagged.length > 0 && <p class="photo-view-hint">Tap a dashed outline to look closer.</p>}
+            {/* M9 part 6 help: the same as tapping a dashed outline, for VoiceOver (a tap on the photo has no name). */}
+            {flagged.length > 0 && (
+              <div class="sr-only" data-testid="flag-buttons">
+                {flagged.slice(0, 12).map((f, n) => (
+                  <button
+                    key={f.i}
+                    type="button"
+                    onClick={() => {
+                      setPicked(f.i);
+                      zoomTo(f.i);
+                    }}
+                  >
+                    {`Look closer at outline ${n + 1} of ${flagged.length}: ${outlines[f.i]!.flag === 'clump' ? 'pieces touching' : 'faint outline'}`}
+                  </button>
+                ))}
+              </div>
+            )}
             <button ref={done} type="button" class="btn btn-filled btn-block" data-testid="photo-done" onClick={onClose}>
               Done
             </button>

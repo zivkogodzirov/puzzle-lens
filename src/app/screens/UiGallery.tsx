@@ -158,8 +158,8 @@ export function UiGallery() {
           value={mode}
           onChange={setMode}
           options={[
-            ['full', 'Full (overview + close-ups)'],
-            ['quick', 'Quick (one overview photo)'],
+            ['full', 'Full (whole table + close-ups)'],
+            ['quick', 'Quick (one whole-table photo)'],
           ]}
         />
       </Section>
@@ -167,9 +167,24 @@ export function UiGallery() {
       <Section title="Grouped list" id="list">
         <ListSection header="Tools" footer="A footer sentence explains the group. 15 px, grey." testId="g-list">
           <ListRow icon={<Icon name="map" />} tone="accent" title="Show my table" href="#/ui" testId="g-row-link" />
-          <ListRow icon={<Icon name="target" />} tone="bad" title="Fill a spot" value="20" chevron onClick={() => toast({ text: 'Fill a spot' })} testId="g-row-button" />
+          <ListRow
+            icon={<Icon name="target" />}
+            tone="bad"
+            title="Fill a spot"
+            value="20"
+            chevron
+            onClick={() => toast({ text: 'Fill a spot' })}
+            testId="g-row-button"
+          />
           <ListRow icon={<Icon name="link" />} tone="good" title="Which pieces join" value="25" chevron onClick={() => toast({ text: 'Which pieces join' })} />
-          <ListRow icon={<Icon name="alert-triangle" />} tone="warn" title="Pieces to check" subtitle="2 outlines look odd" chevron onClick={() => toast({ text: 'Pieces to check' })} />
+          <ListRow
+            icon={<Icon name="alert-triangle" />}
+            tone="warn"
+            title="Pieces to check"
+            subtitle="2 outlines look odd"
+            chevron
+            onClick={() => toast({ text: 'Pieces to check' })}
+          />
           <ListRow icon={<Icon name="settings" />} title="Settings" value="cm" href="#/settings" />
           <ListRow icon={<Icon name="x" />} tone="grey" title="Not available now" onClick={() => {}} disabled />
         </ListSection>

@@ -6,6 +6,8 @@ import { useEffect } from 'preact/hooks';
 import { useRegisterSW } from 'virtual:pwa-register/preact';
 import { logInfo, logWarn } from '../../log/logger';
 import { Icon } from '../ui/icons';
+// M9 part 6 help: news read from the screen's one status region.
+import { useAnnounce } from '../ui/announce';
 
 export function UpdateBanner() {
   const {
@@ -34,9 +36,10 @@ export function UpdateBanner() {
     return undefined;
   }, [offlineReady]);
 
+  useAnnounce(needRefresh ? 'A new version of Puzzle Lens is ready: tap Reload.' : offlineReady ? 'Ready to work offline' : null);
   if (needRefresh) {
     return (
-      <div class="banner banner-update" role="status">
+      <div class="banner banner-update">
         <span>A new version of Puzzle Lens is ready.</span>
         <button class="btn btn-small" onClick={() => void updateServiceWorker(true)}>
           Reload
@@ -46,7 +49,7 @@ export function UpdateBanner() {
   }
   if (offlineReady) {
     return (
-      <div class="banner" role="status">
+      <div class="banner">
         <span>
           Ready to work offline <Icon name="check" size={18} class="icon-inline" />
         </span>

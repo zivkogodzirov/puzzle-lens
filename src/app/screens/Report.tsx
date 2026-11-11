@@ -12,6 +12,8 @@ import { isDeviceCheckResults, missingParts, modeLabel, PART_NAMES, REQUIRED_PAR
 import type { DeviceCheckResults, DisplayMode, RunPart } from '../../device/types';
 import { Callout } from '../ui/Callout';
 import { Icon } from '../ui/icons';
+// M9 part 6 help: news read from the screen's one status region.
+import { useAnnounce } from '../ui/announce';
 
 type Phase =
   | { kind: 'idle' }
@@ -34,6 +36,7 @@ function when(ts: number): string {
 export function ReportScreen() {
   const [includeFull, setIncludeFull] = useState(false);
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
+  useAnnounce(phase.kind === 'preparing' ? (phase.step > 0 ? `Step ${phase.step} of ${phase.total}: ${phase.label}` : 'Starting') : null);
   const [share, setShare] = useState<ShareState>('none');
   const [facts, setFacts] = useState<Facts | null>(null);
   const mounted = useRef(true);
@@ -197,7 +200,7 @@ export function ReportScreen() {
 
       {phase.kind === 'preparing' && (
         <div style={{ marginTop: '12px' }}>
-          <p class="small" data-testid="report-progress" aria-live="polite">
+          <p class="small" data-testid="report-progress">
             {phase.step > 0 ? `Step ${phase.step} of ${phase.total}: ${phase.label}…` : 'Starting…'}
           </p>
           <progress max={phase.total} value={phase.step} style={{ width: '100%' }} />
@@ -269,7 +272,9 @@ export function ReportScreen() {
           Choose <strong>AirDrop</strong> and pick your Mac, or choose <strong>Mail</strong> or <strong>Messages</strong> to send it to me.
         </li>
       </ol>
-      <p class="muted small">If the Share menu doesn't open, tap "Download instead". The file goes to the Files app › Downloads, and you can share it from there.</p>
+      <p class="muted small">
+        If the Share menu doesn't open, tap "Download instead". The file goes to the Files app › Downloads, and you can share it from there.
+      </p>
     </main>
   );
 }

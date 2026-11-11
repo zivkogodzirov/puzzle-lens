@@ -71,7 +71,7 @@ export function PiecesTab() {
           )}
           {(project.batch?.n ?? 1) > 1 && (
             <span class="muted" data-testid="puzzle-batch">
-              {' · '}Batch {project.batch!.n}
+              {' · '}Lot {project.batch!.n}
             </span>
           )}
         </p>

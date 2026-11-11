@@ -137,17 +137,19 @@
   --m-press: 120ms ease-out;
   --m-state: 220ms ease-out;
   --m-sheet: 350ms cubic-bezier(0.32, 0.72, 0, 1);
+  /* M9 part 6 type: one point of the type scale; 1rem is 17 px at the iPhone's default Text Size (see the type section). */
+  --pt: calc(1rem / 17);
   --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  --t-large-title: 700 34px/41px var(--font-family);
-  --t-title-1: 700 28px/34px var(--font-family);
-  --t-title-2: 700 22px/28px var(--font-family);
-  --t-title-3: 600 20px/25px var(--font-family);
-  --t-headline: 600 17px/22px var(--font-family);
-  --t-body: 400 17px/22px var(--font-family);
-  --t-callout: 400 16px/21px var(--font-family);
-  --t-subhead: 400 15px/20px var(--font-family);
-  --t-footnote: 400 13px/18px var(--font-family);
-  --t-badge: 600 12px/16px var(--font-family);
+  --t-large-title: 700 calc(34 * var(--pt))/calc(41 * var(--pt)) var(--font-family);
+  --t-title-1: 700 calc(28 * var(--pt))/calc(34 * var(--pt)) var(--font-family);
+  --t-title-2: 700 calc(22 * var(--pt))/calc(28 * var(--pt)) var(--font-family);
+  --t-title-3: 600 calc(20 * var(--pt))/calc(25 * var(--pt)) var(--font-family);
+  --t-headline: 600 calc(17 * var(--pt))/calc(22 * var(--pt)) var(--font-family);
+  --t-body: 400 calc(17 * var(--pt))/calc(22 * var(--pt)) var(--font-family);
+  --t-callout: 400 calc(16 * var(--pt))/calc(21 * var(--pt)) var(--font-family);
+  --t-subhead: 400 calc(15 * var(--pt))/calc(20 * var(--pt)) var(--font-family);
+  --t-footnote: 400 calc(13 * var(--pt))/calc(18 * var(--pt)) var(--font-family);
+  --t-badge: 600 calc(12 * var(--pt))/calc(16 * var(--pt)) var(--font-family);
   color-scheme: dark;
 }
 @media (prefers-color-scheme: light) {
@@ -195,7 +197,7 @@ body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font: 17px/1.45 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font: 1rem/1.45 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
 }
@@ -215,12 +217,12 @@ body {
   margin-bottom: 12px;
 }
 .topbar h1 {
-  font-size: 22px;
+  font-size: calc(22 * var(--pt));
   margin: 0;
   flex: 1;
 }
 h2 {
-  font-size: 18px;
+  font-size: calc(18 * var(--pt));
   margin: 22px 0 8px;
 }
 p {
@@ -230,7 +232,7 @@ p {
   color: var(--muted);
 }
 .small {
-  font-size: 14px;
+  font-size: calc(15 * var(--pt));
 }
 .card {
   background: var(--panel);
@@ -290,15 +292,15 @@ p {
   flex-direction: column;
   justify-content: space-between;
   font-weight: 600;
-  font-size: 17px;
+  font-size: calc(17 * var(--pt));
 }
 .tile .tile-icon {
-  font-size: 28px;
+  font-size: calc(28 * var(--pt));
 }
 .tile .tile-sub {
   font-weight: 400;
   color: var(--muted);
-  font-size: 13px;
+  font-size: calc(15 * var(--pt));
 }
 .tile-wide {
   grid-column: 1 / -1;
@@ -314,7 +316,7 @@ p {
   align-items: center;
   gap: 12px;
   justify-content: space-between;
-  font-size: 15px;
+  font-size: calc(15 * var(--pt));
 }
 .banner-update {
   background: var(--banner-update-bg);
@@ -352,7 +354,7 @@ ol.steps li {
   display: grid;
   grid-template-columns: minmax(120px, 42%) 1fr;
   gap: 4px 12px;
-  font-size: 15px;
+  font-size: calc(15 * var(--pt));
 }
 .kv dt {
   color: var(--muted);
@@ -384,7 +386,7 @@ label.field {
 label.field span {
   display: block;
   color: var(--muted);
-  font-size: 14px;
+  font-size: calc(15 * var(--pt));
   margin-bottom: 6px;
 }
 select,
@@ -395,7 +397,7 @@ input[type='number'] {
   border: 1px solid var(--border);
   background: var(--panel-2);
   color: var(--text);
-  font-size: 17px;
+  font-size: calc(17 * var(--pt));
   padding: 0 12px;
 }
 /* ---------- Live screen ---------- */
@@ -431,7 +433,7 @@ input[type='number'] {
 .live-top .title {
   flex: 1;
   font-weight: 600;
-  font-size: 15px;
+  font-size: calc(15 * var(--pt));
 }
 .live-bottom {
   position: absolute;
@@ -453,7 +455,7 @@ input[type='number'] {
   border: 1px solid rgba(255, 255, 255, 0.35);
   background: rgba(0, 0, 0, 0.45);
   color: var(--white);
-  font-size: 15px;
+  font-size: calc(15 * var(--pt));
   font-weight: 600;
 }
 .chip[aria-pressed='true'] {
@@ -492,7 +494,7 @@ input[type='number'] {
   background: rgba(0, 0, 0, 0.62);
   border-radius: 10px;
   padding: 8px 10px;
-  font: 12px/1.35 ui-monospace, 'SF Mono', Menlo, monospace;
+  font: calc(12 * var(--pt))/1.35 ui-monospace, 'SF Mono', Menlo, monospace;
   color: var(--cam-hud);
   max-width: 64vw;
   pointer-events: none;
@@ -550,7 +552,7 @@ input[type='number'] {
   gap: 10px;
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
-  font-size: 15px;
+  font-size: calc(15 * var(--pt));
 }
 .check-row:last-child {
   border-bottom: 0;
@@ -565,7 +567,7 @@ input[type='number'] {
 }
 pre.logbox {
   white-space: pre-wrap;
-  font-size: 12px;
+  font-size: calc(12 * var(--pt));
   background: var(--panel-2);
   padding: 10px;
   border-radius: 10px;
@@ -610,7 +612,7 @@ pre.logbox {
   border: 1px solid var(--border);
   background: var(--panel-2);
   color: var(--text);
-  font-size: 18px;
+  font-size: calc(18 * var(--pt));
   padding: 0 14px;
 }
 .text-input:focus {
@@ -618,7 +620,7 @@ pre.logbox {
   outline-offset: 1px;
 }
 .text-input.big-number {
-  font-size: 28px;
+  font-size: calc(28 * var(--pt));
   font-weight: 700;
   letter-spacing: 0.5px;
 }
@@ -636,7 +638,7 @@ pre.logbox {
   border: 1px solid var(--border);
   background: var(--panel-2);
   color: var(--text);
-  font-size: 17px;
+  font-size: calc(17 * var(--pt));
   font-weight: 600;
   cursor: pointer;
 }
@@ -661,7 +663,7 @@ pre.logbox {
 .wizard-next {
   margin-top: 18px;
   min-height: 58px;
-  font-size: 18px;
+  font-size: calc(18 * var(--pt));
 }
 .wizard-secondary {
   margin-top: 12px;
@@ -693,7 +695,7 @@ pre.logbox {
   margin: 0 0 6px;
 }
 .step-count {
-  font-size: 14px;
+  font-size: calc(15 * var(--pt));
   color: var(--muted);
 }
 .step-dots .dots {
@@ -834,16 +836,16 @@ pre.logbox {
   padding: 18px 12px;
 }
 .grid-big {
-  font-size: 34px;
+  font-size: calc(34 * var(--pt));
   font-weight: 800;
   line-height: 1.15;
 }
 .grid-big .muted {
-  font-size: 18px;
+  font-size: calc(18 * var(--pt));
   font-weight: 600;
 }
 .grid-sub {
-  font-size: 20px;
+  font-size: calc(20 * var(--pt));
   font-weight: 600;
   margin: 4px 0;
 }
@@ -875,7 +877,7 @@ pre.logbox {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 30px;
+  font-size: calc(30 * var(--pt));
   overflow: hidden;
   flex: none;
 }
@@ -891,13 +893,13 @@ pre.logbox {
   min-width: 0;
 }
 .puzzle-title {
-  font-size: 17px;
+  font-size: calc(17 * var(--pt));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .puzzle-chevron {
-  font-size: 28px;
+  font-size: calc(28 * var(--pt));
   color: var(--muted);
 }
 .setup-progress {
@@ -923,7 +925,7 @@ pre.logbox {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 15px;
+  font-size: calc(15 * var(--pt));
   background: var(--panel-2);
   border: 1px solid var(--border);
   flex: none;
@@ -981,9 +983,9 @@ pre.logbox {
 .gauge-bubble { fill: var(--cam-warn); }
 .gauge-bubble.ok { fill: var(--cam-good); }
 .gauge-arrow { fill: none; stroke: var(--cam-accent); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
-.gauge-msg { margin: 0; font-weight: 600; font-size: 17px; text-align: center; max-width: 80vw; }
+.gauge-msg { margin: 0; font-weight: 600; font-size: calc(17 * var(--pt)); text-align: center; max-width: 80vw; }
 .gauge-msg.ok { color: var(--cam-good); }
-.gauge-sub { margin: 0; font-size: 13px; opacity: 0.85; }
+.gauge-sub { margin: 0; font-size: calc(15 * var(--pt)); opacity: 0.85; }
 .level-ask { position: absolute; right: 12px; top: calc(var(--safe-top) + 72px); z-index: 3; }
 .table-camera-extra {
   position: absolute;
@@ -1076,7 +1078,7 @@ pre.logbox {
 .btn-on { border-color: var(--accent); }
 .trays { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
 .tray-count { align-items: center; gap: 10px; }
-.tray-count strong { min-width: 1.5em; text-align: center; font-size: 18px; }
+.tray-count strong { min-width: 1.5em; text-align: center; font-size: calc(18 * var(--pt)); }
 .trays .chip { background: var(--panel-2); color: var(--text); border-color: var(--border); display: inline-flex; align-items: center; gap: 6px; }
 .trays .chip[aria-pressed='true'] { background: var(--text); color: var(--bg); }
 /* The puzzle page's "Show pieces" filter: page colours, like the trays (the camera's see-through chip gave 3.6:1 in light mode). */
@@ -1085,7 +1087,7 @@ pre.logbox {
 .swatch { display: inline-block; width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.5); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4); }
 .tray-detail { display: flex; flex-direction: column; gap: 8px; }
 .tray-summary .chips { margin-top: 6px; }
-.tray-tag { position: absolute; left: 4px; bottom: 4px; min-width: 18px; padding: 0 4px; height: 18px; border-radius: 9px; font-size: 11px; font-weight: 800; line-height: 18px; text-align: center; border: 1px solid rgba(0, 0, 0, 0.5); }
+.tray-tag { position: absolute; left: 4px; bottom: 4px; min-width: 18px; padding: 0 4px; height: 18px; border-radius: 9px; font-size: min(calc(12 * var(--pt)), 16px); font-weight: 800; line-height: 18px; text-align: center; border: 1px solid rgba(0, 0, 0, 0.5); }
 .table-photo { justify-content: flex-start; padding-top: calc(var(--safe-top) + 12px); background: var(--black); overflow-y: auto; }
 .table-photo-bar { width: 100%; gap: 8px; align-items: center; color: var(--white); margin-bottom: 8px; }
 .table-photo svg { width: 100%; max-height: 80vh; }
@@ -1111,10 +1113,10 @@ pre.logbox {
 .state-found { background: var(--state-found); }
 .state-shape { background: var(--state-shape); }
 .state-placed { background: var(--state-placed); }
-.side-tag { position: absolute; right: 4px; bottom: 4px; min-width: 18px; height: 18px; line-height: 18px; border-radius: 9px; background: var(--good); color: var(--on-good); font-size: 12px; font-weight: 800; text-align: center; padding: 0 3px; }
+.side-tag { position: absolute; right: 4px; bottom: 4px; min-width: 18px; height: 18px; line-height: 18px; border-radius: 9px; background: var(--good); color: var(--on-good); font-size: min(calc(12 * var(--pt)), 16px); font-weight: 800; text-align: center; padding: 0 3px; }
 .contrast-cell { fill: rgba(255, 0, 200, 0.5); stroke: var(--ov-contrast); stroke-width: 0.04; }
 .border-question { margin: 10px 0; }
-.border-question .chip { background: var(--panel-2); color: var(--text); border-color: var(--border); font-size: 14px; min-height: var(--tap-min); }
+.border-question .chip { background: var(--panel-2); color: var(--text); border-color: var(--border); font-size: calc(15 * var(--pt)); min-height: var(--tap-min); }
 .border-question .chip[aria-pressed='true'] { background: var(--text); color: var(--bg); }
 
 /* ---------- Live view of the table (M5) ---------- */
@@ -1122,7 +1124,7 @@ pre.logbox {
 .live-table { z-index: 60; }
 .live-tap { position: absolute; inset: 0; z-index: 1; }
 .live-table .live-top { z-index: 2; }
-.live-status { position: absolute; left: 10px; top: calc(var(--safe-top) + 62px); z-index: 2; display: inline-flex; align-items: center; margin: 0; padding: 0 12px; max-width: calc(100vw - 20px); font-size: 14px; pointer-events: none; }
+.live-status { position: absolute; left: 10px; top: calc(var(--safe-top) + 62px); z-index: 2; display: inline-flex; align-items: center; margin: 0; padding: 0 12px; max-width: calc(100vw - 20px); font-size: calc(15 * var(--pt)); pointer-events: none; }
 .live-status-good { border-color: rgba(60, 207, 122, 0.8); }
 .live-status-weak { border-color: rgba(255, 181, 71, 0.8); }
 .live-status-lost { border-color: rgba(255, 107, 107, 0.8); }
@@ -1143,11 +1145,11 @@ pre.logbox {
 .test-tab-word { writing-mode: vertical-rl; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; }
 .test-tab-dot { order: -1; flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--cam-bad); }
 .test-sheet { position: fixed; inset: 0; z-index: 95; overflow-y: auto; background: var(--bg); color: var(--text); padding: calc(var(--safe-top) + 12px) 16px calc(var(--safe-bottom) + 20px); }
-.test-sheet-bar { display: flex; align-items: center; gap: 10px; font-size: 18px; }
+.test-sheet-bar { display: flex; align-items: center; gap: 10px; font-size: calc(18 * var(--pt)); }
 .test-sheet-bar .grow { flex: 1; }
-.test-body h2 { font-size: 19px; margin: 14px 0 6px; }
-.test-body h3 { font-size: 16px; margin: 14px 0 6px; }
-.test-body h4 { font-size: 15px; margin: 12px 0 4px; }
+.test-body h2 { font-size: calc(19 * var(--pt)); margin: 14px 0 6px; }
+.test-body h3 { font-size: calc(16 * var(--pt)); margin: 14px 0 6px; }
+.test-body h4 { font-size: calc(15 * var(--pt)); margin: 12px 0 4px; }
 .test-body p { margin: 6px 0; }
 .test-body .md-list { padding-left: 22px; margin: 6px 0; }
 .test-body .md-list li { margin: 6px 0; }
@@ -1181,15 +1183,15 @@ pre.logbox {
 .pending-thumb { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
 .pending-thumb img, .pending-thumb .catalog-empty { width: 56px; height: 56px; object-fit: contain; border-radius: 8px; background: var(--paper); }
 .pending-choice { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; min-height: auto; padding: 6px; }
-.pending-tag { position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%; background: var(--warn); color: var(--on-warn); font-weight: 800; font-size: 13px; display: flex; align-items: center; justify-content: center; }
-.tiny { font-size: 11px; }
+.pending-tag { position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%; background: var(--warn); color: var(--on-warn); font-weight: 800; font-size: min(calc(13 * var(--pt)), 17px); display: flex; align-items: center; justify-content: center; }
+.tiny { font-size: calc(13 * var(--pt)); }
 
 /* ---------- Which pieces join (M6) ---------- */
 .matches { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
-.matches h3 { margin: 6px 0 0; font-size: 15px; }
+.matches h3 { margin: 6px 0 0; font-size: calc(15 * var(--pt)); }
 .match-card { margin: 0; }
 .match-next { border-color: var(--good-ink); }
-.match-next-title { margin: 0 0 6px; font-weight: 700; color: var(--good-ink); text-transform: uppercase; font-size: 12px; letter-spacing: 0.04em; }
+.match-next-title { margin: 0 0 6px; font-weight: 700; color: var(--good-ink); text-transform: uppercase; font-size: calc(13 * var(--pt)); letter-spacing: 0.04em; }
 .match-row { align-items: center; gap: 10px; flex-wrap: wrap; }
 .match-row p { margin: 0 0 4px; }
 .match-thumb { width: 56px; height: 56px; object-fit: contain; border-radius: 8px; background: var(--paper); display: inline-block; flex: none; }
@@ -1206,8 +1208,8 @@ pre.logbox {
 .piece-partners p { margin: 0; }
 
 /* ---------- Progress (M7 part 2) ---------- */
-.progress-big { font-size: 18px; margin: 0 0 8px; }
-.progress-big strong { font-size: 26px; }
+.progress-big { font-size: calc(18 * var(--pt)); margin: 0 0 8px; }
+.progress-big strong { font-size: calc(26 * var(--pt)); }
 .progress-bar { height: 10px; border-radius: 5px; background: var(--panel-2); overflow: hidden; }
 .progress-bar span { display: block; height: 100%; background: var(--good); }
 .progress-map { display: block; width: 100%; height: auto; margin-top: 10px; border-radius: 8px; }
@@ -1249,17 +1251,17 @@ h1[tabindex='-1']:focus { outline: none; }
 .app:has(.action-bar) .screen { padding-bottom: calc(var(--safe-bottom) + var(--action-bar-h) + 24px); }
 .action-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; padding: 8px calc(var(--safe-right) + 12px) calc(var(--safe-bottom) + 8px) calc(var(--safe-left) + 12px); border-top: 1px solid var(--border); background: var(--panel); box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.12); }
 .action-bar-inner { display: flex; gap: 8px; max-width: 696px; margin: 0 auto; }
-.action-bar-btn { flex: 1 1 0; min-width: 0; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 15px; font-weight: 600; line-height: 1.15; cursor: pointer; }
-.action-bar-icon { font-size: 18px; line-height: 1; }
+.action-bar-btn { flex: 1 1 0; min-width: 0; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2); color: var(--text); font: inherit; font-size: calc(15 * var(--pt)); font-weight: 600; line-height: 1.15; cursor: pointer; }
+.action-bar-icon { font-size: calc(18 * var(--pt)); line-height: 1; }
 .action-bar-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .action-bar-primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
 .action-bar-btn[aria-expanded='true'] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 /* A panel opened from the action bar: its heading and Close, clear of the status bar when brought into view. */
 .panel-head { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; scroll-margin-top: calc(var(--safe-top) + 12px); }
-.panel-head h3 { flex: 1; margin: 0; font-size: 18px; }
+.panel-head h3 { flex: 1; margin: 0; font-size: calc(18 * var(--pt)); }
 /* The Joins count as a badge on its button (check 2026-11-10: "Joins (3…" was cut off at 375 px). */
 .action-bar-btn { position: relative; }
-.action-bar-badge { position: absolute; top: 3px; right: 6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; line-height: 20px; font-variant-numeric: tabular-nums; }
+.action-bar-badge { position: absolute; top: 3px; right: 6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-size: min(calc(12 * var(--pt)), 16px); font-weight: 700; line-height: 20px; font-variant-numeric: tabular-nums; }
 /* Words on the dark photo views: the camera's light text (check 2026-11-10: 2.9–3.6:1 in light mode). */
 .photo-result .muted { color: var(--cam-text); }
 
@@ -1294,7 +1296,7 @@ h1[tabindex='-1']:focus { outline: none; }
 .list-row:disabled { opacity: 0.5; }
 .list-inset > li + li > .list-row::before { content: ''; position: absolute; top: 0; right: 0; left: var(--s-4); border-top: 0.5px solid var(--border); }
 .list-inset > li + li > .list-row.has-icon::before { left: calc(var(--s-4) + 30px + var(--s-3)); }
-.list-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; background: var(--fill-grey); color: var(--text); font-size: 17px; line-height: 1; }
+.list-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; background: var(--fill-grey); color: var(--text); font-size: min(calc(17 * var(--pt)), 22px); line-height: 1; }
 .list-icon svg { width: 18px; height: 18px; }
 .list-icon-accent { background: var(--accent); color: var(--on-accent); }
 .list-icon-good { background: var(--good); color: var(--on-good); }
@@ -1311,7 +1313,7 @@ h1[tabindex='-1']:focus { outline: none; }
 .callout-good { background: var(--good-tint); }
 .callout-warn { background: var(--warn-tint); }
 .callout-bad { background: var(--bad-tint); }
-.callout-icon { flex: none; align-self: flex-start; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: var(--on-accent); font-size: 18px; font-weight: 700; line-height: 1; }
+.callout-icon { flex: none; align-self: flex-start; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: var(--on-accent); font-size: min(calc(18 * var(--pt)), 24px); font-weight: 700; line-height: 1; }
 .callout-icon svg { width: 20px; height: 20px; }
 .callout-good .callout-icon { background: var(--good); color: var(--on-good); }
 .callout-warn .callout-icon { background: var(--warn); color: var(--on-warn); }
@@ -1340,7 +1342,7 @@ h1[tabindex='-1']:focus { outline: none; }
 .ui-action-head { padding: var(--s-3) var(--s-4); text-align: center; color: var(--muted); }
 .ui-action-title { margin: 0; font: var(--t-footnote); font-weight: 600; }
 .ui-action-message { margin: 2px 0 0; font: var(--t-subhead); }
-.ui-action-btn { display: block; width: 100%; min-height: var(--tap-answer); padding: 0 var(--s-4); border: 0; border-top: 0.5px solid var(--border); background: transparent; color: var(--accent); font: 400 20px/25px var(--font-family); cursor: pointer; }
+.ui-action-btn { display: block; width: 100%; min-height: var(--tap-answer); padding: 0 var(--s-4); border: 0; border-top: 0.5px solid var(--border); background: transparent; color: var(--accent); font: 400 calc(20 * var(--pt))/calc(25 * var(--pt)) var(--font-family); cursor: pointer; }
 .ui-action-group > .ui-action-btn:first-child { border-top: 0; }
 .ui-action-btn:active { background: var(--fill-grey); }
 .ui-action-btn.is-destructive { color: var(--bad-ink); }
@@ -1362,7 +1364,7 @@ h1[tabindex='-1']:focus { outline: none; }
 .app:has(.tabbar-fixed) .screen { padding-bottom: calc(var(--safe-bottom) + var(--action-bar-h) + 24px); }
 .tabbar-item { position: relative; flex: 1 1 0; min-width: 0; min-height: var(--tabbar-h); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 2px 3px; border: 0; background: transparent; color: var(--muted); font: var(--t-footnote); font-weight: 500; cursor: pointer; }
 .tabbar-item[aria-current='page'] { color: var(--accent); font-weight: 600; }
-.tabbar-icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; font-size: 20px; line-height: 1; }
+.tabbar-icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; font-size: min(calc(20 * var(--pt)), 22px); line-height: 1; }
 .tabbar-icon svg { width: 24px; height: 24px; }
 .tabbar-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tabbar-badge { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--bad); color: var(--on-bad); font: var(--t-badge); line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
@@ -1391,7 +1393,7 @@ h1[tabindex='-1']:focus { outline: none; }
 .btn-cam .test-btn-dot { border-color: var(--black); }
 /* The zoom shown in the scan camera's top row (not a button): words in the same 36 px circle. */
 .cam-zoom { flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--tap-min); height: var(--tap-min); }
-.cam-zoom > span { display: inline-flex; align-items: center; justify-content: center; width: var(--tap-icon); height: var(--tap-icon); border-radius: 50%; background: var(--cam-material); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.28); color: var(--white); font: var(--t-badge); font-size: 13px; }
+.cam-zoom > span { display: inline-flex; align-items: center; justify-content: center; width: var(--tap-icon); height: var(--tap-icon); border-radius: 50%; background: var(--cam-material); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.28); color: var(--white); font: var(--t-badge); font-size: calc(13 * var(--pt)); }
 /* The edge tab's and the steps sheet's flask. */
 .test-tab .icon { flex: none; }
 .test-sheet-title { display: inline-flex; align-items: center; gap: var(--s-2); }
@@ -1598,7 +1600,7 @@ h1[tabindex='-1']:focus { outline: none; }
 .pieces-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-3); margin: var(--s-2) 0; font: var(--t-footnote); color: var(--muted); }
 .pieces-legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .pieces-legend .place-dot, .pieces-legend .pending-tag, .pieces-legend .side-tag, .pieces-legend .tray-tag { position: static; flex: none; }
-.pieces-legend .pending-tag, .pieces-legend .side-tag { width: 18px; min-width: 18px; height: 18px; font-size: 11px; line-height: 18px; padding: 0; }
+.pieces-legend .pending-tag, .pieces-legend .side-tag { width: 18px; min-width: 18px; height: 18px; font-size: min(calc(12 * var(--pt)), 16px); line-height: 18px; padding: 0; }
 .legend-tile { flex: none; display: inline-block; width: 14px; height: 14px; border-radius: 3px; background: var(--panel-2); }
 .legend-tile.kind-corner { outline: 3px solid var(--kind-corner); outline-offset: -3px; }
 .legend-tile.kind-edge { outline: 3px solid var(--kind-edge); outline-offset: -3px; }
@@ -1875,6 +1877,51 @@ body:has(.scan-wait) [data-testid='camera-busy'] { display: none; }
   .cam-dock-row { display: flex; flex-direction: column-reverse; gap: var(--s-3); width: auto; }
 }
 
+/* ---------- M9 part 6: type ---------- */
+/* Text follows the iPhone's Text Size setting (design plan §3.3, decision 11, §3.8 rule 4). The root font is the
+   iPhone's body text style, 17 px at the default size and up to about 31 px at the largest accessibility size; every
+   font size is a number of points of --pt (1rem / 17), so at the default size each is the same px as before.
+   Elsewhere (a computer, an Android phone) the root is 17 px, or more when the browser's own text size is bigger.
+   Floors: 15 points for any sentence, status or count; 13 for section headers, tab labels and metadata; 12 only
+   for numbers in badges. Printed pages (marker sheets, tray labels) and drawings (SVG) keep their own sizes. */
+html { font-size: 106.25%; }
+@supports (font: -apple-system-body) and (-webkit-touch-callout: none) {
+  html { font: -apple-system-body; }
+}
+/* The camera: its text grows to about 24 px at most (Title 3 is 20 points), so it never buries the picture. The
+   sheets drawn over it (the result, the gear, the map) grow like any other sheet. */
+.live { --pt: min(calc(1rem / 17), 1.2px); }
+.live .ui-sheet-root { --pt: calc(1rem / 17); }
+.live, .live .ui-sheet-root { --t-large-title: 700 calc(34 * var(--pt))/calc(41 * var(--pt)) var(--font-family); --t-title-1: 700 calc(28 * var(--pt))/calc(34 * var(--pt)) var(--font-family); --t-title-2: 700 calc(22 * var(--pt))/calc(28 * var(--pt)) var(--font-family); --t-title-3: 600 calc(20 * var(--pt))/calc(25 * var(--pt)) var(--font-family); --t-headline: 600 calc(17 * var(--pt))/calc(22 * var(--pt)) var(--font-family); --t-body: 400 calc(17 * var(--pt))/calc(22 * var(--pt)) var(--font-family); --t-callout: 400 calc(16 * var(--pt))/calc(21 * var(--pt)) var(--font-family); --t-subhead: 400 calc(15 * var(--pt))/calc(20 * var(--pt)) var(--font-family); --t-footnote: 400 calc(13 * var(--pt))/calc(18 * var(--pt)) var(--font-family); --t-badge: 600 calc(12 * var(--pt))/calc(16 * var(--pt)) var(--font-family); }
+/* The bars keep their height: the tab bar's words stop at 15 px (as on the iPhone, where tab bar words hardly grow),
+   the navigation bar's title and buttons at 22 px. */
+.tabbar-item { font-size: min(calc(13 * var(--pt)), 15px); line-height: 18px; }
+.tabbar-badge { font-size: min(calc(12 * var(--pt)), 15px); }
+.navbar .navbar-title { font-size: min(calc(17 * var(--pt)), 22px); line-height: 1.3; }
+.navbar-back, .navbar-btn { font-size: min(calc(17 * var(--pt)), 22px); line-height: 1.3; }
+/* Badges and round marks grow with their number (the same size as before at the default text size). */
+.tray-tag, .side-tag, .pieces-legend .pending-tag, .pieces-legend .side-tag, .tabbar-badge { height: max(18px, 1.5em); min-width: max(18px, 1.5em); line-height: max(18px, 1.5em); }
+.pieces-legend .pending-tag, .pieces-legend .side-tag { width: max(18px, 1.5em); }
+.pending-tag { width: max(20px, 1.5em); height: max(20px, 1.5em); }
+.action-bar-badge { height: max(20px, 1.6em); min-width: max(20px, 1.6em); line-height: max(20px, 1.6em); }
+.setup-mark { width: max(30px, 2em); height: max(30px, 2em); }
+/* Layouts that broke only at large sizes. A long word or address breaks rather than pushing the page sideways; the
+   segmented control's words wrap instead of being cut off with "…". */
+body { overflow-wrap: break-word; }
+.segmented-nowrap > button, .page-filter-btn { white-space: normal; overflow-wrap: anywhere; }
+
+/* M9 part 6: fixes */
+/* Help's pictures are drawings: their words keep fixed sizes (in the drawing's own units), so they never spill out of their boxes at a large Text Size. */
+svg.how-art .how-label text { font: 600 12px/16px var(--font-family); }
+svg.how-art .how-text { font: 600 17px/22px var(--font-family); }
+svg.how-art .how-text-small { font: 600 13px/18px var(--font-family); }
+/* The step's number circle grows with its number (these rules come before the help section's, hence the longer selectors). */
+.how-title > .how-n { width: auto; height: auto; min-width: max(30px, 1.6em); min-height: max(30px, 1.6em); box-sizing: border-box; padding: 0 0.3em; line-height: 1.2; }
+/* The piece card's answers: at a large Text Size each takes the width it is given and its words wrap, so they stay on the screen. */
+.card-answer-btn { flex: 1 1 8.5em; min-width: 0; max-width: 100%; height: auto; white-space: normal; overflow-wrap: anywhere; padding-top: var(--s-2); padding-bottom: var(--s-2); line-height: 1.2; }
+/* A tile touching another piece: arrows apart (not the faint outline's "!"). */
+.tile-split { display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
 /* ---------- Reduce Motion (M9 part 1) ---------- */
 /* iPhone Settings > Accessibility > Motion > Reduce Motion: nothing moves or slides. The spinner only fades in
    and out, so a wait still shows it is working; the live view's pulsing ring is still and thick (LiveTable.tsx). */
@@ -1883,3 +1930,78 @@ body:has(.scan-wait) [data-testid='camera-busy'] { display: none; }
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .spinner { animation: spinner-fade 1.2s ease-in-out infinite alternate !important; }
 }
+
+/* M9 part 6: help and access */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+.check-row-btn { width: 100%; margin: 0; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: none; color: inherit; font-family: inherit; line-height: inherit; text-align: left; min-height: 44px; }
+.check-row-btn:last-of-type { border-bottom: 0; }
+.help-intro { font: var(--t-body); margin: var(--s-2) 0 var(--s-3); }
+.how-steps { list-style: none; margin: 0; padding: 0; }
+.how-step { margin: 0 0 var(--s-3); }
+.how-art { display: block; width: 100%; max-width: 360px; height: auto; margin: 0 auto var(--s-2); }
+.how-title { display: flex; align-items: center; gap: var(--s-2); margin: var(--s-2) 0; font: var(--t-title-3); }
+.how-n { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font: var(--t-headline); }
+.how-body p { font: var(--t-callout); margin: 0 0 var(--s-2); }
+.how-art .how-table { fill: var(--panel-2); }
+.how-art .how-piece { color: var(--muted); }
+.how-art .how-phone { fill: var(--text); }
+.how-art .how-screen { fill: var(--panel-2); }
+.how-art .how-dash { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; }
+.how-art .how-shutter { fill: none; stroke: var(--accent); stroke-width: 3; }
+.how-art .how-shutter-fill { fill: var(--accent); }
+.how-art .how-label rect { fill: var(--toast-bg); }
+.how-art .how-label text { fill: var(--toast-text); font: var(--t-badge); }
+.how-art .how-tabbar { fill: var(--panel); }
+.how-art .how-tab { fill: var(--muted); }
+.how-art .how-tab-on { fill: var(--accent); }
+.how-art .how-arrow { color: var(--muted); }
+.how-art .how-cell { fill: var(--panel-2); stroke: var(--border); stroke-width: 1; }
+.how-art .how-cell-done { fill: var(--accent); stroke: var(--border); stroke-width: 1; }
+.how-art .how-ring { fill: none; stroke: var(--good); stroke-width: 4; }
+.how-art .how-card { fill: var(--panel-2); stroke: var(--border); }
+.how-art .how-text { fill: var(--text); font: var(--t-headline); }
+.how-art .how-text-small { fill: var(--text); font: var(--t-footnote); font-weight: 600; }
+.how-art .how-btn { fill: var(--panel); stroke: var(--border); }
+.how-art .how-btn-good { fill: var(--good); }
+.how-art .how-on-good { color: var(--on-good); }
+.how-art .how-on-good-text { fill: var(--on-good); }
+.how-art .how-toast { fill: var(--toast-bg); }
+.how-art .how-on-toast { color: var(--toast-action); }
+.how-art .how-on-toast-text { fill: var(--toast-action); }
+.how-art .how-cam-bg { fill: var(--good); }
+.help-testing { margin-top: var(--s-5); }
+.help-testing-title { font: var(--t-title-2); margin: 0 0 var(--s-2); }
+.help-testing-title:focus { outline: none; }
+.help-test-title { margin: var(--s-1) 0 var(--s-2); font: var(--t-headline); }
+.help-test-title:focus { outline: none; }
+/* M9 part 6: tiles. The Pieces grid's tiles (design plan §3.5 "Piece tile", §2 decision 10; screens/puzzle/PiecesGrid.tsx):
+   a grey square, the piece cut out by its outline at 72 % with a soft shadow (or its thumbnail), badges in the corners, no rings. */
+.pieces-grid .piece-tile { position: relative; display: block; width: 100%; aspect-ratio: 1; min-height: var(--tap-min); padding: 0; border: 0; border-radius: 12px; background: var(--panel-2); overflow: hidden; cursor: pointer; }
+.pieces-grid .piece-tile.thumb-selected { outline: 3px solid var(--selected-line); outline-offset: 2px; }
+.pieces-grid .piece-tile:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.pieces-grid .tile-piece { position: absolute; inset: 0; }
+.pieces-grid .tile-shade { position: absolute; display: block; transform: translateY(1.5px); background: color-mix(in srgb, var(--black) 28%, transparent); }
+.pieces-grid .tile-piece.tile-wait { visibility: hidden; }
+.pieces-grid .piece-tile .tile-cut { position: absolute; display: block; max-width: none; margin: 0; padding: 0; aspect-ratio: auto; object-fit: fill; background: none; border-radius: 0; }
+.pieces-grid .piece-tile .tile-thumb { position: absolute; inset: 8%; width: 84%; height: 84%; aspect-ratio: auto; object-fit: contain; background: none; border-radius: 8px; display: block; }
+.tile-badge { position: absolute; display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 3px; border-radius: 10px; font-size: 12px; font-weight: 800; line-height: 1; box-sizing: border-box; }
+.pieces-grid .tile-kind { top: 4px; left: 4px; background: var(--panel); box-shadow: var(--e1); }
+.tile-kind svg { display: block; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.tile-kind .tile-kind-frame { stroke: var(--muted); stroke-width: 1; opacity: 0.6; }
+.tile-kind .tile-kind-side { stroke-width: 3; }
+.tile-kind-corner { color: var(--kind-corner); }
+.tile-kind-corner .tile-kind-side { stroke: var(--kind-corner); }
+.tile-kind-edge { color: var(--kind-edge); }
+.tile-kind-edge .tile-kind-side { stroke: var(--kind-edge); }
+.pieces-grid .tile-check { top: 4px; right: 4px; background: var(--warn); color: var(--on-warn); }
+.tile-check.in-legend { background: var(--warn); color: var(--on-warn); }
+.pieces-grid .tile-br { position: absolute; right: 4px; bottom: 4px; display: flex; align-items: center; gap: 3px; }
+.tile-br .tile-badge { position: static; }
+.tile-spot-strong { background: var(--good); color: var(--on-good); }
+.tile-spot-likely { background: var(--panel); color: var(--good-ink); border: 2px solid var(--good-ink); }
+.tile-spot-shape { display: block; flex: none; width: 12px; height: 12px; margin: 4px; border-radius: 50%; background: var(--state-shape); box-shadow: 0 0 0 2px var(--panel); }
+.tile-spot .icon { stroke-width: 3; }
+.tile-badge.side-tag { right: auto; bottom: auto; background: var(--panel); color: var(--text); box-shadow: var(--e1); font-size: 12px; }
+.pieces-grid .tile-badge.tray-tag { top: auto; right: auto; left: 4px; bottom: 4px; border: 1px solid color-mix(in srgb, var(--black) 50%, transparent); }
+.pieces-legend .tile-badge, .pieces-legend .tile-spot-shape { position: static; flex: none; }
+.pieces-legend .tile-spot-shape { margin: 0 2px; }

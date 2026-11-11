@@ -47,40 +47,43 @@ function CheckRow({ c, older }: { c: CheckEntry; older: boolean }) {
   const toggle = () => setOpen((o) => !o);
   return (
     <>
-      <div
-        class="check-row"
-        role="button"
-        tabIndex={0}
+      {/* M9 part 6 help: a real button (it was a div with role=button). */}
+      <button
+        type="button"
+        class="check-row check-row-btn"
         aria-expanded={open}
         data-testid={`check-${c.id}`}
         data-status={c.status}
         style={{ cursor: 'pointer', alignItems: 'baseline' }}
         onClick={toggle}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            toggle();
-          }
-        }}
       >
         <span class="check-name">{c.label}</span>
-        <span class={statusClass(c.status)} aria-label={statusWord(c.status)} title={statusWord(c.status)} style={{ width: '1.4em', textAlign: 'center', fontWeight: 700, flex: 'none' }}>
+        <span
+          class={statusClass(c.status)}
+          aria-label={statusWord(c.status)}
+          title={statusWord(c.status)}
+          style={{ width: '1.4em', textAlign: 'center', fontWeight: 700, flex: 'none' }}
+        >
           {statusSymbol(c.status)}
         </span>
         <span class="check-value" style={{ flex: '0 0 48%' }}>
           {c.value}
           {older && <span class="muted small"> (older version)</span>}
         </span>
-      </div>
+      </button>
       {open && (
         <div data-testid={`check-details-${c.id}`}>
-          {c.status === 'info' && <p class="small muted" style={{ margin: '4px 0' }}>Normal on iPhone — nothing to do.</p>}
+          {c.status === 'info' && (
+            <p class="small muted" style={{ margin: '4px 0' }}>
+              Normal on iPhone — nothing to do.
+            </p>
+          )}
           {older && (
             <p class="small muted" style={{ margin: '4px 0' }} data-testid={`check-older-${c.id}`}>
               Measured with an older version of the app ({c.appVersion}). Run this step again to refresh it.
             </p>
           )}
-          <pre class="logbox" style={{ fontSize: '11px', maxHeight: '45vh', margin: '4px 0 8px' }}>
+          <pre class="logbox" style={{ fontSize: 'calc(11 * var(--pt))', maxHeight: '45vh', margin: '4px 0 8px' }}>
             {c.details === undefined ? 'No details.' : JSON.stringify(c.details, null, 2)}
           </pre>
         </div>
@@ -135,13 +138,13 @@ function Results({ results, running }: { results: DeviceCheckResults; running: b
       )}
       {anyOlder && !running && (
         <p class="small muted" data-testid="device-check-older">
-          The app was updated since some of these were measured (marked "older version"). They're still included in reports; run those steps again
-          to refresh them.
+          The app was updated since some of these were measured (marked "older version"). They're still included in reports; run those steps again to refresh
+          them.
         </p>
       )}
       {sections.map((s) => (
         <section key={s.id} data-testid={`device-section-${s.id}`}>
-          <h3 style={{ fontSize: '16px', margin: '16px 0 4px' }}>{s.title}</h3>
+          <h3 style={{ fontSize: 'calc(16 * var(--pt))', margin: '16px 0 4px' }}>{s.title}</h3>
           <div class="card" style={{ padding: '4px 14px' }}>
             {s.checks.map((c) => (
               <CheckRow key={c.id} c={c} older={isFromOlderVersion(c, results)} />
@@ -163,7 +166,7 @@ function Results({ results, running }: { results: DeviceCheckResults; running: b
             <dt>Safari</dt>
             <dd>{env.safariVersion ?? '—'}</dd>
             <dt>Browser ID</dt>
-            <dd style={{ fontSize: '12px' }}>{env.userAgent}</dd>
+            <dd style={{ fontSize: 'calc(13 * var(--pt))' }}>{env.userAgent}</dd>
           </dl>
         </details>
       )}
@@ -193,8 +196,8 @@ function StepsCard({ mode, results, busy }: { mode: DisplayMode; results: Device
           const done = partDone(results, p);
           return (
             <li key={p} data-testid={`device-part-${p}`} data-done={done ? 'true' : 'false'}>
-              <Icon name={done ? 'check' : 'circle'} size={18} class={`part-mark${done ? ' is-done' : ''}`} label={done ? 'Done' : 'Not done yet'} />{' '}
-              {i + 1}. {PART_NAMES[p]}
+              <Icon name={done ? 'check' : 'circle'} size={18} class={`part-mark${done ? ' is-done' : ''}`} label={done ? 'Done' : 'Not done yet'} /> {i + 1}.{' '}
+              {PART_NAMES[p]}
               {done && results?.parts[p] ? <span class="muted"> · {when(results.parts[p])}</span> : null}
             </li>
           );
@@ -206,8 +209,8 @@ function StepsCard({ mode, results, busy }: { mode: DisplayMode; results: Device
         </a>
       )}
       <p class="small" style={{ marginBottom: 0 }}>
-        Also run this in the <strong>{modeLabel(other)}</strong> and send a report from there too. The two keep separate data, so this screen can't see
-        that run.
+        Also run this in the <strong>{modeLabel(other)}</strong> and send a report from there too. The two keep separate data, so this screen can't see that
+        run.
       </p>
     </Callout>
   );
@@ -283,7 +286,15 @@ export function DeviceCheckScreen() {
         muted
         autoPlay
         data-testid="device-camera-preview"
-        style={{ display: running === 'camera' ? 'block' : 'none', width: '100%', maxHeight: '240px', objectFit: 'contain', background: 'var(--black)', borderRadius: '12px', marginTop: '10px' }}
+        style={{
+          display: running === 'camera' ? 'block' : 'none',
+          width: '100%',
+          maxHeight: '240px',
+          objectFit: 'contain',
+          background: 'var(--black)',
+          borderRadius: '12px',
+          marginTop: '10px',
+        }}
       />
       {progressLine('camera')}
 
@@ -303,6 +314,9 @@ export function DeviceCheckScreen() {
       <input
         ref={fileRef}
         class="hidden-input"
+        // M9 part 6 help: opened by the button above; VoiceOver skips the hidden field.
+        tabIndex={-1}
+        aria-hidden="true"
         type="file"
         accept="image/*"
         capture="environment"
@@ -318,8 +332,8 @@ export function DeviceCheckScreen() {
 
       <h2>4. Photo test</h2>
       <p class="small">
-        Finds the way your iPhone lets the app take full-size photos, and sets up <strong>Snap</strong> to use it. Hold the phone over the puzzle box
-        again and <strong>keep it still</strong> — about a minute, around 10 photos.
+        Finds the way your iPhone lets the app take full-size photos, and sets up <strong>Snap</strong> to use it. Hold the phone over the puzzle box again and{' '}
+        <strong>keep it still</strong> — about a minute, around 10 photos.
       </p>
       <button
         class="btn btn-block"
@@ -338,7 +352,15 @@ export function DeviceCheckScreen() {
         muted
         autoPlay
         data-testid="photo-probe-preview"
-        style={{ display: running === 'photoProbe' ? 'block' : 'none', width: '100%', maxHeight: '240px', objectFit: 'contain', background: 'var(--black)', borderRadius: '12px', marginTop: '10px' }}
+        style={{
+          display: running === 'photoProbe' ? 'block' : 'none',
+          width: '100%',
+          maxHeight: '240px',
+          objectFit: 'contain',
+          background: 'var(--black)',
+          borderRadius: '12px',
+          marginTop: '10px',
+        }}
       />
       {progressLine('photoProbe')}
 

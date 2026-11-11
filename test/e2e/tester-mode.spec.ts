@@ -94,7 +94,7 @@ test.describe('Tester mode', () => {
     await expect(page.getByTestId('tester-off')).toHaveAttribute('aria-pressed', 'true');
     await gotoScreen(page, '');
     for (const id of ['tool-live', 'tool-device', 'tool-report', 'tool-log']) await expect(page.getByTestId(id), id).toHaveCount(0);
-    for (const name of ['Setup guide', 'Settings']) await expect(page.getByRole('link', { name: new RegExp(name) })).toBeVisible();
+    for (const name of ['How it works', 'Settings']) await expect(page.getByRole('link', { name: new RegExp(name) })).toBeVisible();
     await expect(page.getByTestId('test-tab')).toHaveCount(0);
     // The Live camera screen (still reachable by its address) has no HUD button.
     await gotoScreen(page, 'live');

@@ -292,7 +292,16 @@ export function TablePhoto({
   // The photo with its outlines, labels, dots and badges (both ways); `pick`: a tapped outline.
   const photo = (pick: (o: PhotoView['outlines'][number]) => void) =>
     !v ? null : (
-      <svg ref={svgRef} viewBox={vb.join(' ')} preserveAspectRatio="xMidYMid meet" data-testid="table-photo-svg" data-zoomed={focus ? 'yes' : 'no'}>
+      <svg
+        ref={svgRef}
+        viewBox={vb.join(' ')}
+        preserveAspectRatio="xMidYMid meet"
+        data-testid="table-photo-svg"
+        data-zoomed={focus ? 'yes' : 'no'}
+        // M9 part 6 help: one picture for VoiceOver; its pieces are picked from "Pieces in view" (a tap on the photo has no name).
+        role="img"
+        aria-label={`Your scan photo, ${outlines.length === 1 ? '1 piece' : `${outlines.length} pieces`} outlined. Pieces in view lists them.`}
+      >
         {mode === 'lit' && (
           <defs>
             <mask id="lit">

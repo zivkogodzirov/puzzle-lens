@@ -12,6 +12,9 @@ import type { PieceRow, Project } from '../../project/types';
 import { logWarn } from '../../log/logger';
 import { Icon } from '../ui/icons';
 import { Callout } from '../ui/Callout';
+// M9 part 6 help: the share in words; the percentage in Tester mode only.
+import { settings } from '../settings';
+import { shareWords } from '../words';
 
 const CELL = 8;
 
@@ -89,16 +92,27 @@ export function TableContrast({ project, pieces, boxUrl }: { project: Project; p
   if (res.share < CONTRAST.warnShare)
     return (
       <Callout kind="good" icon={<Icon name="eye" />} title="Table contrast: good" testId="contrast-ok">
-        <p>Only {pc < 1 ? 'under 1' : `about ${pc}`} % of the picture is close to your table’s colour: pieces from there are a bit harder to find.</p>
+        <p>
+          {settings.testerMode.value ? `Only ${pc < 1 ? 'under 1' : `about ${pc}`} %` : `Only ${shareWords(res.share)}`} of the picture is close to your table’s
+          colour: pieces from there are a bit harder to find.
+        </p>
         <div class="callout-buttons">{toggle}</div>
         {map}
       </Callout>
     );
   return (
     <Callout kind="warn" icon={<Icon name="eye" />} title="Table contrast" testId="contrast-warn">
-      <p>About {pc} % of the picture is close to your table’s colour. Pieces from there stand out little, so a scan may miss them: check they’re found.</p>
+      <p>
+        {settings.testerMode.value ? `About ${pc} %` : capital(shareWords(res.share))} of the picture is close to your table’s colour. Pieces from there stand
+        out little, so a scan may miss them: check they’re found.
+      </p>
       <div class="callout-buttons">{toggle}</div>
       {map}
     </Callout>
   );
+}
+
+/** "about a third" → "About a third". */
+function capital(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

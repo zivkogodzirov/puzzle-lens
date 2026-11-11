@@ -17,7 +17,7 @@ test('home screen loads, shows the install banner in a Safari tab, and logs no e
   await expect(page.getByTestId('memory-result-waiting')).toHaveCount(0);
 
   // The main tiles are there.
-  for (const name of ['Live camera', 'Device check', 'Send report', 'Setup guide', 'Settings']) {
+  for (const name of ['Live camera', 'Device check', 'Send report', 'How it works', 'Settings']) {
     await expect(page.getByRole('link', { name: new RegExp(name) })).toBeVisible();
   }
   await expect(page.getByText(/^Version \S+/)).toBeVisible();

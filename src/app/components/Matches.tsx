@@ -165,6 +165,8 @@ function PairCard({
   onAnswer: (s: PairSuggestion, fits: boolean) => void;
 }) {
   const bCell: [number, number] = s.dir === 1 ? [s.col + 1, s.row] : [s.col, s.row + 1];
+  // M9 part 6 help: each card's buttons name their spots, so VoiceOver tells the cards' buttons apart.
+  const where = `column ${s.col + 1}${s.dir === 1 ? `–${s.col + 2}` : ''}, row ${s.row + 1}${s.dir === 2 ? `–${s.row + 2}` : ''}`;
   return (
     <div class={`card match-card${next ? ' match-next' : ''}`} data-testid={next ? 'match-next' : 'match-pair'} data-pair={pairKey(s.a, s.b, s.dir)}>
       {next && <p class="match-next-title">What next</p>}
@@ -193,14 +195,14 @@ function PairCard({
         </div>
       </div>
       <div class="row match-buttons">
-        <button class="btn btn-small" data-testid="match-find" onClick={() => onFind([s.a, s.b])}>
+        <button class="btn btn-small" data-testid="match-find" aria-label={`Point them out: ${where}`} onClick={() => onFind([s.a, s.b])}>
           <Icon name="scan-eye" size={20} /> Point them out
         </button>
         {/* "Not there" left, "They fit" right, as in iPhone alerts (decision 6). */}
-        <button class="btn btn-small" data-testid="match-not" onClick={() => onAnswer(s, false)}>
+        <button class="btn btn-small" data-testid="match-not" aria-label={`${ANSWER.not}: ${where}`} onClick={() => onAnswer(s, false)}>
           <Icon name="x" size={20} /> {ANSWER.not}
         </button>
-        <button class="btn btn-small btn-fits btn-good" data-testid="match-fits" onClick={() => onAnswer(s, true)}>
+        <button class="btn btn-small btn-fits btn-good" data-testid="match-fits" aria-label={`${ANSWER.groupFits}: ${where}`} onClick={() => onAnswer(s, true)}>
           <Icon name="check" size={20} /> {ANSWER.groupFits}
         </button>
       </div>
@@ -260,10 +262,20 @@ function BlockCard({
         </div>
       </div>
       <div class="row match-buttons">
-        <button class="btn btn-small" data-testid="match-find" onClick={() => onFind([...b.ids])}>
+        <button
+          class="btn btn-small"
+          data-testid="match-find"
+          aria-label={`Point them out: columns ${b.col + 1}–${b.col + 2}, rows ${b.row + 1}–${b.row + 2}`}
+          onClick={() => onFind([...b.ids])}
+        >
           <Icon name="scan-eye" size={20} /> Point them out
         </button>
-        <button class="btn btn-small btn-fits btn-good" data-testid="match-block-fits" onClick={() => onAnswerAll(b)}>
+        <button
+          class="btn btn-small btn-fits btn-good"
+          data-testid="match-block-fits"
+          aria-label={`${ANSWER.groupFits}: the square at columns ${b.col + 1}–${b.col + 2}, rows ${b.row + 1}–${b.row + 2}`}
+          onClick={() => onAnswerAll(b)}
+        >
           <Icon name="check" size={20} /> {ANSWER.groupFits}
         </button>
       </div>

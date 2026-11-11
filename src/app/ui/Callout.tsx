@@ -17,7 +17,10 @@
  * (`.callout-title`, text) + one `.btn btn-small callout-action`.
  */
 import type { ComponentChildren } from 'preact';
+import { useEffect, useRef } from 'preact/hooks';
 import { Icon, type IconName } from './icons';
+// M9 part 6 help: a "status" callout is read from the screen's one status region (design plan §3.8 rule 7).
+import { announce } from './announce';
 
 export type CalloutKind = 'info' | 'good' | 'warn' | 'bad';
 
@@ -32,15 +35,26 @@ export interface CalloutProps {
   title?: ComponentChildren;
   /** The one button. */
   action?: { label: string; onClick: () => void; testId?: string };
-  /** role="status" for news that arrives (a result), "alert" for an error that needs attention now. */
+  /**
+   * "status" for news that arrives (a result): its words are read out through the screen's one permanent status
+   * region (announce.ts; M9 part 6), each time they change. "alert" for an error that needs attention now.
+   */
   role?: 'status' | 'alert';
   testId?: string;
   children?: ComponentChildren;
 }
 
 export function Callout({ kind = 'info', icon, title, action, role, testId, children }: CalloutProps) {
+  // M9 part 6 help: "status" news goes to the one status region; the callout itself is no live region.
+  const box = useRef<HTMLDivElement>(null);
+  const said = useRef<string | null>(null);
+  useEffect(() => {
+    if (role !== 'status') return;
+    const words = box.current?.querySelector('.callout-body')?.textContent ?? '';
+    if (words !== said.current) announce((said.current = words));
+  });
   return (
-    <div class={`callout callout-${kind}`} role={role} data-testid={testId}>
+    <div ref={box} class={`callout callout-${kind}`} role={role === 'alert' ? 'alert' : undefined} data-testid={testId}>
       <span class="callout-icon" aria-hidden="true">
         {icon ?? <Icon name={KIND_ICON[kind]} size={20} />}
       </span>

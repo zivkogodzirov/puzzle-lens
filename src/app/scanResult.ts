@@ -80,7 +80,7 @@ export function piecesResult(c: PiecesCounts): ScanResult {
   if (c.back)
     items.push({
       tone: 'info',
-      text: `${c.back === 1 ? '1 piece' : `${c.back} pieces`} set aside in an earlier batch ${c.back === 1 ? 'is' : 'are'} back: recognised, not counted again.`,
+      text: `${c.back === 1 ? '1 piece' : `${c.back} pieces`} set aside in an earlier lot ${c.back === 1 ? 'is' : 'are'} back: recognised, not counted again.`,
     });
   const movedHere = c.moved - c.back;
   if (movedHere > 0)

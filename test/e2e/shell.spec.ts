@@ -188,7 +188,7 @@ test('each screen has its own title, and its heading gets the focus', async ({ p
   await expect(page).toHaveTitle('Puzzle Lens');
   for (const [hash, title, heading] of [
     ['#/settings', 'Settings · Puzzle Lens', 'Settings'],
-    ['#/help', 'Setup guide · Puzzle Lens', 'Setup guide'],
+    ['#/help', 'How it works · Puzzle Lens', 'How it works'],
     ['#/puzzle/shell-setup', 'Half set up · Puzzle Lens', 'Half set up'],
     // The old Progress address: the puzzle's Picture tab (M9 part 4).
     ['#/progress/shell-done', 'Harbour at dusk · Puzzle Lens', 'Harbour at dusk'],

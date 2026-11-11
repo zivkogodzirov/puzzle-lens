@@ -524,7 +524,7 @@ test('progress page (M7 part 2): in the puzzle, known spots on the box picture, 
   await expect(page.getByTestId('progress-left')).toContainText('the piece is known for 5');
   // How often the app is right: on More in Tester mode (M9 part 4), not on Picture.
   await expect(page.getByTestId('progress-accuracy')).toHaveCount(0);
-  await expect(page.getByTestId('progress-batch')).toContainText('Batch 1');
+  await expect(page.getByTestId('progress-batch')).toContainText('Lot 1');
   await page.screenshot({ path: test.info().outputPath('progress.png'), fullPage: true });
 });
 

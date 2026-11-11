@@ -94,7 +94,7 @@ describe('pieces found or read', () => {
     expect(x).toMatchObject({ kind: 'closeup', title: 'Close-up read: 14 pieces', sub: '2 new, 12 seen before' });
     expect(texts(x)).toEqual([
       '14 ready',
-      '1 piece set aside in an earlier batch is back: recognised, not counted again.',
+      '1 piece set aside in an earlier lot is back: recognised, not counted again.',
       '2 pieces were moved: recognised, not counted again.',
       '2 pieces may be ones you moved: check them on the Pieces tab ("Pieces to check"), or take a close-up.',
       '1 piece is no longer where it was (taken away, or moved out of view).',

@@ -1,5 +1,7 @@
 import type { GaugeState } from '../../scan/autoCapture';
 import { settings } from '../settings';
+// M9 part 6 help: news read from the screen's one status region.
+import { useAnnounceSettled } from '../ui/announce';
 
 /**
  * The level for hand-held photos (PLAN §2 "Phone"; M9 part 5, design plan §3.5 camera chrome): a 104 px
@@ -57,6 +59,9 @@ export function LevelGauge({
  * tilt") follow on a second line.
  */
 export function CameraStatus({ state, tiltDeg, maxTiltDeg }: { state: GaugeState | null; tiltDeg: number | null; maxTiltDeg: number }) {
+  // Only an instruction that stayed 1.5 s is read out (M9 part 6 fixes); "Taking the photo" is read by the camera
+  // screen itself (TableCamera), once.
+  useAnnounceSettled(state && !/^Taking the photo/.test(state.message) ? state.message : null);
   if (!state) return null;
   const dot = tiltDeg === null ? 'none' : tiltDeg <= maxTiltDeg ? 'level' : 'tilted';
   const ready = state.status === 'ready';
@@ -64,9 +69,7 @@ export function CameraStatus({ state, tiltDeg, maxTiltDeg }: { state: GaugeState
     <div class="cam-status" data-testid="camera-status" data-level={dot}>
       <span class={`cam-status-dot cam-status-dot-${dot}`} aria-hidden="true" />
       <span class="cam-status-words">
-        <span class={ready ? 'gauge-msg ok' : 'gauge-msg'} role="status" aria-live="polite">
-          {state.message}
-        </span>
+        <span class={ready ? 'gauge-msg ok' : 'gauge-msg'}>{state.message}</span>
         {/* Height and tilt in numbers: for testing only (M9 part 1, design plan §3.7). */}
         {state.heightMm !== null && settings.testerMode.value && (
           <span class="gauge-sub">

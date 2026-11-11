@@ -26,7 +26,7 @@ function SegmentGroup({
 }) {
   return (
     <section class="list-section settings-group">
-      <h3 class="list-header">{header}</h3>
+      <h2 class="list-header">{header}</h2>
       <div class="settings-control">{children}</div>
       {footer && (
         <p class="list-footer" data-testid={footerTestId}>
@@ -104,7 +104,16 @@ export function SettingsScreen() {
         />
       </SegmentGroup>
       {tester && (
-        <ListSection>
+        // M9 part 6 help: the tester guide (install, Device check, Send report, the test steps) lives in Help's "For testing".
+        <ListSection header="Diagnostics" footer="Shown while Tester mode is on." testId="settings-diagnostics">
+          <ListRow
+            icon={<Icon name="flask-conical" />}
+            tone="accent"
+            title="For testing"
+            subtitle="Install, Device check, Send report, what to test"
+            href="#/help/testing"
+            testId="settings-testing-guide"
+          />
           <ListRow icon={<Icon name="eye" />} tone="accent" title="Components (for testing)" href="#/ui" testId="settings-components" />
         </ListSection>
       )}
@@ -175,8 +184,8 @@ export function SettingsScreen() {
           testId="scan-mode"
           value={settings.scanMode.value}
           options={[
-            ['full', 'Full (overview + close-ups)'],
-            ['quick', 'Quick (one overview photo)'],
+            ['full', 'Full (Whole table + Close-ups)'],
+            ['quick', 'Quick (one Whole table photo)'],
           ]}
           onChange={(v) => (settings.scanMode.value = v)}
         />
@@ -188,8 +197,9 @@ export function SettingsScreen() {
           testId="tracking-fps"
           value={settings.trackingFps.value}
           options={[
-            [30, 'Smooth (30/s)'],
-            [15, 'Battery saver (15/s)'],
+            // M9 part 6 help: "/s" in Tester mode only (design plan §3.7).
+            [30, tester ? 'Smooth (30/s)' : 'Smooth'],
+            [15, tester ? 'Battery saver (15/s)' : 'Battery saver'],
           ]}
           onChange={(v) => (settings.trackingFps.value = v)}
         />

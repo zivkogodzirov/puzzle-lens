@@ -93,7 +93,9 @@ export function LiveScreen() {
   const can2x = Boolean(zoomCap && zoomCap.max >= 2);
 
   return (
-    <div class="live">
+    // M9 part 6 help: the screen's main landmark, with a heading (the title beside Back shows the camera's state).
+    <main class="live">
+      <h1 class="sr-only">Live camera</h1>
       <video ref={videoRef} playsInline muted autoPlay data-testid="live-video" />
       {live && <MarkerOverlay video={videoEl} />}
 
@@ -221,7 +223,17 @@ export function LiveScreen() {
         </div>
       </div>
 
-      <input ref={fileRef} class="hidden-input" type="file" accept="image/*" capture="environment" onChange={onFile} onCancel={() => cancelExternalCapture()} />
+      <input
+        ref={fileRef}
+        class="hidden-input"
+        tabIndex={-1}
+        aria-hidden="true"
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={onFile}
+        onCancel={() => cancelExternalCapture()}
+      />
 
       {snapBusy.value && (
         <div class="live-center" style={{ pointerEvents: 'none' }}>
@@ -238,6 +250,6 @@ export function LiveScreen() {
           }}
         />
       )}
-    </div>
+    </main>
   );
 }

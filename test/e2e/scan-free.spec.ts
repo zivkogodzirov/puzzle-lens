@@ -224,7 +224,7 @@ test.describe('batches (M7)', () => {
     await page.screenshot({ path: test.info().outputPath('new-batch-started.png'), fullPage: true });
     await openTab(page, 'pieces');
     await expect(page.getByTestId('puzzle-status-counts')).toContainText(`0 on the table, ${n1} set aside`);
-    await expect(page.getByTestId('puzzle-batch')).toContainText('Batch 2');
+    await expect(page.getByTestId('puzzle-batch')).toContainText('Lot 2');
 
     // The next photo starts a fresh table: its pieces are read (as new ones).
     await page.getByTestId('scan-pieces').click();

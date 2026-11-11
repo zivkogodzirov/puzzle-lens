@@ -176,7 +176,7 @@ export function PieceCard(props: PieceCardProps) {
               ? 'You said it doesn’t fit any of its suggested spots.'
               : choice && spots
                 ? 'It fits none of the empty spots (by its shape or its picture). It may not be a piece, or it may come from somewhere else.'
-                : 'No spot yet: scan this piece again (overview or close-up).'}
+                : 'No spot yet: scan this piece again (a Whole table photo or a Close-up).'}
           </p>
         )}
         {spot && !fits && (
@@ -216,10 +216,20 @@ export function PieceCard(props: PieceCardProps) {
               Did it fit?
             </p>
             <div class="card-answer">
-              <button class="btn card-answer-btn" data-testid="spot-not" onClick={() => answer(false)}>
+              <button
+                class="btn card-answer-btn"
+                data-testid="spot-not"
+                aria-label={`${ANSWER.not}: column ${spot.col + 1}, row ${spot.row + 1}`}
+                onClick={() => answer(false)}
+              >
                 <Icon name="x" size={22} /> {ANSWER.not}
               </button>
-              <button class="btn btn-good btn-fits card-answer-btn" data-testid="spot-fits" onClick={() => answer(true)}>
+              <button
+                class="btn btn-good btn-fits card-answer-btn"
+                data-testid="spot-fits"
+                aria-label={`${ANSWER.fits} in column ${spot.col + 1}, row ${spot.row + 1}`}
+                onClick={() => answer(true)}
+              >
                 <Icon name="check" size={22} /> {ANSWER.fits}
               </button>
             </div>

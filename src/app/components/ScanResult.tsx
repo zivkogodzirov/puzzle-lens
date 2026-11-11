@@ -14,6 +14,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { Sheet } from '../ui/Sheet';
 import { Button, IconButton } from '../ui/Button';
 import { Icon, type IconName } from '../ui/icons';
+// M9 part 6 help: news read from the screen's one status region.
+import { useAnnounce } from '../ui/announce';
 
 import type { ResultTone, ScanResult } from '../scanResult';
 
@@ -159,8 +161,11 @@ export function ScanWait({ stage, since, frozen, onCancel, onBack }: ScanWaitPro
     return () => clearTimeout(t);
   }, [since]);
   const at = STAGES.findIndex(([k]) => k === stage);
+  // Each stage is read out as it starts ("Finding pieces"), from the screen's one status region.
+  useAnnounce(STAGES[at]?.[1]);
   return (
-    <div class="scan-wait" data-testid="scan-wait" data-stage={stage}>
+    // M9 part 6 help: the wait covers the camera: a dialog, so VoiceOver stays on it (its stages are read from the status region).
+    <div class="scan-wait" data-testid="scan-wait" data-stage={stage} role="dialog" aria-modal="true" aria-label="Reading the photo">
       {frozen && <FrozenPhoto f={frozen} />}
       {onBack && (
         <IconButton class="btn-cam scan-wait-back" label="Back" testId="scan-wait-back" onClick={onBack}>
@@ -168,7 +173,7 @@ export function ScanWait({ stage, since, frozen, onCancel, onBack }: ScanWaitPro
         </IconButton>
       )}
       <div class="scan-wait-card">
-        <div role="status" aria-label="Reading the photo">
+        <div>
           <ol class="scan-wait-stages">
             {STAGES.map(([k, label], i) => (
               <li key={k} data-state={i < at ? 'done' : i === at ? 'now' : 'next'} data-testid={`wait-${k}`} aria-current={i === at ? 'step' : undefined}>

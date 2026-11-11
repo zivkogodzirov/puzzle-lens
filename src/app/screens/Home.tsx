@@ -206,7 +206,7 @@ export function HomeScreen() {
             </li>
           </ol>
           <a class="btn btn-small callout-action callout-link" href="#/help">
-            Full setup guide
+            More help
           </a>
         </Callout>
       )}
@@ -261,7 +261,7 @@ export function HomeScreen() {
       )}
 
       <ListSection>
-        <ListRow icon={<Icon name="compass" />} tone="accent" title="Setup guide" subtitle="Step by step" href="#/help" testId="tool-help" />
+        <ListRow icon={<Icon name="compass" />} tone="accent" title="How it works" subtitle="Four steps, with pictures" href="#/help" testId="tool-help" />
       </ListSection>
 
       <p class="muted small home-version">Version {APP_VERSION}</p>

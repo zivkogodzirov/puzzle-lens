@@ -319,10 +319,20 @@ function Candidate({
         </p>
         {/* "Not there" left, "It fits" right (decision 6); one above the other, "It fits" on top, when they don't fit side by side. */}
         <div class="card-answer">
-          <button class="btn card-answer-btn" data-testid="fill-not" onClick={() => onAnswer(c, false)}>
+          <button
+            class="btn card-answer-btn"
+            data-testid="fill-not"
+            aria-label={`${ANSWER.not}: column ${spot[0] + 1}, row ${spot[1] + 1}`}
+            onClick={() => onAnswer(c, false)}
+          >
             <Icon name="x" size={22} /> {ANSWER.not}
           </button>
-          <button class="btn btn-good btn-fits card-answer-btn" data-testid="fill-fits" onClick={() => onAnswer(c, true)}>
+          <button
+            class="btn btn-good btn-fits card-answer-btn"
+            data-testid="fill-fits"
+            aria-label={`${ANSWER.fits} in column ${spot[0] + 1}, row ${spot[1] + 1}`}
+            onClick={() => onAnswer(c, true)}
+          >
             <Icon name="check" size={22} /> {ANSWER.fits}
           </button>
         </div>

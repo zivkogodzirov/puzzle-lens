@@ -32,6 +32,8 @@ import { logError } from '../../../log/logger';
 import { borderCounts, pieceGroup } from './shared';
 import { usePuzzle } from './context';
 import { PictureMap } from './PictureMap';
+// M9 part 6 help: percentages in Tester mode only.
+import { settings } from '../../settings';
 
 /** Numbers with thousands separators ("1,008"). */
 const num = (n: number) => n.toLocaleString('en-US');
@@ -173,7 +175,7 @@ export function PictureTab() {
             Bright: in the puzzle · <span class="pic-ring-sample" aria-hidden="true" /> its piece is waiting · Dim: still to find
           </p>
           {placing && (
-            <p class="pic-legend" role="status" data-testid="picture-placing">
+            <p class="pic-legend" data-testid="picture-placing">
               Finding the spots of your pieces… {placing.done} of {placing.total}
             </p>
           )}
@@ -272,7 +274,7 @@ function ProgressHead({ prog }: { prog: PuzzleProgress }) {
           aria-valuemin={0}
           aria-valuemax={prog.cells}
           aria-valuenow={prog.done}
-          aria-valuetext={`${pc(prog.done, prog.cells)} % done`}
+          aria-valuetext={`${num(prog.done)} of ${num(prog.cells)}`}
           aria-label="In the puzzle"
         >
           <svg viewBox="0 0 64 64" width={64} height={64} aria-hidden="true">
@@ -290,7 +292,8 @@ function ProgressHead({ prog }: { prog: PuzzleProgress }) {
             />
           </svg>
           <span class="pic-ring-pc" aria-hidden="true">
-            {left === 0 ? <Icon name="check" size={24} /> : `${pc(prog.done, prog.cells)}%`}
+            {/* M9 part 6 help: the percentage in Tester mode only (design plan §3.7); the count is beside the ring. */}
+            {left === 0 ? <Icon name="check" size={24} /> : settings.testerMode.value ? `${pc(prog.done, prog.cells)}%` : null}
           </span>
         </div>
         <div class="pic-head-text">
@@ -391,7 +394,8 @@ function PieceLists({ prog, pieces }: { prog: PuzzleProgress; pieces: PieceRow[]
         </div>
       )}
       <p class="list-footer pic-batch" data-testid="progress-batch">
-        Batch {batchNumber(project)}
+        {/* M9 part 6 help: "lot", the owner's word (design plan §3.7). */}
+        Lot {batchNumber(project)}
         {project.batch ? `, started ${new Date(project.batch.startedAt).toLocaleString()}` : ''}.
       </p>
     </>

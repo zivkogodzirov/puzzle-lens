@@ -1,4 +1,6 @@
-# M9, part 5: the scan camera (and M9 parts 1–4, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+# M9, part 6: polish (and M9 parts 1–5, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+
+**New in M9 part 6** (the last of 6 design stages): pieces on the Pieces tab are **cut out from their pictures** on plain tiles with one small sign per meaning; text **grows with your iPhone's Text Size**; Help is now **"How it works"** in four illustrated steps (the testing guide moved to "For testing"); and a **VoiceOver** pass: every button says what it does, and progress and results are read out.
 
 **New in M9 part 5** (design stage 5 of 6): the scan camera is laid out like the iPhone Camera app: one instruction at the top, a round level in the middle, and at the bottom the last photo, a big shutter whose ring fills before a photo takes itself, and **Photos**. After a photo: a flash, a click and a tap you feel ("Sounds and taps" in Settings turns them off), named steps while it reads (with **Cancel** after 10 s), and a **results card** ("Found 22 pieces …") with **See where they go**, **Take another** and **See photo** (a zoomable photo).
 
@@ -27,6 +29,24 @@ These steps are for version **{version}** (Settings shows the version).
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## M9 part 6: polish
+### Piece tiles
+1. Open *The Kiss* → **Pieces**. Each tile shows just the piece's shape on a grey square, not a square photo with table around it.
+2. No coloured frames: corner and edge pieces have a small square sign top-left; a sure spot a filled tick bottom-right, "maybe" an empty tick, shape read a purple dot; an amber **?** or **!** top-right means have a look.
+3. The line above the grid explains the same signs. Scroll fast to the bottom and back: smooth? Tap a tile: its card opens.
+4. After you photograph the same pieces again from another angle, do the shapes still line up with the pictures? (A screenshot helps if not.)
+
+### Text size
+1. iPhone Settings → Accessibility → Display & Text Size → **Larger Text**: turn on Larger Accessibility Sizes and drag the slider right.
+2. Open Puzzle Lens from the Home Screen: the words are bigger, nothing is cut off, nothing scrolls sideways; the bars at the top and bottom keep their size. On the camera the words grow only a little.
+3. Tap a piece: **It fits** sits above **Not there** when they don't fit side by side.
+4. Put the slider back to the middle: the app looks as before.
+
+### How it works, and VoiceOver
+1. Home → **How it works**: four cards with pictures (Scan, Find, Say whether it fits, Photograph). With Tester mode on, a **For testing** section follows (the old guide, and **What to test now**).
+2. Turn on **VoiceOver**. Open a puzzle, tap a piece: it reads the card's title; swipe to the green button: "It fits in column …, row …". On Pieces each tile says what it is ("Edge piece, very likely column …").
+3. With VoiceOver on, Scan and take a photo: you hear "Reading photo", "Finding pieces", "Saving", then the result.
 
 ## M9 part 5: the scan camera
 ### The camera screen
@@ -300,6 +320,7 @@ In the M8 part 3 follow-up I said a darker cloth might help pale pieces. I never
 - Your answers are kept with the puzzle, and in backups.
 
 ## Please tell me
+- M9 part 6: do the cut-out tiles look right and line up? Does the app follow your Text Size (in the Home Screen app too)? Is "How it works" clear?
 - M9 part 5: does the new camera feel like the iPhone Camera app? Did the ring and the photo taking itself feel right? Did you hear the click and feel the tap? Is the results card clear?
 - M9 part 4: do the four tabs (Table, Picture, Pieces, More) make sense? Is anything you used before hard to find now? Does the zoomable box picture on Picture work well with your thumb?
 - M9 part 3: does the piece card make it easier to find the spot (the close-up)? Are "It fits / Not there" and "Very likely / Maybe" clear? Are the dashed outlines and badges easy to understand on your cream table?

@@ -43,6 +43,8 @@ import { logError, logInfo, logWarn } from '../../log/logger';
 import { errorWords, setupSteps, UNREADABLE_PHOTO, useBlobUrl } from './puzzle/shared';
 import { StepTable } from './StepTable';
 import { PAPER } from '../tokens';
+// M9 part 6 help: news read from the screen's one status region.
+import { useAnnounce } from '../ui/announce';
 
 const COMMON_COUNTS = [500, 1000, 1500, 2000];
 const MAX_COUNT = 40000;
@@ -265,7 +267,7 @@ function StepInstall({ onContinue }: { onContinue: () => void }) {
         </li>
       </ol>
       <a class="btn btn-block" href="#/help">
-        Full setup guide
+        How it works
       </a>
       <button class="btn btn-block wizard-secondary" data-testid="continue-anyway" onClick={onContinue}>
         Continue in Safari anyway (for a test)
@@ -427,6 +429,7 @@ function StepBox({ project, save, onNext }: { project: Project; save: (patch: Pr
   const saveCorners = (corners: Corner[] | null) => putBlob(cornersId, 'box-corners', new Blob([]), { corners } satisfies BoxPhotoMeta);
   const loadCorners = async (): Promise<Corner[] | null> => ((await getBlobRow(cornersId))?.meta as BoxPhotoMeta | undefined)?.corners ?? null;
   const [phase, setPhase] = useState<BoxPhase>(project.box ? { kind: 'done' } : { kind: 'working', label: 'Loading…' });
+  useAnnounce(phase.kind === 'working' ? phase.label : null);
   const [error, setError] = useState<string | null>(null);
   const rectUrl = useBlobUrl(project.box ? rectId : null, project.box);
   const urls = useRef<string[]>([]);
@@ -629,7 +632,7 @@ function StepBox({ project, save, onNext }: { project: Project; save: (patch: Pr
       )}
 
       {phase.kind === 'working' && (
-        <div class="card working" data-testid="box-working" aria-live="polite">
+        <div class="card working" data-testid="box-working">
           <span class="spinner" aria-hidden="true" /> {phase.label}
         </div>
       )}

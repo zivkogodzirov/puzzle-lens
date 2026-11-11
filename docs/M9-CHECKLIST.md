@@ -90,3 +90,16 @@ The design work follows the app review's plan, in 6 stages, each checked on your
 2. Read the results card; try See photo and Take another.
 3. Photograph your nearly finished puzzle: are the saved spots and the loose pieces easy to read?
 
+## Part 6: polish (the last design stage)
+
+**New:**
+- **Piece tiles:** each piece cut out from its own picture on a plain grey tile (from its stored outline; a plain picture where the outline can't be matched), with one small sign per meaning instead of coloured rings; the legend uses the same signs; each tile has a VoiceOver name.
+- **Text size:** all text follows the iPhone Text Size setting (the app looks the same at the normal size; a few tiny labels now have a 15-point minimum); camera words stay small; the bars keep their size.
+- **How it works:** Help in four illustrated steps; the testing guide is under "For testing" (Tester mode, or Settings → Diagnostics).
+- **VoiceOver:** one place per screen where progress and results are read out; named buttons ("It fits in column 3, row 2"); the camera screens have titles; the live view and the photo wait are announced as their own screens.
+- **Words:** "lot" instead of "batch", "Whole table" instead of "overview", percentages only in Tester mode.
+
+1. Look at the Pieces tab: do the cut-outs look right?
+2. Try a bigger Text Size.
+3. Read How it works; try VoiceOver on a piece and a scan.
+

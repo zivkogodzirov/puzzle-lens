@@ -87,7 +87,7 @@ test('the four segments filter the grid: All, Border (corners first), Inside, Ch
   // The legend lists only the badges on screen.
   const legend = page.getByTestId('pieces-legend');
   await expect(legend).toContainText('very likely');
-  await expect(legend).toContainText('faint outline');
+  await expect(legend).toContainText('check outline');
   await expect(legend).not.toContainText('colour group');
 });
 
@@ -176,7 +176,7 @@ for (const size of [
 ]) {
   test(`${size.width} px: the grid is 4 across, a tile opens its card, 44 px targets, no sideways scroll, nothing under the tab bar`, async ({ page }) => {
     await page.setViewportSize(size);
-    await seedPieces(page, { pending: [{ id: 'seen-1', like: 'r2c3', maybe: ['r2c3'] }] });
+    await seedPieces(page, { cut: true, pending: [{ id: 'seen-1', like: 'r2c3', maybe: ['r2c3'] }] });
     await page.addStyleTag({ content: ':root { --safe-top: 62px !important; --safe-bottom: 34px !important; }' });
     const boxes = await tiles(page).evaluateAll((els) => els.slice(0, 5).map((e) => e.getBoundingClientRect().toJSON() as DOMRect));
     expect(new Set(boxes.slice(0, 4).map((b) => Math.round(b.y))).size).toBe(1);
@@ -187,6 +187,15 @@ for (const size of [
     }
     expect(await smallTargets(page)).toEqual([]);
     expect(await sideways(page)).toBeLessThanOrEqual(0);
+    // M9 part 6: square tiles, each piece cut out by its outline (a clip-path polygon), loaded and checked.
+    for (const b of boxes) expect(Math.abs(b.width - b.height)).toBeLessThanOrEqual(1);
+    await expect(tiles(page).locator('.tile-cut')).toHaveCount(13);
+    await expect.poll(() => tiles(page).locator('.tile-piece:not(.tile-wait)').count()).toBe(13);
+    const cut = await tiles(page)
+      .first()
+      .evaluate((b) => ({ cut: b.getAttribute('data-cut'), clip: getComputedStyle(b.querySelector('.tile-cut')!).clipPath }));
+    expect(cut.cut).toBe('outline');
+    expect(cut.clip).toMatch(/^polygon\(/);
     // Nothing under the tab bar at the bottom of the tab.
     await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
     await page.waitForTimeout(300);
@@ -224,8 +233,97 @@ for (const size of [
   });
 }
 
+test('M9 part 6: the tiles: a cut-out per piece, one badge per state, VoiceOver names, no rings', async ({ page }) => {
+  await seedPieces(page, { cut: true, pending: [{ id: 'seen-1', like: 'r2c3', maybe: ['r2c3', 'r2c4'] }], weak: ['r1c6'], clump: ['r2c4'] });
+  const tile = (id: string) => page.locator(`[data-testid="catalog"] .thumb-btn[data-id="${id}"]`);
+  await expect(tiles(page)).toHaveCount(13);
+  await expect(page.locator('[data-testid="catalog"] [data-cut="outline"]')).toHaveCount(13);
+  // No coloured rings: no outline on a tile or its picture (only the open piece's tile has one).
+  const rings = await tiles(page).evaluateAll(
+    (els) =>
+      els.filter((b) =>
+        [b, ...b.querySelectorAll('img')].some((e) => getComputedStyle(e).outlineStyle !== 'none' && getComputedStyle(e).outlineWidth !== '0px'),
+      ).length,
+  );
+  expect(rings).toBe(0);
+  // Corner / edge glyph top-left, the spot bottom-right, "?" / "!" top-right.
+  await expect(tile('r0c0').getByTestId('kind-tag')).toHaveAttribute('data-kind', 'corner');
+  await expect(tile('r0c5').getByTestId('kind-tag')).toHaveAttribute('data-kind', 'edge');
+  await expect(tile('r2c4').getByTestId('kind-tag')).toHaveCount(0);
+  await expect(tile('seen-1').getByTestId('pending-tag')).toHaveText('?');
+  await expect(tile('r1c6').getByTestId('check-tag')).toHaveText('!');
+  // Touching another piece: its own badge (arrows apart, as on the photo's outlines), not the faint outline's "!".
+  await expect(tile('r2c4').getByTestId('check-tag')).toHaveAttribute('data-flag', 'clump');
+  await expect(tile('r2c4').getByTestId('check-tag').locator('svg.tile-split')).toHaveCount(1);
+  await expect(tile('r2c4').getByTestId('check-tag')).not.toHaveText('!');
+  const spots = await tiles(page).evaluateAll((els) =>
+    els.map((b) => [b.getAttribute('data-place'), b.querySelector('[data-testid="spot-tag"]')?.getAttribute('data-spot') ?? null]),
+  );
+  for (const [place, spot] of spots) {
+    if (place === 'strong' || place === 'likely') expect(spot).toBe(place);
+    else expect(spot === 'shape' || spot === null).toBe(true);
+  }
+  expect(spots.some(([, s]) => s === 'strong')).toBe(true);
+  // The badges sit in the tile's corners.
+  const at = await tile('r0c0').evaluate((b) => {
+    const r = b.getBoundingClientRect();
+    const k = b.querySelector('[data-testid="kind-tag"]')!.getBoundingClientRect();
+    const s = b.querySelector('[data-testid="spot-tag"]')!.getBoundingClientRect();
+    return [k.left - r.left, k.top - r.top, r.right - s.right, r.bottom - s.bottom];
+  });
+  for (const v of at) expect(v).toBeLessThanOrEqual(10);
+  // VoiceOver names.
+  const names = await tiles(page).evaluateAll((els) => Object.fromEntries(els.map((b) => [b.getAttribute('data-id'), b.getAttribute('aria-label')])));
+  expect(names['r0c0']).toMatch(/^Corner piece, .*number \d+$/);
+  expect(names['r0c5']).toMatch(/^Edge piece/);
+  // (the piece touching another one is left out: touching makes its shape unsure)
+  const placed = await tiles(page).evaluateAll((els) =>
+    els.filter((b) => b.getAttribute('data-place') === 'strong' && b.getAttribute('data-id') !== 'r2c4').map((b) => b.getAttribute('aria-label')),
+  );
+  expect(placed.length).toBeGreaterThan(0);
+  for (const n of placed) expect(n).toMatch(/^(Corner|Edge|Inside) piece, very likely column \d+ row \d+/);
+  expect(names['r1c6']).toMatch(/check outline, number \d+$/);
+  expect(names['r2c4']).toMatch(/touching another piece, number \d+$/);
+  expect(names['r2c4']).not.toContain('check outline');
+  expect(names['seen-1']).toContain('to check, may be a piece you moved');
+  // Every name is different.
+  expect(new Set(Object.values(names)).size).toBe(13);
+  // The legend: the same glyphs, with words.
+  const legend = page.getByTestId('pieces-legend');
+  for (const w of ['corner', 'edge', 'very likely', 'shape read', 'to check', 'check outline', 'touching', 'frame side']) await expect(legend).toContainText(w);
+  await expect(legend.locator('.tile-kind')).toHaveCount(2);
+  // A tile opens the piece's card.
+  await tile('r0c0').click();
+  await expect(page.getByTestId('spot')).toBeVisible();
+});
+
+test('M9 part 6: after an answer the other tiles keep their cut-outs (none left waiting)', async ({ page }) => {
+  await seedPieces(page, { cut: true });
+  await expect(tiles(page)).toHaveCount(12);
+  await expect.poll(() => tiles(page).locator('.tile-piece:not(.tile-wait)').count()).toBe(12);
+  // "It fits" on a piece with a spot: the rows are read again (new cut-out objects, same pictures).
+  await tiles(page).locator('xpath=self::*[@data-place="strong" or @data-place="likely"]').first().click();
+  await expect(page.getByTestId('spot-fits')).toBeVisible();
+  await page.waitForTimeout(400);
+  await page.getByTestId('spot-fits').click();
+  await expect(page.getByTestId('spot')).toHaveCount(0);
+  await expect(page.getByTestId('toast-text')).toContainText('Placed');
+  await page.waitForTimeout(500);
+  const n = await tiles(page).count();
+  expect(n).toBeGreaterThan(0);
+  await expect(page.locator('[data-testid="catalog"] .tile-wait')).toHaveCount(0);
+  await expect(page.locator('[data-testid="catalog"] [data-cut="outline"] .tile-cut')).toHaveCount(n);
+});
+
+test('M9 part 6: pieces without a photo of them keep their thumbnail in the tile', async ({ page }) => {
+  await seedPieces(page);
+  await expect(tiles(page)).toHaveCount(12);
+  await expect(page.locator('[data-testid="catalog"] [data-cut="thumb"] img.tile-thumb')).toHaveCount(12);
+  await expect(page.locator('[data-testid="catalog"] .tile-cut')).toHaveCount(0);
+});
+
 test('1000 pieces on the table: the Pieces tab opens and scrolls fast, Show more adds 200', async ({ page }) => {
-  await seedPieces(page, { bulk: 988, open: null });
+  await seedPieces(page, { cut: true, bulk: 988, open: null });
   await page.evaluate((pid) => (location.hash = `#/puzzle/${pid}/table`), PROJECT);
   await expect(page.getByTestId('tab-table')).toHaveAttribute('aria-current', 'page');
   // Wait until the shell has read the pieces (the Pieces tab's tools only show then).
@@ -249,6 +347,8 @@ test('1000 pieces on the table: the Pieces tab opens and scrolls fast, Show more
     return { drawn: Math.round(drawn), pictures: Math.round(performance.now() - t0) };
   });
   await expect(tiles(page)).toHaveCount(200);
+  // M9 part 6: the tiles are cut-outs.
+  await expect(page.locator('[data-testid="catalog"] [data-cut="outline"]')).toHaveCount(200);
   await expect(page.getByTestId('catalog-more')).toContainText('Show 200 more of 800');
   // Scroll to the bottom and back over 1.5 s: the longest frame.
   const scroll = await page.evaluate(async () => {

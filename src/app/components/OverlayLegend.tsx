@@ -11,6 +11,8 @@ import { Sheet } from '../ui/Sheet';
 import { settings } from '../settings';
 import { BADGE_R, DASH_SVG, HALO, HALO_SCALE, OVERLAY_STATE, SPLIT_GLYPH, type BadgeMark } from '../overlay';
 import { OV } from '../tokens';
+// M9 part 6 help: news read from the screen's one status region.
+import { useAnnounce } from '../ui/announce';
 
 /** A badge as SVG (centre cx, cy; `k` = drawing units per screen px). */
 export function SvgBadge({ mark, cx, cy, k = 1 }: { mark: BadgeMark; cx: number; cy: number; k?: number }) {
@@ -229,9 +231,10 @@ export function LabelTip({ active }: { active: boolean }) {
       settings.labelTipShown.value = true;
     }
   }, [active, state]);
+  useAnnounce(state === 'shown' ? '17·9 means column 17, row 9 on the box picture.' : null);
   if (state !== 'shown') return null;
   return (
-    <div class="ov-tip" role="status" data-testid="overlay-tip">
+    <div class="ov-tip" data-testid="overlay-tip">
       <span class="ov-tip-text">
         <strong>17·9</strong> means column 17, row 9 on the box picture.
       </span>

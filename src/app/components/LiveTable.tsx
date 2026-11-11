@@ -55,6 +55,8 @@ import {
   type Rect,
 } from '../overlay';
 import { OV } from '../tokens';
+// M9 part 6 help: news read from the screen's one status region.
+import { announce } from '../ui/announce';
 
 /** A piece is shown as gone from its spot after this many of the last GONE_CHECKS presence checks. */
 const GONE_OF = 3;
@@ -156,6 +158,7 @@ export function LiveTable({
   const showNote = (text: string, undo?: () => void) => {
     clearTimeout(noteTimer.current);
     setNote({ text, undo });
+    announce(undo ? `${text} Undo is below.` : text); // M9 part 6 help
     noteTimer.current = setTimeout(() => setNote(null), undo ? UNDO_MS : NOTE_MS);
   };
   useEffect(() => () => clearTimeout(noteTimer.current), []);
@@ -652,10 +655,12 @@ export function LiveTable({
               : 'Starting…';
 
   return (
-    <div class="live live-table" data-testid="live-table">
+    // M9 part 6 help: the live view opens over the puzzle's tabs: a dialog named by its title.
+    <div class="live live-table" data-testid="live-table" role="dialog" aria-modal="true" aria-label={title}>
       <video ref={videoRef} playsInline muted autoPlay data-testid="live-video" />
       <canvas ref={canvasRef} class="overlay" data-testid="live-table-overlay" data-status={status.kind} aria-hidden="true" />
-      <div class="live-tap" data-testid="live-tap" onClick={onTap} />
+      {/* Taps on the picture; VoiceOver uses "Pieces in view" (below) instead. */}
+      <div class="live-tap" data-testid="live-tap" onClick={onTap} aria-hidden="true" />
 
       <div class="live-top">
         <IconButton label="Back" class="btn-cam" testId="live-table-close" onClick={onClose}>
@@ -675,7 +680,7 @@ export function LiveTable({
 
       {refs.kind === 'none' && (
         <div class="notice notice-warn live-notice" data-testid="live-no-photo">
-          <p>There's no scan photo of your table to compare with yet. Scan your pieces first (Scan → overview photo), then come back.</p>
+          <p>There's no scan photo of your table to compare with yet. Scan your pieces first (a Whole table photo), then come back.</p>
         </div>
       )}
       {refs.kind === 'error' && (
@@ -707,7 +712,7 @@ export function LiveTable({
 
       <div class="live-table-bottom">
         {note && (
-          <p class="live-note" role="status" data-testid="live-note">
+          <p class="live-note" data-testid="live-note">
             <span class="live-note-text">{note.text}</span>
             {note.undo && (
               <button type="button" class="live-note-undo" data-testid="live-undo" onClick={note.undo}>
@@ -734,6 +739,7 @@ export function LiveTable({
                 <span class="small">Tried it in {answer.labelOf(tp)}?</span>
                 <button
                   class="btn btn-small btn-good btn-fits"
+                  aria-label={`${ANSWER.fits} in ${answer.labelOf(tp)}`}
                   data-testid="live-fits"
                   onClick={() => {
                     const where = answer.labelOf(tp);
@@ -747,6 +753,7 @@ export function LiveTable({
                 </button>
                 <button
                   class="btn btn-small"
+                  aria-label={`${ANSWER.not}: ${answer.labelOf(tp)}`}
                   data-testid="live-not"
                   onClick={() => {
                     answer.onAnswer(tp, false);
@@ -769,7 +776,7 @@ export function LiveTable({
                   Show where it goes
                 </button>
               )}
-              <IconButton label="Close" class="btn-cam live-info-close" testId="live-info-close" onClick={() => setTapped(null)}>
+              <IconButton label="Close the piece's details" class="btn-cam live-info-close" testId="live-info-close" onClick={() => setTapped(null)}>
                 <Icon name="x" />
               </IconButton>
             </div>

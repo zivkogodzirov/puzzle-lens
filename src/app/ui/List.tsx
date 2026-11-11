@@ -28,7 +28,8 @@ export interface ListSectionProps {
 export function ListSection({ header, footer, testId, children }: ListSectionProps) {
   return (
     <section class="list-section" data-testid={testId}>
-      {header && <h3 class="list-header">{header}</h3>}
+      {/* M9 part 6 help: h2, the level under the screen's h1 (headings in order for VoiceOver). */}
+      {header && <h2 class="list-header">{header}</h2>}
       <ul class="list-inset" role="list">
         {children}
       </ul>

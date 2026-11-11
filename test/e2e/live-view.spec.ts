@@ -199,7 +199,7 @@ test.describe('live view of the table', () => {
     await expect(page.getByTestId('live-fits').locator('svg[data-icon="check"]')).toHaveCount(1);
     await expect(page.getByTestId('live-not')).toHaveText('Not there');
     await expect(page.getByTestId('live-not').locator('svg[data-icon="x"]')).toHaveCount(1);
-    await expect(page.getByTestId('live-info-close')).toHaveAccessibleName('Close');
+    await expect(page.getByTestId('live-info-close')).toHaveAccessibleName("Close the piece's details"); // M9 part 6: distinct from the sheets' Close
     await expect(page.getByTestId('live-info-close').locator('svg[data-icon="x"]')).toHaveCount(1);
     await expect(page.getByTestId('live-table-close')).toHaveAccessibleName('Back');
     for (const id of ['live-fits', 'live-not', 'live-info-close', 'live-table-close']) {
@@ -209,7 +209,8 @@ test.describe('live view of the table', () => {
     await page.getByTestId('live-fits').click();
     const fitsAt = Date.now();
     const note = page.getByTestId('live-note');
-    await expect(note).toHaveAttribute('role', 'status');
+    // M9 part 6: read out from the screen's one status region (the note itself is no live region).
+    await expect(page.getByTestId('announce')).toContainText('✓ In the puzzle at');
     await expect(note).toContainText('✓ In the puzzle at');
     await expect.poll(async () => Number(await overlay.getAttribute('data-drawn'))).toBe(inView - 1);
     await page.waitForTimeout(Math.max(0, 8_200 - (Date.now() - fitsAt)));

@@ -250,8 +250,9 @@ for (const size of [
     expect(fb.x, '"It fits" on the right').toBeGreaterThan(nb.x);
     expect(Math.round(fb.x - (nb.x + nb.width))).toBe(12);
     await expect(fits).toHaveClass(/btn-good/);
-    await expect(fits).toHaveAccessibleName('It fits');
-    await expect(not).toHaveAccessibleName('Not there');
+    // M9 part 6: the names say the spot too, for VoiceOver.
+    await expect(fits).toHaveAccessibleName(/^It fits in column \d+, row \d+$/);
+    await expect(not).toHaveAccessibleName(/^Not there: column \d+, row \d+$/);
     // Above the Home bar at the medium height.
     expect(fb.y + fb.height).toBeLessThanOrEqual(size.height - (size.width === 402 ? 34 : 0));
     expect(await smallTargets(page, '[data-testid=spot]')).toEqual([]);

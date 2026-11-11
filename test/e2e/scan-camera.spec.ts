@@ -170,12 +170,36 @@ test.describe('scan camera (M9 part 5)', () => {
     test('the chrome at every size: named 44 px targets, nothing over anything or the middle; mode words; the mini map; the gear sheet', async ({ page }) => {
       test.setTimeout(240_000);
       await page.addInitScript((url) => ((window as unknown as { __fakeScene?: string }).__fakeScene = url), scene);
+      // M9 part 6 fixes: when each level message showed and when VoiceOver was told (only one that stayed 1.5 s).
+      await page.addInitScript(() => {
+        const shown: { t: number; text: string }[] = [];
+        const said: { t: number; text: string }[] = [];
+        Object.assign(window, { __shown: shown, __said: said });
+        new MutationObserver(() => {
+          const m = document.querySelector('.gauge-msg')?.textContent ?? '';
+          if (m && shown.at(-1)?.text !== m) shown.push({ t: performance.now(), text: m });
+          const a = document.querySelector('[data-testid="announce"]')?.textContent ?? '';
+          if (a && said.at(-1)?.text !== a) said.push({ t: performance.now(), text: a });
+        }).observe(document, { subtree: true, childList: true, characterData: true });
+      });
       await seedPuzzle(page, 'cam-chrome', true);
       await openScan(page, 'cam-chrome');
       // Tilted, so no photo takes itself while the chrome is checked.
       await tilt(page, 20);
       await expect(page.getByTestId('level-gauge')).toBeVisible({ timeout: 120_000 });
       await expect(page.getByTestId('camera-status')).toContainText('Hold the phone flat');
+      await expect
+        .poll(() => page.evaluate(() => (window as unknown as { __said: { text: string }[] }).__said.some((s) => s.text.includes('Hold the phone flat'))))
+        .toBe(true);
+      type Line = { t: number; text: string };
+      const { shown, said } = await page.evaluate(() => {
+        const w = window as unknown as { __shown: Line[]; __said: Line[] };
+        return { shown: w.__shown, said: w.__said };
+      });
+      for (const s of said) {
+        const last = shown.filter((m) => m.t <= s.t).at(-1);
+        if (last && last.text === s.text) expect(s.t - last.t, `"${s.text}" read after it stayed`).toBeGreaterThanOrEqual(1400);
+      }
       await expect(page.getByTestId('camera-status')).toHaveAttribute('data-level', 'tilted');
       // The reticle: 104 px, in the middle, no panel behind it.
       const ret = (await page.locator('.gauge svg').boundingBox())!;

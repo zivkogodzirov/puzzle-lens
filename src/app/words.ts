@@ -21,6 +21,22 @@ export const ANSWER = { fits: 'It fits', not: 'Not there', groupFits: 'They fit'
  */
 export const CONFIDENCE_WORDS = { strong: 'Very likely', likely: 'Maybe', several: 'Several places look alike' } as const;
 
+/**
+ * A share of something in words (M9 part 6 help, design plan §3.7: percentages only in Tester mode):
+ * 0.04 → "very little", 0.12 → "about a tenth", 0.33 → "about a third", 0.5 → "about half".
+ */
+export function shareWords(share: number): string {
+  if (share < 0.01) return 'under a hundredth';
+  if (share < 0.06) return 'very little';
+  if (share < 0.15) return 'about a tenth';
+  if (share < 0.23) return 'about a fifth';
+  if (share < 0.29) return 'about a quarter';
+  if (share < 0.42) return 'about a third';
+  if (share < 0.6) return 'about half';
+  if (share < 0.85) return 'most';
+  return 'nearly all';
+}
+
 export const UNREADABLE_PHOTO = 'This photo couldn’t be read. Take it again, or choose a different photo.';
 
 /** Shown for an error whose own text is technical (the text itself is in the Activity log). */

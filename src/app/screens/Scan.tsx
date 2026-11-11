@@ -854,7 +854,9 @@ export function ScanScreen() {
   );
 
   return (
-    <>
+    // M9 part 6 help: the screen's main landmark and its heading (the shell moves VoiceOver to it).
+    <main class="scan-screen">
+      <h1 class="sr-only">{routeSub.value === 'picture' ? 'Photograph the puzzle so far' : 'Scan pieces'}</h1>
       <TableCamera
         mode={kind}
         map={map}
@@ -962,7 +964,7 @@ export function ScanScreen() {
           }}
         />
       )}
-    </>
+    </main>
   );
 }
 
