@@ -4,6 +4,13 @@ All notable changes to Puzzle Lens (working title in M0: "Piece Finder") are rec
 
 ## [Unreleased]
 
+### M10 (part 2): white pieces on your cream table (2026-11-17; tested on the Mac with your photos, not yet on your iPhone)
+- **Your 11 new photos** (the skyline puzzle, about 120 pieces each, many white sky pieces) showed most white pieces missed: they are only a little brighter than the cream table and almost colourless, so the app took them for lamp shine, and their outlines came out ragged and were then dropped as "a faint shadow edge".
+- **White pieces found by their sharp edge:** on a smooth table, a piece-sized patch that is a little brighter than the table (or faint bluish print), solid, lying on its own and ending in a sharp step to table or shadow is now a piece. Lamp shine is just as colourless (measured), but it fades out softly and is bigger than a piece. Light patches inside printed pieces (the Kiss's white dress) have print around them and are left alone.
+- **Hand-counted:** 4 of the new photos counted piece by piece (479 pieces). Outlined one by one: IMG_9375 78 → 105, IMG_9377 77 → 104, IMG_9380 93 → 112, IMG_9383 83 → 100. False outlines 4 → 3. Your 11 older counted photos are unchanged, and so are the computer-made test sets.
+- **LiDAR:** Safari web apps can't use the iPhone's LiDAR sensor, and its depth (about 1 cm) couldn't see a 2 mm piece anyway; the table's one colour and the pieces' sharp edges do the job instead.
+- **Left:** pieces inside the lamp's bright shiny spot (2 dark pieces on IMG_9377); some pinkish-white pieces whose colour is closest to the table's; things printed on the box lying on the table.
+
 ### M10 (part 1): better piece finding (2026-11-11; tested on the Mac with your photos, not yet on your iPhone)
 - **By 5 builders in parallel** (a hand-counted photo test; splitting touching pieces; pale edges; the tilt fit; the finished-puzzle grid), merged, checked by an independent reviewer and fixed.
 - **A hand-counted test on your photos:** every loose piece on 11 of your photos marked by hand (479 pieces), so each change is measured. Before → after: outlined one by one **252 → 297**, false pieces **43 → 22**, no piece lost.

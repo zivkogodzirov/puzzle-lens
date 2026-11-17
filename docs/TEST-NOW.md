@@ -1,4 +1,6 @@
-# M10, part 1: better piece finding (and M9 parts 1–6, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+# M10, part 2: white pieces on your cream table (and M10 part 1, M9 parts 1–6, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+
+**New in M10 part 2:** the app now finds **white and very pale pieces on your cream table**. They are only a little brighter than the table and almost colourless, so the app used to take them for lamp shine and drop them. Now a piece-sized patch that is a little brighter than the table, stands on its own and ends in a sharp edge counts as a piece; real lamp shine fades out softly and is bigger than a piece. Measured on 4 of your skyline photos where every piece was counted by hand (about 120 each), pieces outlined one by one: **78 → 105, 77 → 104, 93 → 112, 83 → 100**. Your 11 older counted photos come out exactly as before.
 
 **New in M10 part 1:** the app finds more of your real pieces. **Touching pieces are split** into their own outlines (on your photo IMG_9127: 27 → 49 of 60 pieces outlined one by one); single pieces wrongly marked "touching" are now outlined on their own; **false "pieces" on the built picture are mostly gone** (IMG_9280: 23 → 7); a group of pieces that still touch counts as "about 3", so the scan says **"Found about N pieces"**. A photo of your nearly finished puzzle now reads **28 × 36** (it read one row too many). Measured on 11 of your photos where every loose piece was counted by hand (479 pieces): outlined one by one 252 → 297, false pieces 43 → 22, none lost.
 
@@ -31,6 +33,13 @@ These steps are for version **{version}** (Settings shows the version).
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## M10 part 2: white pieces on your cream table
+1. Spread about 50 pieces of the skyline puzzle on your cream table, **including plenty of white sky pieces**, a little apart. Take one photo from straight above (as in your photo IMG_9380).
+2. The card should say **"Found about N pieces"**: is N close to how many you laid out? Before this change about a third of the white pieces were missed.
+3. Tap **See photo**. The white pieces should have outlines (most of them solid; a pale one may be dashed with a ? sign).
+4. If your lamp makes a bright shiny spot on the table, check that the spot itself has **no outline**. Pieces lying right inside the shiny spot can still be missed: move them out of it, or move the lamp.
+5. Send me a screenshot of any white piece that still has no outline.
 
 ## M10 part 1: better piece finding
 ### Touching pieces

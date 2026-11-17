@@ -2,6 +2,20 @@
 
 The steps for the newest part are also inside the app: tap the round **🧪** button at the top right of any screen.
 
+## Part 2: white pieces on your cream table
+
+**New:** white and very pale pieces are found on your cream table. A piece-sized patch that is a little brighter than the table, stands on its own and ends in a sharp edge is a piece; lamp shine fades out softly and is bigger than a piece.
+
+**Why:** on your 11 skyline photos most white sky pieces were missed: the app took them for lamp shine.
+
+**Measured on your photos:** 4 skyline photos counted by hand (about 120 pieces each). Outlined one by one: 78 → 105, 77 → 104, 93 → 112, 83 → 100. Your older photos are unchanged.
+
+1. Spread about 50 skyline pieces with plenty of white ones on the cream table, a little apart. Take one photo from straight above. Is "Found about N pieces" close to what you laid out?
+2. Tap **See photo**: do the white pieces have outlines? Does the lamp's shiny spot have none?
+3. Send a screenshot of any white piece still without an outline.
+
+**Still to do:** pieces inside the lamp's shiny spot; pinkish-white pieces closest to the table's colour.
+
 ## Part 1: touching pieces, the built picture, the nearly finished puzzle
 
 **New:**
