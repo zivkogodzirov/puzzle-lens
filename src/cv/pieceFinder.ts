@@ -344,6 +344,44 @@ export const SEG = {
   whiteCore: 0.5,
   whiteRingPrint: 0.1,
   whiteKeepShare: 0.5,
+  /**
+   * A lamp's shine on a coloured table (M10 part 3, 2026-11-17). On the cream table the lighting
+   * field follows a lamp's reflection only in part, so its middle reads a ≈ 1.06 and c ≈ 0.06
+   * against the field, exactly like a white piece (measured on IMG_9375/9377), and it is classed
+   * faint print: it joined the pieces in and at it into one big blob, reported as an object (2 dark
+   * pieces lost on IMG_9377, 4 white ones at the rim on IMG_9375). A bright area (as for whiteStep)
+   * of `shineMinArea`–`shineMaxArea` pieces (the owner's shine spots: 15–24; smaller bright areas at
+   * a table's edge are not shine, IMG_9224), not touching a marker card (the only `ignore` this early:
+   * the table's own edge is not known yet), at least `shineFaintS` faint print, whose body (closed by
+   * `shineClose` px: pieces and scratches inside a shine leave holes; then opened by a square of
+   * `shineOpen` × a piece side, wider than one or two touching pieces) is at least `shineBodyMin`
+   * pieces and `shineFaint` faint print, with open table on at least `shineFree` of the ring 2–4 px
+   * around the closed area (and at least `shineFreeMin` × a piece side of it), and soft there (its
+   * border band less than `shineSoft` × its gain above that ring; shine 0.3–0.62, a white piece ≥ 0.5
+   * by whiteEdgeDrop, so the shine gets its own limit): the area is shine (GLARE, and 2 in the
+   * white/shine marks, so no pale "piece" is filled in inside it). So is "strong print" brighter than
+   * the table in its enclosed holes (a reflection's hot middle, far off the table's colour: IMG_9263).
+   * Dark pieces in it stay. With `shineParts`, each part sticking out of the body gets the
+   * white-step test on its own outer border (ring outside the shine ≥ `shinePartRing` of the whole
+   * ring): white pieces at the shine's rim. Not found: a white or pastel piece lying wholly inside the
+   * shine (it was lost before too, inside the "object"). Tray lids pass these tests too
+   * (their white bottom); they have no pieces in them on the owner's photos. As GLARE the shine now
+   * counts towards the glare share (the "glare covers part of the table" advice, with markers only)
+   * and flags pieces in or beside it as glare (score × 0.7); none of the owner's counts changed.
+   */
+  shine: true as boolean,
+  shineParts: true as boolean,
+  shineMinArea: 10,
+  shineMaxArea: 60,
+  shineFaintS: 0.15,
+  shineOpen: 0.7,
+  shineClose: 6,
+  shineSoft: 0.7,
+  shineBodyMin: 1.5,
+  shineFaint: 0.3,
+  shineFree: 0.3,
+  shinePartRing: 0.35,
+  shineFreeMin: 6,
   /** Fragments closer than this (mm) are joined when the union is at most `fragmentUnion` × the expected area. */
   fragmentGapMm: 3,
   fragmentMax: 0.85,
@@ -485,7 +523,7 @@ function run(cv: Cv, sc: CvScope, rgba: PixelBuffer, opts: FindOptions): FindRes
 
   // 4–6. Masks.
   const prior = opts.pieceAreaMm2 ?? DEFAULT_PIECE_AREA_MM2;
-  const pieceMask = buildMask(cv, cls, cardZone, w, h, prior * sppm * sppm, sppm, shadow?.explained ?? null, field.noise > SEG.grainyNoise);
+  const pieceMask = buildMask(cv, cls, cardZone, w, h, prior * sppm * sppm, sppm, shadow?.explained ?? null, field.noise > SEG.grainyNoise, white);
   lap('masks');
   if (opts.debug) opts.debug.pieceMask = pieceMask;
 
@@ -754,40 +792,28 @@ function whiteScratch(n: number): WhiteScratch {
   return { bright: new Uint8Array(n), comp: new Int32Array(n), stack: new Int32Array(n) };
 }
 
-/** Chebyshev dilation (r > 0) or erosion (r < 0) of a 0/1 box image, separable. */
+/**
+ * Chebyshev dilation (r > 0) or erosion (r < 0) of a 0/1 box image, separable, with a running count
+ * of ones in the window (the same cost for any r; outside the box counts as 0).
+ */
 function boxMorph(src: Uint8Array, bw: number, bh: number, r: number): Uint8Array {
-  const grow = r > 0;
   const k = Math.abs(r);
-  const tmp = new Uint8Array(bw * bh);
-  const out = new Uint8Array(bw * bh);
-  for (let y = 0; y < bh; y++)
-    for (let x = 0; x < bw; x++) {
-      let v = grow ? 0 : 1;
-      for (let i = -k; i <= k; i++) {
-        const xx = x + i;
-        // Outside the box counts as "not the area".
-        const s = xx < 0 || xx >= bw ? 0 : src[y * bw + xx]!;
-        if (grow ? s : !s) {
-          v = grow ? 1 : 0;
-          break;
-        }
+  const full = 2 * k + 1;
+  const pass = (inp: Uint8Array, len: number, lines: number, step: number, lineStep: number): Uint8Array => {
+    const out = new Uint8Array(bw * bh);
+    for (let l = 0; l < lines; l++) {
+      const base = l * lineStep;
+      let cnt = 0;
+      for (let i = 0; i < Math.min(k, len); i++) cnt += inp[base + i * step]!;
+      for (let i = 0; i < len; i++) {
+        if (i + k < len) cnt += inp[base + (i + k) * step]!;
+        if (i - k - 1 >= 0) cnt -= inp[base + (i - k - 1) * step]!;
+        out[base + i * step] = r > 0 ? (cnt > 0 ? 1 : 0) : cnt === full ? 1 : 0;
       }
-      tmp[y * bw + x] = v;
     }
-  for (let y = 0; y < bh; y++)
-    for (let x = 0; x < bw; x++) {
-      let v = grow ? 0 : 1;
-      for (let i = -k; i <= k; i++) {
-        const yy = y + i;
-        const s = yy < 0 || yy >= bh ? 0 : tmp[yy * bw + x]!;
-        if (grow ? s : !s) {
-          v = grow ? 1 : 0;
-          break;
-        }
-      }
-      out[y * bw + x] = v;
-    }
-  return out;
+    return out;
+  };
+  return pass(pass(src, bw, bh, 1, bw), bh, bw, bw, 1);
 }
 
 const median = (a: number[]): number => {
@@ -825,10 +851,12 @@ function whiteSteps(
       (alpha[p]! > lvl || (SEG.whiteWithFaint && (cls[p] === WEAK || cls[p] === PALE) && alpha[p]! >= 1))
         ? 1
         : 0;
+  let anyIgnore = false;
+  for (let p = 0; p < n && !anyIgnore; p++) if (ignore[p]) anyIgnore = true;
   const minA = SEG.whiteMinArea * piecePx;
   const maxA = SEG.whiteMaxArea * piecePx;
-  const rIn = SEG.whiteRingPx;
   const rOut = SEG.whiteRingOutPx;
+  const shineMax = SEG.shineMaxArea * piecePx;
   let id = 0;
   const pix: number[] = [];
   for (let s0 = 0; s0 < n; s0++) {
@@ -840,13 +868,15 @@ function whiteSteps(
     stack[top++] = s0;
     comp[s0] = id;
     pix.length = 0;
+    let cnt = 0;
     let x0 = w;
     let y0 = h;
     let x1 = 0;
     let y1 = 0;
     while (top) {
       const p = stack[--top]!;
-      if (pix.length <= maxA) pix.push(p);
+      cnt++;
+      if (cnt <= shineMax) pix.push(p);
       const x = p % w;
       const y = (p - x) / w;
       if (x < x0) x0 = x;
@@ -867,8 +897,13 @@ function whiteSteps(
         }
       }
     }
-    if (pix.length < minA || pix.length > maxA) continue;
-    // The area, its core (≥ 2 px inside its border) and the ring rIn..rOut px outside it, in its box.
+    if (pix.length > maxA) {
+      // Bigger than a piece: maybe a lamp's shine with pieces in or at it (SEG.shine).
+      if (SEG.shine && cnt >= SEG.shineMinArea * piecePx && cnt <= shineMax)
+        shineArea(pix, [x0, y0, x1, y1], cls, alpha, anyIgnore ? ignore : null, bright, w, h, piecePx, lvl, whiteOut);
+      continue;
+    }
+    if (pix.length < minA) continue;
     const bx0 = Math.max(0, x0 - rOut);
     const by0 = Math.max(0, y0 - rOut);
     const bw = Math.min(w - 1, x1 + rOut) - bx0 + 1;
@@ -878,46 +913,287 @@ function whiteSteps(
       const x = p % w;
       m[((p - x) / w - by0) * bw + x - bx0] = 1;
     }
-    const coreM = boxMorph(m, bw, bh, -2);
-    let core = 0;
-    for (let q = 0; q < bw * bh; q++) core += coreM[q]!;
-    // Solid, not a thin bright line or ring (a drawn outline, a reflection along an edge).
-    if (core < SEG.whiteCore * pix.length) continue;
-    const near = boxMorph(m, bw, bh, rIn - 1);
-    const far = boxMorph(m, bw, bh, rOut);
-    const inner: number[] = [];
-    const band: number[] = [];
-    const ring: number[] = [];
-    let ringPrint = 0;
-    let edge = false;
-    for (let by = 0; by < bh && !edge; by++)
-      for (let bx = 0; bx < bw; bx++) {
-        const q = by * bw + bx;
-        const p = (by0 + by) * w + bx0 + bx;
-        if (m[q]) {
-          inner.push(alpha[p]!);
-          if (!coreM[q]) band.push(alpha[p]!);
-        } else if (far[q] && !near[q]) {
-          if (ignore[p]) {
-            edge = true; // cut by the table's edge or a card: leave it to the usual cues
-            break;
-          }
-          ring.push(alpha[p]!);
-          if (cls[p] === STRONG) ringPrint++;
-        }
-      }
-    if (edge || ring.length < 8 || !band.length) continue;
-    // A light patch of a printed piece (a white dress next to its dark print) has print around it; a
-    // white piece lies alone, ringed by table and shadow.
-    if (ringPrint > SEG.whiteRingPrint * ring.length) continue;
-    const gain = median(inner) - 1;
-    const outside = median(ring) - 1;
-    // A sharp step: just outside, the brightness is down near the table's, and its own border band is
-    // still near its middle's (a soft spot's border sits at the threshold, whatever its peak).
-    if (gain <= 0 || outside > SEG.whiteRingDrop * gain || median(band) - 1 - outside < SEG.whiteEdgeDrop * gain) continue;
+    if (!whitePasses(m, bw, bh, bx0, by0, pix.length, cls, alpha, ignore, w)) continue;
     for (const p of pix) {
       if (cls[p] !== STRONG) cls[p] = WEAK;
       if (whiteOut) whiteOut[p] = 1;
+    }
+  }
+}
+
+/**
+ * The white-step test on one area `m` (a 0/1 box image at bx0, by0, with `area` pixels): solid,
+ * alone, ending in a sharp step (SEG.whiteStep). Optionally (`within`: another 0/1 box image of the
+ * same size, the shine it sticks out of) the ring counts only pixels outside `within` and must be at
+ * least `SEG.shinePartRing` of the whole ring, and the border band leaves out what touches `within`.
+ */
+function whitePasses(
+  m: Uint8Array,
+  bw: number,
+  bh: number,
+  bx0: number,
+  by0: number,
+  area: number,
+  cls: Uint8Array,
+  alpha: Float32Array,
+  ignore: Uint8Array | null,
+  w: number,
+  within?: Uint8Array,
+): boolean {
+  // The area, its core (≥ 2 px inside its border) and the ring rIn..rOut px outside it, in its box.
+  const coreM = boxMorph(m, bw, bh, -2);
+  let core = 0;
+  for (let q = 0; q < bw * bh; q++) core += coreM[q]!;
+  // Solid, not a thin bright line or ring (a drawn outline, a reflection along an edge).
+  if (core < SEG.whiteCore * area) return false;
+  const near = boxMorph(m, bw, bh, SEG.whiteRingPx - 1);
+  const far = boxMorph(m, bw, bh, SEG.whiteRingOutPx);
+  const nearWithin = within ? boxMorph(within, bw, bh, 2) : null;
+  const inner: number[] = [];
+  const band: number[] = [];
+  const ring: number[] = [];
+  let ringAll = 0;
+  let ringPrint = 0;
+  for (let by = 0; by < bh; by++)
+    for (let bx = 0; bx < bw; bx++) {
+      const q = by * bw + bx;
+      const p = (by0 + by) * w + bx0 + bx;
+      if (m[q]) {
+        inner.push(alpha[p]!);
+        if (!coreM[q] && !(nearWithin && nearWithin[q])) band.push(alpha[p]!);
+      } else if (far[q] && !near[q]) {
+        // Cut by the table's edge or a card: leave it to the usual cues.
+        if (ignore && ignore[p]) return false;
+        ringAll++;
+        if (within && within[q]) continue;
+        ring.push(alpha[p]!);
+        if (cls[p] === STRONG) ringPrint++;
+      }
+    }
+  if (ring.length < 8 || !band.length) return false;
+  if (within && ring.length < SEG.shinePartRing * ringAll) return false;
+  // A light patch of a printed piece (a white dress next to its dark print) has print around it; a
+  // white piece lies alone, ringed by table and shadow.
+  if (ringPrint > SEG.whiteRingPrint * ring.length) return false;
+  const gain = median(inner) - 1;
+  const outside = median(ring) - 1;
+  // A sharp step: just outside, the brightness is down near the table's, and its own border band is
+  // still near its middle's (a soft spot's border sits at the threshold, whatever its peak).
+  return gain > 0 && outside <= SEG.whiteRingDrop * gain && median(band) - 1 - outside >= SEG.whiteEdgeDrop * gain;
+}
+
+/** A crop of a 0/1 box image (bw wide) to the sub-box x0, y0, cw × ch. */
+function cropBox(src: Uint8Array, bw: number, x0: number, y0: number, cw: number, ch: number): Uint8Array {
+  const out = new Uint8Array(cw * ch);
+  for (let y = 0; y < ch; y++) out.set(src.subarray((y0 + y) * bw + x0, (y0 + y) * bw + x0 + cw), y * cw);
+  return out;
+}
+
+/** 8-connected components of a 0/1 box image: each component's box positions. */
+function boxComponents(m: Uint8Array, bw: number, bh: number): number[][] {
+  const lab = new Uint8Array(bw * bh);
+  const out: number[][] = [];
+  const st: number[] = [];
+  for (let q0 = 0; q0 < bw * bh; q0++) {
+    if (!m[q0] || lab[q0]) continue;
+    const part: number[] = [];
+    st.length = 0;
+    st.push(q0);
+    lab[q0] = 1;
+    while (st.length) {
+      const q = st.pop()!;
+      part.push(q);
+      const x = q % bw;
+      const y = (q - x) / bw;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          const yy = y + dy;
+          if (xx < 0 || yy < 0 || xx >= bw || yy >= bh) continue;
+          const r = yy * bw + xx;
+          if (m[r] && !lab[r]) {
+            lab[r] = 1;
+            st.push(r);
+          }
+        }
+    }
+    out.push(part);
+  }
+  return out;
+}
+
+/**
+ * A lamp's shine on a coloured table (SEG.shine): a bright area much bigger than a piece whose body
+ * (what a square wider than any piece fits in) is mostly faint print and fades softly into open
+ * table. It becomes GLARE (table-like: pieces in it stand alone); what sticks out of the body gets
+ * the white-step test on its own outer border (white pieces at the shine's rim).
+ */
+function shineArea(
+  pix: number[],
+  bbox: [number, number, number, number],
+  cls: Uint8Array,
+  alpha: Float32Array,
+  ignore: Uint8Array | null,
+  bright: Uint8Array,
+  w: number,
+  h: number,
+  piecePx: number,
+  lvl: number,
+  whiteOut?: Uint8Array,
+): void {
+  // (`ignore` is null when the photo has none: no marker cards.)
+  // Hardly any faint print: white-table glare, paper.
+  let faint = 0;
+  for (const p of pix) if (cls[p] === WEAK || cls[p] === PALE) faint++;
+  if (faint < SEG.shineFaintS * pix.length) return;
+  const pad = 8;
+  const bx0 = Math.max(0, bbox[0] - pad);
+  const by0 = Math.max(0, bbox[1] - pad);
+  const bw = Math.min(w - 1, bbox[2] + pad) - bx0 + 1;
+  const bh = Math.min(h - 1, bbox[3] + pad) - by0 + 1;
+  // Box position → image position.
+  const img = new Int32Array(bw * bh);
+  for (let y = 0, q = 0; y < bh; y++) for (let x = 0; x < bw; x++, q++) img[q] = (by0 + y) * w + bx0 + x;
+  const at = (q: number) => img[q]!;
+  const S = new Uint8Array(bw * bh);
+  for (const p of pix) {
+    const x = p % w;
+    S[((p - x) / w - by0) * bw + x - bx0] = 1;
+  }
+  // Touching a marker card (the only `ignore` at this stage; the table's own edge is not known yet).
+  if (ignore) {
+    const S1 = boxMorph(S, bw, bh, 1);
+    for (let q = 0; q < bw * bh; q++) if (S1[q] && ignore[at(q)]) return;
+  }
+  // Body: closed by `shineClose` px (pieces and scratches inside a shine leave holes), opened by a
+  // square wider than a piece's body.
+  const R = Math.max(3, Math.round(SEG.shineOpen * Math.sqrt(piecePx)));
+  const closed = boxMorph(boxMorph(S, bw, bh, SEG.shineClose), bw, bh, -SEG.shineClose);
+  const B = boxMorph(boxMorph(closed, bw, bh, -R), bw, bh, R);
+  let bodyN = 0;
+  let bodyFaint = 0;
+  const body: number[] = [];
+  for (let q = 0; q < bw * bh; q++) {
+    if (!B[q] || !S[q]) continue;
+    const p = at(q);
+    bodyN++;
+    body.push(alpha[p]!);
+    if (cls[p] === WEAK || cls[p] === PALE) bodyFaint++;
+  }
+  if (bodyN < SEG.shineBodyMin * piecePx) return;
+  if (bodyFaint < SEG.shineFaint * bodyN) return;
+  // Free border: the ring 2–4 px outside the (closed) area that is open table (not bright, not print
+  // or shadow), and how much the area's border band next to it is brighter than it.
+  const n2 = boxMorph(closed, bw, bh, 1);
+  const n4 = boxMorph(closed, bw, bh, 4);
+  const freeRing = new Uint8Array(bw * bh);
+  const ringA: number[] = [];
+  let ringN = 0;
+  let freeN = 0;
+  for (let q = 0; q < bw * bh; q++) {
+    if (!n4[q] || n2[q]) continue;
+    ringN++;
+    const p = at(q);
+    const c = cls[p];
+    if (!bright[p] && !(ignore && ignore[p]) && (c === TABLE || c === PALE || c === GLARE)) {
+      freeRing[q] = 1;
+      freeN++;
+      ringA.push(alpha[p]!);
+    }
+  }
+  if (freeN < SEG.shineFree * ringN || freeN < SEG.shineFreeMin * Math.sqrt(piecePx)) return;
+  const nearFree = boxMorph(freeRing, bw, bh, 4);
+  const e2 = boxMorph(closed, bw, bh, -2);
+  const bandA: number[] = [];
+  for (let q = 0; q < bw * bh; q++) if (S[q] && !e2[q] && nearFree[q]) bandA.push(alpha[at(q)]!);
+  if (!bandA.length) return;
+  const gain = median(body) - 1;
+  const step = median(bandA) - median(ringA);
+  if (gain <= 0 || step >= SEG.shineSoft * gain) return;
+  const rOut = SEG.whiteRingOutPx;
+  // A sub-box around `part` (box positions) with the ring margin, for the white-step tests.
+  const sub = (part: number[]) => {
+    let x0 = bw;
+    let y0 = bh;
+    let x1 = 0;
+    let y1 = 0;
+    for (const q of part) {
+      const x = q % bw;
+      const y = (q - x) / bw;
+      x0 = Math.min(x0, x);
+      y0 = Math.min(y0, y);
+      x1 = Math.max(x1, x);
+      y1 = Math.max(y1, y);
+    }
+    const sx = Math.max(0, x0 - rOut - 3);
+    const sy = Math.max(0, y0 - rOut - 3);
+    const sw = Math.min(bw - 1, x1 + rOut + 3) - sx + 1;
+    const sh = Math.min(bh - 1, y1 + rOut + 3) - sy + 1;
+    const m = new Uint8Array(sw * sh);
+    for (const q of part) {
+      const x = q % bw;
+      m[((q - x) / bw - sy) * sw + x - sx] = 1;
+    }
+    return { m, sx, sy, sw, sh };
+  };
+  // Parts sticking out of the body: white pieces at the shine's rim keep the white-step test.
+  const keep = new Uint8Array(bw * bh);
+  if (SEG.shineParts) {
+    const rest = new Uint8Array(bw * bh);
+    for (let q = 0; q < bw * bh; q++) rest[q] = S[q] && !B[q] ? 1 : 0;
+    for (const part of boxComponents(rest, bw, bh)) {
+      if (part.length < SEG.whiteMinArea * piecePx || part.length > SEG.whiteMaxArea * piecePx) continue;
+      const { m, sx, sy, sw, sh } = sub(part);
+      if (whitePasses(m, sw, sh, bx0 + sx, by0 + sy, part.length, cls, alpha, ignore, w, cropBox(B, bw, sx, sy, sw, sh))) for (const q of part) keep[q] = 1;
+    }
+  }
+  // Holes the shine encloses (not reached from the box's border without crossing it).
+  const outside = new Uint8Array(bw * bh);
+  const st: number[] = [];
+  const reach = (r: number) => {
+    if (!S[r] && !outside[r]) {
+      outside[r] = 1;
+      st.push(r);
+    }
+  };
+  for (let x = 0; x < bw; x++) {
+    reach(x);
+    reach((bh - 1) * bw + x);
+  }
+  for (let y = 0; y < bh; y++) {
+    reach(y * bw);
+    reach(y * bw + bw - 1);
+  }
+  while (st.length) {
+    const q = st.pop()!;
+    const x = q % bw;
+    if (x > 0) reach(q - 1);
+    if (x < bw - 1) reach(q + 1);
+    if (q >= bw) reach(q - bw);
+    if (q < (bh - 1) * bw) reach(q + bw);
+  }
+  // The hot middle of a reflection can be far off the table's colour (classed strong print): bright
+  // "strong print" in the shine's holes is shine too (IMG_9263). Dark pieces in it are not bright.
+  // A pastel piece lying in the middle of the shine is lost with it: neither its edge (the hot
+  // middle's is about as sharp) nor its contact shadow (too faint in the shine) told them apart
+  // (review 2026-11-17); it was lost before too, inside the "object".
+  for (let q = 0; q < bw * bh; q++) {
+    if (S[q] || outside[q]) continue;
+    const p = at(q);
+    if (cls[p] === STRONG && alpha[p]! > lvl) {
+      cls[p] = GLARE;
+      if (whiteOut) whiteOut[p] = 2;
+    }
+  }
+  for (let q = 0; q < bw * bh; q++) {
+    if (!S[q]) continue;
+    const p = at(q);
+    if (keep[q]) {
+      if (cls[p] !== STRONG) cls[p] = WEAK;
+      if (whiteOut) whiteOut[p] = 1;
+    } else {
+      cls[p] = GLARE;
+      if (whiteOut) whiteOut[p] = 2;
     }
   }
 }
@@ -1312,6 +1588,7 @@ function buildMask(
   sppm: number,
   explained: Uint8Array | null,
   grainy = false,
+  marks: Uint8Array | null = null,
 ): Uint8Array {
   const n = w * h;
   // Pale print never covers more than a piece: bigger "pale" areas are the field being off
@@ -1423,7 +1700,8 @@ function buildMask(
     const ringFilled = fillHoles(cv, sc, ringMat);
     const rf: Uint8Array = ringFilled.data.slice();
     const inner = new Uint8Array(n);
-    for (let p = 0; p < n; p++) inner[p] = rf[p] && !ring[p] && !cardZone[p] ? 255 : 0;
+    // Shine (marks 2, SEG.shine) is table: speckle inside it never encloses a pale piece.
+    for (let p = 0; p < n; p++) inner[p] = rf[p] && !ring[p] && !cardZone[p] && !(marks && marks[p] === 2) ? 255 : 0;
     const innerMat = toMat(cv, sc, inner, w, h);
     const il = sc.keep(new cv.Mat());
     const stats = sc.keep(new cv.Mat());
@@ -1530,7 +1808,7 @@ interface BlobCtx {
   img: SmallRgb;
   field: LightField;
   cls: Uint8Array;
-  /** Pixels of white print found by its sharp step (SEG.whiteStep). */
+  /** 1: white print found by its sharp step (SEG.whiteStep); 2: a lamp's shine (SEG.shine). */
   white: Uint8Array;
   pieceMask: Uint8Array;
   cardZone: Uint8Array;
@@ -2102,6 +2380,31 @@ function regionOutline(cv: Cv, sc: CvScope, lab: Int32Array, id: number, st: Int
   return out;
 }
 
+/**
+ * White pieces in onePiece's weak-clump rule: at least whiteKeepShare white-step print, and no bigger
+ * than its white-step patches can be (whiteMaxArea pieces each). On the skyline photos these are single
+ * white pieces a little over a piece's size with their shadow (1.2–1.7, one patch each) and touching
+ * pairs; a big plain white thing is not.
+ */
+function whitePieces(
+  marks: Uint8Array,
+  roi: Uint8Array,
+  rx0: number,
+  ry0: number,
+  rw: number,
+  rh: number,
+  w: number,
+  whiteN: number,
+  area: number,
+  expPx: number,
+): boolean {
+  if (whiteN < SEG.whiteKeepShare * area) return false;
+  const m = new Uint8Array(rw * rh);
+  for (let y = 0; y < rh; y++) for (let x = 0; x < rw; x++) if (roi[y * rw + x] && marks[(ry0 + y) * w + rx0 + x] === 1) m[y * rw + x] = 1;
+  const patches = boxComponents(m, rw, rh).filter((c) => c.length >= SEG.whiteMinArea * expPx).length;
+  return patches >= 1 && area <= patches * SEG.whiteMaxArea * expPx;
+}
+
 function onePiece(
   cv: Cv,
   sc: CvScope,
@@ -2132,7 +2435,7 @@ function onePiece(
       if (!roi[(y - ry0) * rw + (x - rx0)]) continue;
       const p = y * w + x;
       if (cls[p] === STRONG) strongN++;
-      if (c.white[p]) whiteN++;
+      if (c.white[p] === 1) whiteN++;
       if (glare[p]) glareIn++;
       if (x === 0 || y === 0 || x === w - 1 || y === h - 1) touchesEdge = true;
       sx += x;
@@ -2225,7 +2528,11 @@ function onePiece(
   if (strongShare < 0.25) flags.weak = true;
   // Bigger than a piece with hardly any clear print: a grey/plain object (a display, a lid), or
   // pale pieces we can't separate anyway. Not reported as pieces.
-  if (flags.weak && flags.clump && !flags.cut && strongShare < SEG.weakClumpStrong) return { kind: 'object', outlineImg, outlineMm, areaMm2 };
+  // …but touching white pieces, each found by its sharp step (SEG.whiteStep), are pieces (M10 part 3:
+  // pieces at a lamp's shine on IMG_9375): mostly white-step print and no bigger than its patches can
+  // be (review 2026-11-17: not a big plain white thing).
+  if (flags.weak && flags.clump && !flags.cut && strongShare < SEG.weakClumpStrong && !whitePieces(c.white, roi, rx0, ry0, rw, rh, w, whiteN, area, expPx))
+    return { kind: 'object', outlineImg, outlineMm, areaMm2 };
   const shapeOk = Math.exp(-Math.pow(Math.log(Math.max(0.05, rel)) / 0.35, 2)) * Math.min(1, solidity / 0.8);
   const score = Math.max(0, Math.min(1, (0.4 + 0.6 * Math.min(1, strongShare / 0.6)) * shapeOk * (flags.glare ? 0.7 : 1) * (flags.cut ? 0.5 : 1)));
   // A faint, badly shaped blob the colour of the table (a soft shadow's or reflection's edge).
@@ -3076,12 +3383,13 @@ function estimateFrom(
       const sppm = ppm / factor;
       const field = estimateField(img, { pxPerMm: sppm, ignore: none, chromaPrior: opts.table ? tableChroma(opts.table) : null });
       const alpha = new Float32Array(w * h);
-      const { cls, onTable } = classifyOnTable(cv, img, field, none, sppm, alpha, PIECE_FACE_SHARE * pitch * pitch * sppm * sppm);
+      const marks = new Uint8Array(w * h);
+      const { cls, onTable } = classifyOnTable(cv, img, field, none, sppm, alpha, PIECE_FACE_SHARE * pitch * pitch * sppm * sppm, marks);
       const shadow = SEG.shadowRuns ? explainShadows(cls, w, h, sppm, none) : null;
       const expPx = pitch * pitch * sppm * sppm;
       const off = new Uint8Array(w * h);
       if (onTable) for (let p = 0; p < w * h; p++) off[p] = onTable[p] ? 0 : 1;
-      const mask = buildMask(cv, cls, off, w, h, expPx, sppm, shadow?.explained ?? null, field.noise > SEG.grainyNoise);
+      const mask = buildMask(cv, cls, off, w, h, expPx, sppm, shadow?.explained ?? null, field.noise > SEG.grainyNoise, marks);
       // Single-piece-like blobs only: not cut by the edge, piece-like solidity and squareness (not
       // clumps, assembled areas or objects), then the MODE of their log-area.
       const areas = withScope((sc) => {

@@ -77,11 +77,12 @@ const FLOOR: Record<string, { single: number; found: number; falseMax: number }>
   IMG_9281: { single: 18, found: 18, falseMax: 0 },
   // M10 part 2 (2026-11-17): the owner's second puzzle (a city skyline, many near-white sky pieces) on the cream table, ~120 pieces
   // each, hand-counted. Before the white-step rule (SEG.whiteStep) one by one / found / false were IMG_9375 78/79/0,
-  // IMG_9377 77/79/0, IMG_9380 93/96/0, IMG_9383 83/84/4; the floors are the numbers with it.
-  IMG_9375: { single: 105, found: 106, falseMax: 0 },
-  IMG_9377: { single: 104, found: 106, falseMax: 0 },
+  // IMG_9377 77/79/0, IMG_9380 93/96/0, IMG_9383 83/84/4; with it 105/106/0, 104/106/0, 112/112/0, 100/106/3. M10 part 3
+  // (a lamp's shine, SEG.shine): the pieces in and at the shine on IMG_9375 (+3) and IMG_9377 (+3), and one on IMG_9383.
+  IMG_9375: { single: 108, found: 109, falseMax: 0 },
+  IMG_9377: { single: 107, found: 109, falseMax: 0 },
   IMG_9380: { single: 112, found: 112, falseMax: 0 },
-  IMG_9383: { single: 100, found: 106, falseMax: 3 },
+  IMG_9383: { single: 101, found: 107, falseMax: 3 },
 };
 
 interface Counts {

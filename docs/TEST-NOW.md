@@ -1,4 +1,7 @@
-# M10, part 2: white pieces on your cream table (and M10 part 1, M9 parts 1–6, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+# M10, part 3: pieces in the lamp's shiny spot (and M10 parts 1–2, M9 parts 1–6, M8 parts 1, 3 and 4, M7, M6, M5, still to check)
+
+**New in M10 part 3:** pieces lying **in or at the edge of your lamp's shiny spot** are found. On your cream table the shine looks, pixel by pixel, exactly like a white piece (a little brighter, almost colourless), so the app used to read the whole spot as faint print and lump the pieces in it into one big "object". Now a bright area much bigger than a piece, with soft edges and open table around it, is shine and counts as table; pieces in it stand on their own, and white pieces at its edge still get the white-piece test. Hand-counted: IMG_9375 105 → 108, IMG_9377 104 → 107 (the 2 dark pieces in the spot), IMG_9383 100 → 101; your older photos are unchanged.
+
 
 **New in M10 part 2:** the app now finds **white and very pale pieces on your cream table**. They are only a little brighter than the table and almost colourless, so the app used to take them for lamp shine and drop them. Now a piece-sized patch that is a little brighter than the table, stands on its own and ends in a sharp edge counts as a piece; real lamp shine fades out softly and is bigger than a piece. Measured on 4 of your skyline photos where every piece was counted by hand (about 120 each), pieces outlined one by one: **78 → 105, 77 → 104, 93 → 112, 83 → 100**. Your 11 older counted photos come out exactly as before.
 
@@ -33,6 +36,12 @@ These steps are for version **{version}** (Settings shows the version).
 ## Get ready
 1. If a banner says a new version is ready, tap **Reload** first, then open this 🧪 Test tab again.
 2. Lay your leftover pieces on the table, then open *The Kiss* → **Scan pieces** → take an **overview photo** (the live view compares the camera with your newest scan photo, so the pieces must still lie where they were photographed). The pieces under **Pieces** should show their spots among your holes, as in M4.
+
+## M10 part 3: pieces in the lamp's shiny spot
+1. Lay a few pieces (dark ones and white ones) **inside and at the edge of the shiny spot** your lamp makes on the table, and others elsewhere. Take one photo from straight above.
+2. Tap **See photo**: the pieces in the shiny spot should have their own outlines, and the shiny spot itself **none**.
+3. Is "Found about N pieces" close to what you laid out? Send a screenshot of any piece in the shine still without an outline.
+4. Known gap: a **white or very pale piece lying right in the middle** of the shiny spot is still missed; pieces at its edge and dark pieces in it are found.
 
 ## M10 part 2: white pieces on your cream table
 1. Spread about 50 pieces of the skyline puzzle on your cream table, **including plenty of white sky pieces**, a little apart. Take one photo from straight above (as in your photo IMG_9380).

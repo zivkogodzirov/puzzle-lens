@@ -2,6 +2,17 @@
 
 The steps for the newest part are also inside the app: tap the round **🧪** button at the top right of any screen.
 
+## Part 3: pieces in the lamp's shiny spot
+
+**New:** pieces lying in or at the edge of your lamp's shiny spot are found. The spot (bright, soft-edged, bigger than a piece) counts as table, so the pieces in it stand on their own.
+
+**Why:** on your cream table the shine looked exactly like faint print, so it swallowed the pieces in it into one "object" (2 dark pieces on IMG_9377, 4 white ones on IMG_9375).
+
+**Measured on your photos:** hand-counted, one by one: IMG_9375 105 → 108, IMG_9377 104 → 107, IMG_9383 100 → 101. Older photos unchanged.
+
+1. Put dark and white pieces inside and at the edge of the lamp's shiny spot, others elsewhere. Take one photo from straight above.
+2. **See photo**: do the pieces in the shine have outlines? Does the shine itself have none?
+
 ## Part 2: white pieces on your cream table
 
 **New:** white and very pale pieces are found on your cream table. A piece-sized patch that is a little brighter than the table, stands on its own and ends in a sharp edge is a piece; lamp shine fades out softly and is bigger than a piece.
